@@ -1,5 +1,5 @@
 // pybind
-#include "pybindings.h"
+#include "forest_segmentor_bindings.h"
 // system
 #include <atomic>
 #include <chrono>
@@ -30,7 +30,7 @@ namespace {
     }
 }
 
-class InferenceNode {
+class SegmentationNode {
 public:
     ros::NodeHandle nh;
     ros::Subscriber sub_points;
@@ -45,8 +45,8 @@ public:
     static constexpr size_t max_segmentation_buffer_size = 5;
     std::condition_variable segment_cv;
 public:
-    InferenceNode() : nh("~") {
-        sub_points = nh.subscribe("/topic_points", 10, &InferenceNode::callback_points, this);
+    SegmentationNode() : nh("~") {
+        sub_points = nh.subscribe("/topic_points", 10, &SegmentationNode::callback_points, this);
 
         segmentation_thread = std::thread([this]() { segmentation_loop(); });
         {
@@ -55,7 +55,7 @@ public:
         }
     }
 
-    ~InferenceNode() {
+    ~SegmentationNode() {
         atomic_node_running = false;
         segment_cv.notify_all();
         thread_ready_cv.notify_all();
@@ -113,7 +113,7 @@ public:
 
 int main(int argc, char* argv[]) {
   ros::init(argc, argv, "forest_segmentation");
-  InferenceNode node;
+  SegmentationNode node;
   ros::spin();
   return 0;
 }
