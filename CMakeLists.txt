@@ -8,14 +8,7 @@ include(dependencies)
 
 find_package(
   catkin REQUIRED
-  COMPONENTS nav_msgs
-             roscpp
-             tf2
-             std_msgs
-             tf2_ros
-             sensor_msgs
-             geometry_msgs
-             rospy)
+  COMPONENTS nav_msgs roscpp tf2 std_msgs tf2_ros sensor_msgs geometry_msgs rospy)
 
 catkin_package()
 

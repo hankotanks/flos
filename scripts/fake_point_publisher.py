@@ -3,14 +3,16 @@ import rospy
 from sensor_msgs.msg import PointCloud2, PointField
 import std_msgs.msg
 import struct
+import random
 
 rospy.init_node('fake_point_publisher')
 pub = rospy.Publisher('/topic_points', PointCloud2, queue_size=10)
 rate = rospy.Rate(1)  # 1 Hz
 
-points = [(1.0, 2.0, 3.0), (4.0, 5.0, 6.0), (7.0, 8.0, 9.0)]
-
 while not rospy.is_shutdown():
+    points = []
+    for i in range(0, random.randint(1, 10)):
+        points.append((random.randint(0, 10), random.randint(0, 10), random.randint(0, 10)))
     msg = PointCloud2()
     msg.header.stamp = rospy.Time.now()
     msg.header.frame_id = 'map'

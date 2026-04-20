@@ -15,7 +15,7 @@ ENV LC_ALL=C.UTF-8
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python3-dev python3-setuptools python-is-python3 \
     lsb-release curl gnupg2 dirmngr \
-    build-essential git wget sudo unzip ninja-build \
+    build-essential git wget unzip ninja-build \
     zsh tmux \
     && rm -rf /var/lib/apt/lists/*
 
@@ -75,44 +75,30 @@ RUN python3 -m pip install --no-cache-dir \
     torch==2.2.1 torchvision==0.17.1 torchaudio==2.2.1 \
     --index-url https://download.pytorch.org/whl/cu118
 
-# create a non-root user
-ARG UNAME=dev
-ARG UID
-ARG GID
-RUN addgroup --gid $GID $UNAME \
-    && adduser --disabled-password --uid $UID --gid $GID --gecos '' $UNAME \
-    && adduser $UNAME sudo \
-    && echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
-
-USER $UNAME
-WORKDIR /home/$UNAME
-ENV HOME=/home/$UNAME
-
 # once it gets merged in, use the master
-RUN sudo sh -c "$(curl -L https://raw.githubusercontent.com/balancedscorpion/zsh-in-docker/new_user/zsh-in-docker.sh)" -- \
-  -u ${UNAME} \
+RUN sh -c "$(curl -L https://raw.githubusercontent.com/balancedscorpion/zsh-in-docker/new_user/zsh-in-docker.sh)" -- \
+  -u root \
   -x \
-  -p git -p z -p sudo -p history -p copybuffer -p copypath -p copyfile \
+  -p git -p z -p history -p copybuffer -p copypath -p copyfile \
   -p https://github.com/zsh-users/zsh-autosuggestions \
   -p https://github.com/zsh-users/zsh-completions
 
-RUN sudo chsh -s $(which zsh) ${UNAME}
 ENV SHELL=/usr/bin/zsh
 SHELL ["/bin/zsh", "-lc"]
 
-RUN echo "export HISTFILE=/home/${UNAME}/.zsh_history" >> /home/${UNAME}/.zshrc \
-  && echo "ros-env() {" >> /home/${UNAME}/.zshrc \
-  && echo "    source /opt/ros/noetic/setup.zsh" >> /home/${UNAME}/.zshrc \
-  && echo "    source /home/${UNAME}/ros_ws/devel/setup.zsh 2>/dev/null || true" >> /home/${UNAME}/.zshrc \
-  && echo "}" >> /home/${UNAME}/.zshrc \
-  && echo "ros-env" >> /home/${UNAME}/.zshrc \
-  && echo 'export ROS_LANG_DISABLE=genlisp:gennodejs:geneus' >> /home/${UNAME}/.zshrc 
+RUN echo "export HISTFILE=/root/.zsh_history" >> /root/.zshrc \
+  && echo "ros-env() {" >> /root/.zshrc \
+  && echo "    source /opt/ros/noetic/setup.zsh" >> /root/.zshrc \
+  && echo "    source /root/ros_ws/devel/setup.zsh 2>/dev/null || true" >> /root/.zshrc \
+  && echo "}" >> /root/.zshrc \
+  && echo "ros-env" >> /root/.zshrc \
+  && echo 'export ROS_LANG_DISABLE=genlisp:gennodejs:geneus' >> /root/.zshrc 
 
-ENV PATH="/home/${UNAME}/.local/bin:${PATH}"
+ENV PATH="/root/.local/bin:${PATH}"
 
 # create catkin workspace
-RUN mkdir -p /home/${UNAME}/ros_ws/src
-WORKDIR /home/${UNAME}/ros_ws
+RUN mkdir -p /root/ros_ws/src
+WORKDIR /root/ros_ws
 RUN /bin/zsh -c "catkin init && catkin config -DPYTHON_EXECUTABLE=$(which python3)"
 
 CMD ["/bin/zsh"]

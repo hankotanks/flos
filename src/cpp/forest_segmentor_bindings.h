@@ -7,6 +7,9 @@
 #include <pybind11/stl.h>
 #include <pybind11/stl_bind.h>
 
+#include <Eigen/Dense>
+
 namespace py = pybind11;
+
 PYBIND11_MAKE_OPAQUE(std::vector<Eigen::Vector3f>);
 PYBIND11_MAKE_OPAQUE(std::vector<float>);
