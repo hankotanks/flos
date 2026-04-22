@@ -5,6 +5,7 @@ from torchmetrics.classification import MulticlassJaccardIndex, MulticlassF1Scor
 from .classwise_wrapper import ClasswiseWrapper
 from torch import nn
 from .ptv3 import PointTransformerV3
+import numpy as np
 
 # from softgroup
 class MLP(nn.Sequential):
@@ -28,14 +29,14 @@ class MLP(nn.Sequential):
 class PointTransformerV3Lightning(pl.LightningModule):
     def __init__(
         self,
-        vds: float,
+        vds: float = 0.1,
         in_channels=1,
         embedding_size=8,
         num_classes=5,
         coord_dimension=3,
         lr: float = 0.001,
         batch_size: int = 1,
-        clear_torch_cache=False,
+        clear_torch_cache=True,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -111,6 +112,10 @@ class PointTransformerV3Lightning(pl.LightningModule):
         # segmentation head
         logits = self.segmentation_head(predicted.feat)
         return logits
+    
+    def infer(self, batch):
+        trav_logits = self.forward(batch)
+        return torch.argmax(trav_logits, dim=-1)
 
     def training_step(self, batch, batch_idx, dataloader_idx=0):
         labels = batch["semantics"]
