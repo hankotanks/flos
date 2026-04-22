@@ -4,7 +4,7 @@ import forest_segmentor_bindings
 
 import torch
 
-from .model import PointTransformerV3Lightning
+from .segmentation_model import PointTransformerV3Lightning
 
 class InferenceHelper:
     def __init__(self):

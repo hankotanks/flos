@@ -13,9 +13,10 @@ ENV LC_ALL=C.UTF-8
 
 # basic dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    libegl1 libgl1 libgomp1 \
     python3 python3-pip python3-dev python3-setuptools python-is-python3 \
     lsb-release curl gnupg2 dirmngr \
-    build-essential git wget unzip ninja-build \
+    build-essential git wget unzip ninja-build clangd \
     zsh tmux \
     && rm -rf /var/lib/apt/lists/*
 
@@ -75,8 +76,8 @@ RUN python3 -m pip install --no-cache-dir \
     torch==2.2.1 torchvision==0.17.1 torchaudio==2.2.1 torchmetrics \
     --index-url https://download.pytorch.org/whl/cu118
 RUN python3 -m pip install --no-cache-dir torch-scatter -f https://data.pyg.org/whl/torch-2.2.1+cu118.html
-RUN python3 -m pip install --no-cache-dir spconv-cu118 addict
-RUN python3 -m pip install --user --no-cache-dir lightning
+RUN python3 -m pip install --no-cache-dir spconv-cu118 addict 
+RUN python3 -m pip install --no-cache-dir --user lightning typer open3d tensorboard
 
 # once it gets merged in, use the master
 RUN sh -c "$(curl -L https://raw.githubusercontent.com/balancedscorpion/zsh-in-docker/new_user/zsh-in-docker.sh)" -- \
