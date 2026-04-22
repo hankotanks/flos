@@ -3,16 +3,16 @@ import os
 from pathlib import Path
 from typing import Optional
 
-import src.python.forest_segmentor.transforms as fAIT
+import forest_segmentor_training.transforms as fAIT
 import torch
 import typer
-from src.python.forest_segmentor.data_modules.digiforest import MinkowskiDigiForestDataModule
-from src.python.forest_segmentor.ptv3_wrapper import PointTransformerV3Lightning
-from src.python.forest_segmentor.utils.config import sync_config_keys
+from forest_segmentor_training.data_modules.digiforest import DigiForestDataModule
+from src.python.forest_segmentor.model import PointTransformerV3Lightning
+from forest_segmentor_training.utils.config import sync_config_keys
 from lightning.pytorch import Trainer, seed_everything
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger, Logger
-from src.python.forest_segmentor.utils.io import load_yaml_or_json
+from forest_segmentor_training.utils.io import load_yaml_or_json
 
 from typing import Dict as dict
 from typing import List as list
@@ -44,7 +44,7 @@ def train(
     if "debug_no_augmentation" in datamodule_config:
         debug_no_augmentation = datamodule_config.pop("debug_no_augmentation")
         batch_transform = None if debug_no_augmentation else batch_transform
-    datamodule = MinkowskiDigiForestDataModule(
+    datamodule = DigiForestDataModule(
         data_dir=data_dir,
         dataset_config=dataset_config,
         transform=None,

@@ -9,10 +9,6 @@ from .base_dataset import BaseDataset
 from enum import Enum
 
 from typing import Union
-from typing import Dict as dict
-from typing import List as list
-from typing import Tuple as tuple
-
 
 class Labels:
     class From(Enum):

@@ -12,33 +12,7 @@ from typing import Dict as dict
 from typing import List
 from typing import Tuple as tuple
 
-class DigiForestDataModule(BaseDataModule):
-    def __init__(
-        self,
-        data_dir: Path,
-        batch_size: int,
-        num_workers: int,
-        dataset_config: dict,
-        transform: Union[Callable[..., dict], None] = None,
-        batch_transform: Union[Callable[..., dict], None] = None,
-        pre_transform: Union[Callable[..., dict], None] = None,
-        pre_filter: Union[Callable[..., bool], None] = None,
-    ):
-        super().__init__(
-            data_dir=data_dir,
-            batch_size=batch_size,
-            num_workers=num_workers,
-            dataset_config=dataset_config,
-            transform=transform,
-            batch_transform=batch_transform,
-            pre_transform=pre_transform,
-            pre_filter=pre_filter,
-            prepare_splits=["train", "val"],
-            dataset_cls=DigiForestDataset,
-            collate_fn=None,
-        )
-
-def mink_collate_fn(batch: List[dict[str, torch.Tensor]]):
+def collate_fn(batch: List[dict[str, torch.Tensor]]):
     """
     by default, with how we do our dataloaders, they return a dict of key value tensors.
     the batch here will be a list of such dicts.
@@ -69,9 +43,7 @@ def mink_collate_fn(batch: List[dict[str, torch.Tensor]]):
     }
 
 
-class MinkowskiDigiForestDataModule(BaseDataModule):
-    """Batch transforms for Minkowski will need a different implementation since the getitem is slightly different"""
-
+class DigiForestDataModule(BaseDataModule):
     def __init__(
         self,
         data_dir: Path,
@@ -95,5 +67,5 @@ class MinkowskiDigiForestDataModule(BaseDataModule):
             pre_filter=pre_filter,
             prepare_splits=prepare_splits,
             dataset_cls=DigiForestDataset,
-            collate_fn=mink_collate_fn,
+            collate_fn=collate_fn,
         )
