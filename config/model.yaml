@@ -1,0 +1,7 @@
+in_channels: 1 # intensity as feature
+num_classes: 5 # include ignore in the number
+coord_dimension: 3
+lr: 0.001
+batch_size: 1
+vds: 0.1
+clear_torch_cache: true

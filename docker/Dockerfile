@@ -72,8 +72,11 @@ RUN python3 -m pip install --upgrade pip setuptools wheel
 RUN python3 -m pip install --no-cache-dir \
     "numpy<=1.25" \
     "networkx<=3.1" \
-    torch==2.2.1 torchvision==0.17.1 torchaudio==2.2.1 \
+    torch==2.2.1 torchvision==0.17.1 torchaudio==2.2.1 torchmetrics \
     --index-url https://download.pytorch.org/whl/cu118
+RUN python3 -m pip install --no-cache-dir torch-scatter -f https://data.pyg.org/whl/torch-2.2.1+cu118.html
+RUN python3 -m pip install --no-cache-dir spconv-cu118 addict
+RUN python3 -m pip install --user --no-cache-dir lightning
 
 # once it gets merged in, use the master
 RUN sh -c "$(curl -L https://raw.githubusercontent.com/balancedscorpion/zsh-in-docker/new_user/zsh-in-docker.sh)" -- \

@@ -1,0 +1,7 @@
+batch_size: 1
+num_workers: 1 # might even be better than multi thread for some reason
+debug_no_augmentation: false # this needs to be put under debug:, doesnt work for some reason
+dataset:
+  include_semantics: true
+  include_instance: true
+  delete_existing_processed_files: false
