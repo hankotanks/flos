@@ -12,7 +12,7 @@ find_package(catkin REQUIRED
 catkin_package()
 
 add_custom_target(python_package ALL 
-  COMMAND pip3 install --user ${CMAKE_CURRENT_SOURCE_DIR}/src/python
+  COMMAND pip3 install --root-user-action=ignore --user ${CMAKE_CURRENT_SOURCE_DIR}/src/python
   COMMENT "Installing Python package..." WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
 add_subdirectory(src/cpp)

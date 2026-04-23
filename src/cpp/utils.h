@@ -7,9 +7,9 @@
 
 #include <Eigen/Dense>
 
-std::pair<std::vector<Eigen::Matrix<float, 3, 1>>, std::vector<float>> 
-    point_cloud2_to_eigen_with_intensities(const sensor_msgs::PointCloud2ConstPtr& msg);
+#include "aliases.h"
 
-sensor_msgs::PointCloud2Ptr 
-eigen_to_point_cloud2_with_fields(const std::vector<Eigen::Matrix<float, 3, 1>>& points, 
-    const std::map<std::string, std::vector<float>> fields, const std_msgs::Header& header);
+EigenCloudWithIntensity pointcloud2_with_intensity_to_eigen(const sensor_msgs::PointCloud2ConstPtr& msg);
+
+sensor_msgs::PointCloud2Ptr pointcloud2_from_eigen(const std_msgs::Header& header, 
+    const EigenCloud& points, const std::map<std::string, EigenCloudField> fields = {});
