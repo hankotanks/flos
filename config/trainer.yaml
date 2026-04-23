@@ -19,7 +19,7 @@ gradient_clip_val: 0.5
 accumulate_grad_batches: 16
 deterministic: false
 # validate after n epochs
-check_val_every_n_epoch: 10
+check_val_every_n_epoch: 5
 # track_grad_norm: 2
 #
 ## debug, will only be used if the debug flag is set on the cli run

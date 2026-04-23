@@ -9,7 +9,6 @@ List serialization code adopted from
 https://github.com/facebookresearch/detectron2/blob/main/detectron2/data/common.py
 """
 
-import multiprocessing as mp
 import pickle
 import numpy as np
 import torch
@@ -20,16 +19,10 @@ class NumpySerializedList:
             buffer = pickle.dumps(data, protocol=-1)
             return np.frombuffer(buffer, dtype=np.uint8)
 
-        print(
-            "Serializing {} elements to byte tensors and concatenating them all ...".format(
-                len(lst)
-            )
-        )
         self._lst = [_serialize(x) for x in lst]
         self._addr = np.asarray([len(x) for x in self._lst], dtype=np.int64)
         self._addr = np.cumsum(self._addr)
         self._lst = np.concatenate(self._lst)
-        print("Serialized dataset takes {:.2f} MiB".format(len(self._lst) / 1024**2))
 
     def __len__(self):
         return len(self._addr)

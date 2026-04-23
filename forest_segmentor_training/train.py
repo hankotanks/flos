@@ -1,9 +1,9 @@
 import copy
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, List
 
-import forest_segmentor_training.transforms as fAIT
+import forest_segmentor_training.utils.transforms as fAIT
 import torch
 import typer
 from forest_segmentor_training.data_modules.digiforest import DigiForestDataModule
@@ -13,33 +13,28 @@ from lightning.pytorch import Trainer, seed_everything
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger, Logger
 from forest_segmentor_training.utils.io import load_yaml_or_json
-
-from typing import Dict as dict
-from typing import List as list
-from typing import Tuple as tuple
-from typing import Union
+from torchvision.transforms import Compose
 
 cli = typer.Typer()
 
 def train(
-    model_config: dict,
-    lightning_config: dict,
-    datamodule_config: dict,
+    model_config: Dict,
+    lightning_config: Dict,
+    datamodule_config: Dict,
     log_dir: Path,
     data_dir: Path,
-    logger: list[Logger],
+    logger: List[Logger],
     seed=None,
+    verbose=False
 ):
     # Data Prep
     # ----------------------
     # TODO: log all the transforms as well
-    pre_transfom = fAIT.Compose([fAIT.CenterGlobal(verbose=True)])
-    batch_transform = fAIT.Compose(
-        [
-            fAIT.RandomRotate(180, axis=2, minkowski=True, verbose=True),
-            fAIT.RandomUniformScale((0.8, 1.2), minkowski=True, verbose=True),
-        ]
-    )
+    pre_transfom = Compose([fAIT.CenterGlobal(verbose=verbose)])
+    batch_transform = Compose([
+        fAIT.RandomRotate(180, axis=2, verbose=verbose),
+        fAIT.RandomUniformScale((0.8, 1.2), verbose=verbose),
+    ])
     dataset_config = datamodule_config.pop("dataset")
     if "debug_no_augmentation" in datamodule_config:
         debug_no_augmentation = datamodule_config.pop("debug_no_augmentation")
@@ -73,7 +68,7 @@ def train(
         auto_insert_metric_name=False,
         mode="max",
         save_last=True,
-        verbose=False,
+        verbose=verbose,
     )
     # ----------------------
 
@@ -166,7 +161,7 @@ def main(
     # load confs
     model_config = load_yaml_or_json(model_config_fp)
     datamodule_config = load_yaml_or_json(data_config_fp)
-    lightning_config: dict = load_yaml_or_json(lightning_config_fp)
+    lightning_config: Dict = load_yaml_or_json(lightning_config_fp)
 
     # process and overwrite confs
     if "debug" in lightning_config:
@@ -204,6 +199,7 @@ def main(
         data_dir=data_dir,
         logger=[tb_logger],
         seed=lightning_config["seed"],
+        verbose=debug
     )
 
 

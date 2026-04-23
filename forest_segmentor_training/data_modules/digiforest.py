@@ -1,18 +1,13 @@
 # proof of concept
 
 from pathlib import Path
-from typing import Any, Callable, Type, Union
+from typing import Dict, List, Callable, Union
 import torch
 
-from ..datasets.base_dataset import BaseDataset
 from ..datasets.digiforest import DigiForestDataset
 from .base_data_module import BaseDataModule
 
-from typing import Dict as dict
-from typing import List
-from typing import Tuple as tuple
-
-def collate_fn(batch: List[dict[str, torch.Tensor]]):
+def collate_fn(batch: List[Dict[str, torch.Tensor]]):
     """
     by default, with how we do our dataloaders, they return a dict of key value tensors.
     the batch here will be a list of such dicts.
@@ -21,8 +16,8 @@ def collate_fn(batch: List[dict[str, torch.Tensor]]):
     batch_dict_values = [data_dict.values() for data_dict in batch]
     # this assumes that the order of keys in the dict is the following
     # i can make it general. but i cba.
-    pos_list, intensity_list, semantics_list, instance_list = list(zip(*batch_dict_values))#, offset_list = 
-    
+    pos_list, intensity_list, semantics_list, _ = list(zip(*batch_dict_values))
+    # dict_keys(['pos', 'intensity', 'semantics', 'instance'])
 
     batched_pos_list = []
     for i, pos in enumerate(pos_list):
@@ -32,14 +27,10 @@ def collate_fn(batch: List[dict[str, torch.Tensor]]):
     batched_pos = torch.cat(batched_pos_list, dim=0)
     batched_intensity = torch.cat(intensity_list, dim=0)
     batched_semantics = torch.cat(semantics_list, dim=0)
-    batched_instance = torch.cat(instance_list, dim=0)
-    # batched_offset = torch.cat(offset_list, dim=0)
     return {
         "pos": batched_pos,
         "intensity": batched_intensity,
         "semantics": batched_semantics,
-        "instance": batched_instance,
-        # "offset": batched_offset,
     }
 
 
@@ -49,10 +40,10 @@ class DigiForestDataModule(BaseDataModule):
         data_dir: Path,
         batch_size: int,
         num_workers: int,
-        dataset_config: dict,
-        transform: Union[Callable[..., dict], None] = None,
-        batch_transform: Union[Callable[..., dict], None] = None,
-        pre_transform: Union[Callable[..., dict], None] = None,
+        dataset_config: Dict,
+        transform: Union[Callable[..., Dict], None] = None,
+        batch_transform: Union[Callable[..., Dict], None] = None,
+        pre_transform: Union[Callable[..., Dict], None] = None,
         pre_filter: Union[Callable[..., bool], None] = None,
         prepare_splits: List[str] = ["train", "val"],
     ):

@@ -1,10 +1,5 @@
 from pathlib import Path
-from typing import Callable, Type
-
-from typing import Dict as dict
-from typing import List as list
-from typing import Tuple as tuple
-from typing import Union
+from typing import Callable, Type, Dict, List, Union
 
 import lightning.pytorch as pl
 from torch.utils.data import DataLoader
@@ -18,13 +13,13 @@ class BaseDataModule(pl.LightningDataModule):
         data_dir: Path,
         batch_size: int,
         num_workers: int,
-        dataset_config: dict,
-        transform: Union[Callable[..., dict], None] = None,
-        batch_transform: Union[Callable[..., dict], None] = None,
-        pre_transform: Union[Callable[..., dict], None] = None,
+        dataset_config: Dict,
+        transform: Union[Callable[..., Dict], None] = None,
+        batch_transform: Union[Callable[..., Dict], None] = None,
+        pre_transform: Union[Callable[..., Dict], None] = None,
         pre_filter: Union[Callable[..., bool], None] = None,
         dataset_cls: Union[Type[BaseDataset], None] = None,
-        prepare_splits: list[str] = ["train", "val", "test", "predict"],
+        prepare_splits: List[str] = ["train", "val", "test", "predict"],
         collate_fn=None,
     ):
         """

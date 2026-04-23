@@ -78,9 +78,7 @@ class Labels:
             tree_mask, np.logical_not(stem_and_canopy_mask)
         )
         if np.any(tree_but_not_sub_class_mask):
-            print(
-                "there were remaining unmapped tree values. these are being ignored"
-            )
+            print("there were remaining unmapped tree values. these are being ignored")
             remapped_labels[tree_but_not_sub_class_mask] = Labels.To.IGNORE.value
 
         return remapped_labels

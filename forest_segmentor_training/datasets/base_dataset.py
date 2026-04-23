@@ -1,14 +1,10 @@
 from pathlib import Path
 import copy
-from typing import Callable, Union
+from typing import Callable, Union, Dict, List
 import torch
 from ..utils.io import load_yaml_or_json
 from torch.utils.data import Dataset
 from functools import cached_property
-
-from typing import Dict as dict
-from typing import List as list
-from typing import Tuple as tuple
 
 from ..utils.serialize import TorchSerializedList
 
@@ -78,8 +74,7 @@ class BaseDataset(Dataset):
 
     def __getitem__(self, idx):
         sample_fp: Path = self.sample_fps[idx]
-        print(f"loading {sample_fp}")
-        data: dict[str, Union[str, torch.Tensor]] = torch.load(sample_fp)
+        data: Dict[str, Union[str, torch.Tensor]] = torch.load(sample_fp)
         if self.transform is not None:
             data = self.transform(data)
         if self.return_filename:
@@ -87,12 +82,12 @@ class BaseDataset(Dataset):
         return data
 
     @cached_property
-    def data_split(self) -> dict[str, list[Path]]:
+    def data_split(self) -> Dict[str, List[Path]]:
         """hard coded requirement of existence of self.root / raw / data_split.json"""
         file_path = self.root / "raw" / "data_split.json"
         if not file_path.exists():
             raise Exception(f"File {file_path} is required for a dataset.")
-        data_split: dict[str, list[Path]] = load_yaml_or_json(
+        data_split: Dict[str, List[Path]] = load_yaml_or_json(
             self.root / "raw" / "data_split.json"
         )
         return data_split
@@ -111,10 +106,10 @@ class BaseDataset(Dataset):
         else:
             return self.root_to_data_dir_callable("processed", self.root)
 
-    def get_sample_fps(self) -> list[Path]:
+    def get_sample_fps(self) -> List[Path]:
         """gets the files from processed dir as per the state machine"""
         # its actually list[str], but whatever to satisfy mypy
-        fp_list: list[Path] = self.data_split[self.split]
+        fp_list: List[Path] = self.data_split[self.split]
         # sanity checking
         assert isinstance(fp_list, list), fp_list
         # fp list is the raw file list. need to convert to processed file loc list
@@ -164,7 +159,6 @@ class BaseDataset(Dataset):
             processed_fp.parent.mkdir(parents=True, exist_ok=True)
             data = self._process_raw_file(raw_fp)
             torch.save(data, processed_fp)
-            print(f"raw file - {raw_fp} - processed to - {processed_fp}")
 
     def _process_raw_file(self, raw_fp: Path):
         """
