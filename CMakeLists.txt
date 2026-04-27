@@ -6,15 +6,18 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(StandardProjectOptions)
 include(dependencies)
 
-find_package(catkin REQUIRED
-  COMPONENTS nav_msgs roscpp tf2 std_msgs tf2_ros sensor_msgs geometry_msgs rospy)
-
-catkin_package()
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 
 add_custom_target(python_package ALL 
-  COMMAND pip3 install --root-user-action=ignore --user ${CMAKE_CURRENT_SOURCE_DIR}/src/python
-  COMMENT "Installing Python package..." WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+  COMMAND pip3 install --root-user-action=ignore ${CMAKE_CURRENT_SOURCE_DIR}/src/python
+  COMMENT "${PROJECT_NAME}: Installing Python package..." 
+  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
 add_subdirectory(src/cpp)
 
-install(DIRECTORY config launch models DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
+install(DIRECTORY config models DESTINATION share/${PROJECT_NAME})
+
+ament_package()

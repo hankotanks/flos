@@ -1,0 +1,21 @@
+# torch
+--index-url https://download.pytorch.org/whl/cu126
+numpy<=1.26.4
+networkx==3.1
+torch==2.9.1
+torchvision==0.24.1
+torchaudio==2.9.1
+torchmetrics
+
+# other packages (must revert back to pypi index)
+--index-url https://pypi.org/simple
+spconv-cu126
+addict
+lightning
+tensorboard
+typer
+open3d
+
+# pyg
+--find-links https://data.pyg.org/whl/torch-2.9.1+cu126.html
+torch-scatter

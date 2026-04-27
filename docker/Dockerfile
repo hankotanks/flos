@@ -13,12 +13,12 @@ ENV LC_ALL=C.UTF-8
 
 # basic dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libegl1 libgl1 libgomp1 \
-    python3 python3-pip python3-dev python3-setuptools python-is-python3 \
-    lsb-release curl gnupg2 dirmngr \
-    build-essential git wget unzip ninja-build clangd \
-    zsh tmux \
-    && rm -rf /var/lib/apt/lists/*
+  build-essential git wget curl unzip ninja-build clangd \
+  lsb-release gnupg2 dirmngr \
+  python3 python3-pip python3-dev python3-setuptools python-is-python3 \
+  zsh tmux \
+  libegl1 libgl1 libgomp1 \  
+  && rm -rf /var/lib/apt/lists/*
 
 # the following is from osrf noetic image
 # setup keys

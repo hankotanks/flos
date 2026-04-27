@@ -7,4 +7,4 @@ podman run -it \
   -v "${SCRIPT_DIR}/../../forest_segmentation_logs:/logs" \
   -v "${SCRIPT_DIR}/../../digiforest_rosbags:/bags" \
   -v "${SCRIPT_DIR}/.zsh_history:/root/.zsh_history" \
-  forest_segmentation_devkit
+  forest_segmentation_devkit_2

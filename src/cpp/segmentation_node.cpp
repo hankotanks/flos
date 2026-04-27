@@ -13,33 +13,39 @@
 // eigen
 #include <Eigen/Core>
 // ros
-#include <tf2_ros/static_transform_broadcaster.h>
-#include <tf2_ros/transform_listener.h>
+#include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/header.hpp>
 // other
 #include "aliases.h"
 #include "utils.h"
 
-class SegmentationNode {
+class SegmentationNode : public rclcpp::Node {
 public:
-    SegmentationNode() : handle("~") {
-        // register parameters
-        handle.param("incoming_points_topic", incoming_points_topic, std::string{"/hesai/pandar"});
-        handle.param("outgoing_points_topic", outgoing_points_topic, std::string{"/inference"});
-        handle.param("path_to_model", path_to_model, std::string{});
-        // and publishers/subscribers
-        incoming_points_subscriber = handle.subscribe(incoming_points_topic, 10, &SegmentationNode::callback, this);
-        outgoing_points_publisher = handle.advertise<sensor_msgs::PointCloud2>(outgoing_points_topic, 10);
-        // start inference loop
+    SegmentationNode() : rclcpp::Node("forest_segmentation") {
+        // get path to default model
+        std::filesystem::path path_to_model_default{PROJECT_ROOT};
+        while(path_to_model_default.filename() != PROJECT_NAME) 
+            path_to_model_default = path_to_model_default.parent_path();
+        path_to_model_default /= "models";
+        path_to_model_default /= "default.ckpt";
+        // declare topics and model path parameters
+        this->declare_parameter<std::string>("incoming_points_topic", "/hesai/pandar");
+        this->declare_parameter<std::string>("outgoing_points_topic", "/inference");
+        this->declare_parameter<std::string>("path_to_model", path_to_model_default.string());
+        // store the parameters
+        this->get_parameter("incoming_points_topic", incoming_points_topic);
+        this->get_parameter("outgoing_points_topic", outgoing_points_topic);
+        this->get_parameter("path_to_model", path_to_model);
+        // ensure that model path exists
+        if(path_to_model.empty()) path_to_model = path_to_model_default;
+        if(!std::filesystem::exists(path_to_model))
+            throw std::runtime_error("model does not exist: " + path_to_model);
+        // point publisher and subscriber
+        incoming_points_subscriber = this->create_subscription<sensor_msgs::msg::PointCloud2>(incoming_points_topic, 10,
+            std::bind(&SegmentationNode::callback, this, std::placeholders::_1));
+        outgoing_points_publisher = this->create_publisher<sensor_msgs::msg::PointCloud2>(outgoing_points_topic, 10);
+        // segmentation threads
         segmentation_thread = std::thread(&SegmentationNode::loop, this);
-        // configure path to model checkpoint if one wasn't provided
-        if(path_to_model.empty()) { 
-            std::filesystem::path temp{PROJECT_ROOT};
-            while(temp.filename() != PROJECT_NAME) temp = temp.parent_path();
-            temp /= "models";
-            temp /= "default.ckpt";
-            path_to_model = temp.string();
-            assert(fs::exists(path_to_model));
-        }
     }
 
     ~SegmentationNode() {
@@ -51,29 +57,29 @@ private:
     struct Buffer {
         static constexpr size_t capacity = 5;
 
-        void push(const sensor_msgs::PointCloud2::ConstPtr& msg) noexcept {
-          const EigenCloudWithIntensity &cloud = pointcloud2_with_intensity_to_eigen(msg);
-          if(std::get<0>(cloud).empty()) return;
-          { // ensure capacity isn't reached
-            std::unique_lock lock(mutex_);
-            if(buffer_.size() >= capacity) {
-              ROS_WARN_STREAM_ONCE("segmentation_node can't keep up!");
-              return;
-            }
-            }
-            // push the cloud
-            buffer_.emplace(std::move(cloud), msg->header);
-            cv_.notify_one();
+        void push(rclcpp::Logger logger, const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg) noexcept {
+            const EigenCloudWithIntensity &cloud = pointcloud2_with_intensity_to_eigen(msg);
+            if(std::get<0>(cloud).empty()) return;
+            { // ensure capacity isn't reached
+                std::unique_lock lock(mutex_);
+                if(buffer_.size() >= capacity) {
+                    RCLCPP_WARN_STREAM_ONCE(logger, "segmentation_node can't keep up!");
+                    return;
+                }
+                // push the cloud
+                buffer_.emplace(std::move(cloud), msg->header);
+                cv_.notify_one();
+            }   
         }
 
-        std::optional<std::pair<EigenCloudWithIntensity, std_msgs::Header>> pop() {
+        std::optional<std::pair<EigenCloudWithIntensity, std_msgs::msg::Header>> pop() {
             { // wait
                 std::unique_lock lock(mutex_);
                 cv_.wait(lock, [this] { return !running_ || !buffer_.empty(); });
                 if(!running_ && buffer_.empty()) return std::nullopt;
             }
             // pop points from buffer and return
-            std::pair<EigenCloudWithIntensity, std_msgs::Header> cloud_and_header = std::move(buffer_.front());
+            std::pair<EigenCloudWithIntensity, std_msgs::msg::Header> cloud_and_header = std::move(buffer_.front());
             buffer_.pop();
             return cloud_and_header;
         }
@@ -89,27 +95,26 @@ private:
     private:
         std::mutex mutex_;
         std::condition_variable cv_;
-        std::queue<std::pair<EigenCloudWithIntensity, std_msgs::Header>> buffer_;
+        std::queue<std::pair<EigenCloudWithIntensity, std_msgs::msg::Header>> buffer_;
         std::atomic<bool> running_{true};
     };
 
 private:
     // parameters
-    ros::NodeHandle handle;
     std::string incoming_points_topic;
     std::string outgoing_points_topic;
     std::string path_to_model;
     // topic stuff  
-    ros::Subscriber incoming_points_subscriber;
-    ros::Publisher outgoing_points_publisher;
+    rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr incoming_points_subscriber;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr outgoing_points_publisher;
     // buffer for incoming point data
     Buffer buffer;
     // separate thread for processing buffered clouds
     std::thread segmentation_thread;
 
 private:
-    void callback(const sensor_msgs::PointCloud2::ConstPtr& msg) {
-        buffer.push(msg);
+    void callback(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg) {
+        buffer.push(this->get_logger(), msg);
     }
 
     void loop() {
@@ -117,7 +122,8 @@ private:
         py::scoped_interpreter guard{};
         // get the inference method from the python module
         py::object infer_module = py::module_::import("forest_segmentor.inference_helper");
-        py::object infer = infer_module.attr("InferenceHelper")(path_to_model).attr("infer");
+        py::object infer_helper = infer_module.attr("InferenceHelper")(path_to_model);
+        py::object infer = infer_helper.attr("infer");
         // loop until node is stopped
         while(true) {
             // get the next batch of points
@@ -125,7 +131,7 @@ private:
             if(!maybe) break;
             auto [cloud, header] = *maybe;
             static_assert(std::is_same_v<decltype(cloud), EigenCloudWithIntensity>);
-            static_assert(std::is_same_v<decltype(header), std_msgs::Header>);
+            static_assert(std::is_same_v<decltype(header), std_msgs::msg::Header>);
             auto [points, intensities] = cloud;
             static_assert(std::is_same_v<decltype(points), EigenCloud>);
             static_assert(std::is_same_v<decltype(intensities), EigenCloudField>);
@@ -136,14 +142,14 @@ private:
             std::map<std::string, std::vector<float>> fields;
             fields.emplace(std::make_pair("intensity", intensities));
             fields.emplace(std::make_pair("class", result.cast<std::vector<float>>()));
-            outgoing_points_publisher.publish(pointcloud2_from_eigen(header, points, fields));
+            outgoing_points_publisher->publish(pointcloud2_from_eigen(header, points, fields));
         }
     }
 };
 
 int main(int argc, char* argv[]) {
-    ros::init(argc, argv, "forest_segmentation");
-    SegmentationNode node;
-    ros::spin();
+    rclcpp::init(argc, argv);
+    rclcpp::spin(std::make_shared<SegmentationNode>());
+    rclcpp::shutdown();
     return 0;
 }

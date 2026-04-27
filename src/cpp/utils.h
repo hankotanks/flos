@@ -3,13 +3,14 @@
 #include <vector>
 #include <map>
 
-#include <sensor_msgs/PointCloud2.h>
+#include <std_msgs/msg/header.hpp>
+#include <sensor_msgs/msg/point_cloud2.hpp>
 
 #include <Eigen/Dense>
 
 #include "aliases.h"
 
-EigenCloudWithIntensity pointcloud2_with_intensity_to_eigen(const sensor_msgs::PointCloud2ConstPtr& msg);
+EigenCloudWithIntensity pointcloud2_with_intensity_to_eigen(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg);
 
-sensor_msgs::PointCloud2Ptr pointcloud2_from_eigen(const std_msgs::Header& header, 
+sensor_msgs::msg::PointCloud2 pointcloud2_from_eigen(const std_msgs::msg::Header& header, 
     const EigenCloud& points, const std::map<std::string, EigenCloudField> fields = {});

@@ -3,7 +3,8 @@
 #include <regex>
 #include <map>
 
-#include <sensor_msgs/point_cloud2_iterator.h>
+#include <sensor_msgs/msg/point_field.hpp>
+#include <sensor_msgs/point_cloud2_iterator.hpp>
 
 namespace {
     inline std::string fix_frame_id(const std::string &frame_id) {
@@ -11,7 +12,7 @@ namespace {
     }
 } // private scope
 
-EigenCloudWithIntensity pointcloud2_with_intensity_to_eigen(const sensor_msgs::PointCloud2ConstPtr& msg) {
+EigenCloudWithIntensity pointcloud2_with_intensity_to_eigen(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg) {
     const size_t point_count = static_cast<size_t>(msg->height) * msg->width;
     std::vector<Eigen::Matrix<float, 3, 1>> points;
     std::vector<float> intensities;
@@ -28,35 +29,35 @@ EigenCloudWithIntensity pointcloud2_with_intensity_to_eigen(const sensor_msgs::P
     return std::make_pair(points, intensities);
 }
 
-sensor_msgs::PointCloud2Ptr pointcloud2_from_eigen(const std_msgs::Header& header, 
+sensor_msgs::msg::PointCloud2 pointcloud2_from_eigen(const std_msgs::msg::Header& header, 
     const EigenCloud& points, const std::map<std::string, EigenCloudField> fields) {
     // create PointCloud2 message with intensity field
-    auto cloud_msg = std::make_unique<sensor_msgs::PointCloud2>();
-    sensor_msgs::PointCloud2Modifier modifier(*cloud_msg);
-    cloud_msg->header = header;
-    cloud_msg->header.frame_id = fix_frame_id(cloud_msg->header.frame_id);
-    cloud_msg->fields.clear();
+    sensor_msgs::msg::PointCloud2 msg;
+    sensor_msgs::PointCloud2Modifier modifier(msg);
+    msg.header = header;
+    msg.header.frame_id = fix_frame_id(msg.header.frame_id);
+    msg.fields.clear();
     int offset = 0;
-    offset = addPointField(*cloud_msg, "x", 1, sensor_msgs::PointField::FLOAT32, offset);
-    offset = addPointField(*cloud_msg, "y", 1, sensor_msgs::PointField::FLOAT32, offset);
-    offset = addPointField(*cloud_msg, "z", 1, sensor_msgs::PointField::FLOAT32, offset);
+    offset = addPointField(msg, "x", 1, sensor_msgs::msg::PointField::FLOAT32, offset);
+    offset = addPointField(msg, "y", 1, sensor_msgs::msg::PointField::FLOAT32, offset);
+    offset = addPointField(msg, "z", 1, sensor_msgs::msg::PointField::FLOAT32, offset);
     // incorporate scalar fields
     for(const auto& [field, field_data] : fields) {
-        offset = addPointField(*cloud_msg, field, 1, sensor_msgs::PointField::FLOAT32, offset);
+        offset = addPointField(msg, field, 1, sensor_msgs::msg::PointField::FLOAT32, offset);
     }
-    cloud_msg->point_step = offset;
-    cloud_msg->row_step = cloud_msg->width * cloud_msg->point_step;
-    cloud_msg->data.resize(static_cast<size_t>(cloud_msg->height) * cloud_msg->row_step);
+    msg.point_step = offset;
+    msg.row_step = msg.width * msg.point_step;
+    msg.data.resize(static_cast<size_t>(msg.height) * msg.row_step);
     modifier.resize(points.size());
     // fill the data
-    sensor_msgs::PointCloud2Iterator<float> msg_x(*cloud_msg, "x");
-    sensor_msgs::PointCloud2Iterator<float> msg_y(*cloud_msg, "y");
-    sensor_msgs::PointCloud2Iterator<float> msg_z(*cloud_msg, "z");
+    sensor_msgs::PointCloud2Iterator<float> msg_x(msg, "x");
+    sensor_msgs::PointCloud2Iterator<float> msg_y(msg, "y");
+    sensor_msgs::PointCloud2Iterator<float> msg_z(msg, "z");
     // build iterators for each field
     std::map<std::string, sensor_msgs::PointCloud2Iterator<float>> msg_fields;
     for(const auto& [field, field_data] : fields) {
         msg_fields.emplace(std::piecewise_construct, 
-            std::forward_as_tuple(field), std::forward_as_tuple(*cloud_msg, field));
+            std::forward_as_tuple(field), std::forward_as_tuple(msg, field));
     }
     // populate the message
     for(size_t i = 0; i < points.size(); ++i, ++msg_x, ++msg_y, ++msg_z) {
@@ -69,5 +70,5 @@ sensor_msgs::PointCloud2Ptr pointcloud2_from_eigen(const std_msgs::Header& heade
             ++msg_fields.at(field);
         }   
     }
-    return cloud_msg;
+    return msg;
 }
