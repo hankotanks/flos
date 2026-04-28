@@ -63,7 +63,7 @@ private:
             { // ensure capacity isn't reached
                 std::unique_lock lock(mutex_);
                 if(buffer_.size() >= capacity) {
-                    RCLCPP_WARN_STREAM_ONCE(logger, "segmentation_node can't keep up!");
+                    RCLCPP_WARN_ONCE(logger, "segmentation_node can't keep up!");
                     return;
                 }
                 // push the cloud
@@ -123,6 +123,7 @@ private:
         // get the inference method from the python module
         py::object infer_module = py::module_::import("forest_segmentor.inference_helper");
         py::object infer_helper = infer_module.attr("InferenceHelper")(path_to_model);
+        RCLCPP_INFO_ONCE(this->get_logger(), "segmentation_node successfully loaded inference model");
         py::object infer = infer_helper.attr("infer");
         // loop until node is stopped
         while(true) {
