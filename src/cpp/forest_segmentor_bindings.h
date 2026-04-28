@@ -9,7 +9,9 @@
 
 #include <Eigen/Dense>
 
+#include "aliases.h"
+
 namespace py = pybind11;
 
-PYBIND11_MAKE_OPAQUE(std::vector<Eigen::Vector3f>);
-PYBIND11_MAKE_OPAQUE(std::vector<float>);
+PYBIND11_MAKE_OPAQUE(EigenCloud);
+PYBIND11_MAKE_OPAQUE(EigenCloudField);
