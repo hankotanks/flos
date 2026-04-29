@@ -7,7 +7,6 @@
 #include <mutex>
 #include <thread>
 #include <queue>
-#include <vector>
 #include <optional>
 #include <filesystem>
 // eigen
@@ -58,7 +57,7 @@ private:
         static constexpr size_t capacity = 5;
 
         void push(rclcpp::Logger logger, const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg) noexcept {
-            const EigenCloudWithIntensity &cloud = pointcloud2_with_intensity_to_eigen(msg);
+            const CloudWithIntensity &cloud = pointcloud2_with_intensity_to_eigen(msg);
             if(std::get<0>(cloud).empty()) return;
             { // ensure capacity isn't reached
                 std::unique_lock lock(mutex_);
@@ -72,14 +71,14 @@ private:
             }   
         }
 
-        std::optional<std::pair<EigenCloudWithIntensity, std_msgs::msg::Header>> pop() {
+        std::optional<std::pair<CloudWithIntensity, std_msgs::msg::Header>> pop() {
             { // wait
                 std::unique_lock lock(mutex_);
                 cv_.wait(lock, [this] { return !running_ || !buffer_.empty(); });
                 if(!running_ && buffer_.empty()) return std::nullopt;
             }
             // pop points from buffer and return
-            std::pair<EigenCloudWithIntensity, std_msgs::msg::Header> cloud_and_header = std::move(buffer_.front());
+            std::pair<CloudWithIntensity, std_msgs::msg::Header> cloud_and_header = std::move(buffer_.front());
             buffer_.pop();
             return cloud_and_header;
         }
@@ -95,7 +94,7 @@ private:
     private:
         std::mutex mutex_;
         std::condition_variable cv_;
-        std::queue<std::pair<EigenCloudWithIntensity, std_msgs::msg::Header>> buffer_;
+        std::queue<std::pair<CloudWithIntensity, std_msgs::msg::Header>> buffer_;
         std::atomic<bool> running_{true};
     };
 
@@ -131,18 +130,19 @@ private:
             auto maybe = buffer.pop();
             if(!maybe) break;
             auto [cloud, header] = *maybe;
-            static_assert(std::is_same_v<decltype(cloud), EigenCloudWithIntensity>);
+            static_assert(std::is_same_v<decltype(cloud), CloudWithIntensity>);
             static_assert(std::is_same_v<decltype(header), std_msgs::msg::Header>);
             auto [points, intensities] = cloud;
-            static_assert(std::is_same_v<decltype(points), EigenCloud>);
-            static_assert(std::is_same_v<decltype(intensities), EigenCloudField>);
+            static_assert(std::is_same_v<decltype(points), Cloud>);
+            static_assert(std::is_same_v<decltype(intensities), FieldF32>);
             // perform the inference
-            py::object result = infer(py::cast(points, py::return_value_policy::reference),
-                py::cast(intensities, py::return_value_policy::reference));
+            py::tuple result = infer(py::cast(points, py::return_value_policy::reference),
+                py::cast(intensities, py::return_value_policy::reference)).cast<py::tuple>();
             // output
-            std::map<std::string, std::vector<float>> fields;
+            std::map<std::string, Field> fields;
             fields.emplace(std::make_pair("intensity", intensities));
-            fields.emplace(std::make_pair("class", result.cast<std::vector<float>>()));
+            fields.emplace(std::make_pair("class", result[0].cast<FieldU8>()));
+            fields.emplace(std::make_pair("confidence", result[1].cast<FieldF32>()));
             outgoing_points_publisher->publish(pointcloud2_from_eigen(header, points, fields));
         }
     }

@@ -114,8 +114,10 @@ class PointTransformerV3Lightning(pl.LightningModule):
         return logits
     
     def infer(self, batch):
-        trav_logits = self.forward(batch)
-        return torch.argmax(trav_logits, dim=-1)
+        logits = self.forward(batch)
+        conf = torch.softmax(logits, dim=-1)
+        pred = torch.argmax(conf, dim=-1)
+        return pred, conf
 
     def training_step(self, batch, batch_idx, dataloader_idx=0):
         labels = batch["semantics"]

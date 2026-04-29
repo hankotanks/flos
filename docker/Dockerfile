@@ -50,7 +50,7 @@ RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
 
 # install ROS2 and related packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ros-kilted-ros-base \
+    ros-kilted-ros-base ros-kilted-rviz2 \
     python3-colcon-common-extensions python3-rosdep python3-vcstool \
     && rm -rf /var/lib/apt/lists/*
 RUN rosdep init 2>/dev/null || true && rosdep update

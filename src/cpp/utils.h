@@ -1,6 +1,5 @@
 #pragma once
 
-#include <vector>
 #include <map>
 
 #include <std_msgs/msg/header.hpp>
@@ -10,7 +9,7 @@
 
 #include "aliases.h"
 
-EigenCloudWithIntensity pointcloud2_with_intensity_to_eigen(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg);
+CloudWithIntensity pointcloud2_with_intensity_to_eigen(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg);
 
 sensor_msgs::msg::PointCloud2 pointcloud2_from_eigen(const std_msgs::msg::Header& header, 
-    const EigenCloud& points, const std::map<std::string, EigenCloudField> fields = {});
+    const Cloud& points, const std::map<std::string, Field>& fields = {});
