@@ -31,8 +31,7 @@ CloudWithIntensity pointcloud2_with_intensity_to_eigen(const sensor_msgs::msg::P
     return std::make_pair(points, intensities);
 }
 
-sensor_msgs::msg::PointCloud2 pointcloud2_from_eigen(const std_msgs::msg::Header& header, 
-    const Cloud& points, const std::map<std::string, Field>& fields) {
+sensor_msgs::msg::PointCloud2 pointcloud2_from_eigen(const std_msgs::msg::Header& header, const CloudWithFields& cloud) {
     sensor_msgs::msg::PointCloud2 msg;
     sensor_msgs::PointCloud2Modifier modifier(msg);
     msg.header = header;
@@ -44,6 +43,7 @@ sensor_msgs::msg::PointCloud2 pointcloud2_from_eigen(const std_msgs::msg::Header
     offset = addPointField(msg, "y", 1, sensor_msgs::msg::PointField::FLOAT32, offset);
     offset = addPointField(msg, "z", 1, sensor_msgs::msg::PointField::FLOAT32, offset);
     // generic fields
+    const auto [points, fields] = cloud;
     for (const auto& [field_name, field_data] : fields) {
         std::visit([&](auto&& vec){
             using T = std::decay_t<decltype(vec)>;

@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <variant>
+#include <map>
 
 #include <Eigen/Dense>
 
@@ -15,3 +16,4 @@ using FieldU8 = std::vector<uint8_t>;
 using Field = std::variant<FieldF32, FieldU8>;
 using Cloud = CLOUD_TYPE;
 using CloudWithIntensity = std::pair<Cloud, FieldF32>;
+using CloudWithFields = std::pair<Cloud, std::map<std::string, Field>>;

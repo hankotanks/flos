@@ -143,7 +143,7 @@ private:
             fields.emplace(std::make_pair("intensity", intensities));
             fields.emplace(std::make_pair("class", result[0].cast<FieldU8>()));
             fields.emplace(std::make_pair("confidence", result[1].cast<FieldF32>()));
-            outgoing_points_publisher->publish(pointcloud2_from_eigen(header, points, fields));
+            outgoing_points_publisher->publish(pointcloud2_from_eigen(header, std::make_pair(points, fields)));
         }
     }
 };
