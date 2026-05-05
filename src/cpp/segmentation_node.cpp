@@ -9,14 +9,16 @@
 #include <queue>
 #include <optional>
 #include <filesystem>
+
 // eigen
 #include <Eigen/Core>
 // ros
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/header.hpp>
+#include <sensor_msgs/msg/point_field.hpp>
+#include <sensor_msgs/point_cloud2_iterator.hpp>
 // other
-#include "aliases.h"
-#include "utils.h"
+#include "Cloud.h"
 
 class SegmentationNode : public rclcpp::Node {
 public:
@@ -57,8 +59,7 @@ private:
         static constexpr size_t capacity = 5;
 
         void push(rclcpp::Logger logger, const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg) noexcept {
-            const CloudWithIntensity &cloud = pointcloud2_with_intensity_to_eigen(msg);
-            if(std::get<0>(cloud).empty()) return;
+            if(msg->width * msg->height == 0) return;
             { // ensure capacity isn't reached
                 std::unique_lock lock(mutex_);
                 if(buffer_.size() >= capacity) {
@@ -66,19 +67,19 @@ private:
                     return;
                 }
                 // push the cloud
-                buffer_.emplace(std::move(cloud), msg->header);
+                buffer_.emplace(msg, msg->header);
                 cv_.notify_one();
             }   
         }
 
-        std::optional<std::pair<CloudWithIntensity, std_msgs::msg::Header>> pop() {
+        std::optional<std::pair<cloud::Cloud, std_msgs::msg::Header>> pop() {
             { // wait
                 std::unique_lock lock(mutex_);
                 cv_.wait(lock, [this] { return !running_ || !buffer_.empty(); });
                 if(!running_ && buffer_.empty()) return std::nullopt;
             }
             // pop points from buffer and return
-            std::pair<CloudWithIntensity, std_msgs::msg::Header> cloud_and_header = std::move(buffer_.front());
+            auto cloud_and_header = std::move(buffer_.front());
             buffer_.pop();
             return cloud_and_header;
         }
@@ -94,7 +95,7 @@ private:
     private:
         std::mutex mutex_;
         std::condition_variable cv_;
-        std::queue<std::pair<CloudWithIntensity, std_msgs::msg::Header>> buffer_;
+        std::queue<std::pair<cloud::Cloud, std_msgs::msg::Header>> buffer_;
         std::atomic<bool> running_{true};
     };
 
@@ -129,21 +130,19 @@ private:
             // get the next batch of points
             auto maybe = buffer.pop();
             if(!maybe) break;
-            auto [cloud, header] = *maybe;
-            static_assert(std::is_same_v<decltype(cloud), CloudWithIntensity>);
+            auto [cloud, header] = std::move(*maybe);
+            static_assert(std::is_same_v<decltype(cloud), cloud::Cloud>);
             static_assert(std::is_same_v<decltype(header), std_msgs::msg::Header>);
-            auto [points, intensities] = cloud;
-            static_assert(std::is_same_v<decltype(points), Cloud>);
-            static_assert(std::is_same_v<decltype(intensities), FieldF32>);
             // perform the inference
+            const std::vector<Eigen::Vector3f>& points = cloud.get_points();
+            // TODO: It would be GREAT if we could avoid constructing this vector every frame
+            std::vector<float> intensity = cloud.get_field<float>("intensity");
             py::tuple result = infer(py::cast(points, py::return_value_policy::reference),
-                py::cast(intensities, py::return_value_policy::reference)).cast<py::tuple>();
+                py::cast(intensity, py::return_value_policy::reference)).cast<py::tuple>();
             // output
-            std::map<std::string, Field> fields;
-            fields.emplace(std::make_pair("intensity", intensities));
-            fields.emplace(std::make_pair("class", result[0].cast<FieldU8>()));
-            fields.emplace(std::make_pair("confidence", result[1].cast<FieldF32>()));
-            outgoing_points_publisher->publish(pointcloud2_from_eigen(header, std::make_pair(points, fields)));
+            cloud.add_field("class", result[0].cast<VectorUINT8>());
+            cloud.add_field("confidence", result[1].cast<VectorFLOAT32>());
+            outgoing_points_publisher->publish(std::move(cloud.message(header)));
         }
     }
 };

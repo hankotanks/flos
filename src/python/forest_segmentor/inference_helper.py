@@ -34,4 +34,4 @@ class InferenceHelper:
         np_pred = pred.cpu().numpy().reshape(-1).astype(np.uint8)
         np_conf = conf.cpu().numpy().reshape(-1).astype(np.float32)
         # although the return is very likely still a copy
-        return forest_segmentor_bindings.FieldU8(np_pred), forest_segmentor_bindings.FieldF32(np_conf)
+        return forest_segmentor_bindings.VectorUINT8(np_pred), forest_segmentor_bindings.VectorFLOAT32(np_conf)
