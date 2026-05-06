@@ -9,16 +9,13 @@
 #include <queue>
 #include <optional>
 #include <filesystem>
-
 // eigen
 #include <Eigen/Core>
 // ros
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/header.hpp>
-#include <sensor_msgs/msg/point_field.hpp>
-#include <sensor_msgs/point_cloud2_iterator.hpp>
 // other
-#include "Cloud.h"
+#include "util/cloud.h"
 
 class SegmentationNode : public rclcpp::Node {
 public:
@@ -72,7 +69,7 @@ private:
             }   
         }
 
-        std::optional<std::pair<cloud::Cloud, std_msgs::msg::Header>> pop() {
+        std::optional<std::pair<util::Cloud, std_msgs::msg::Header>> pop() {
             { // wait
                 std::unique_lock lock(mutex_);
                 cv_.wait(lock, [this] { return !running_ || !buffer_.empty(); });
@@ -95,7 +92,7 @@ private:
     private:
         std::mutex mutex_;
         std::condition_variable cv_;
-        std::queue<std::pair<cloud::Cloud, std_msgs::msg::Header>> buffer_;
+        std::queue<std::pair<util::Cloud, std_msgs::msg::Header>> buffer_;
         std::atomic<bool> running_{true};
     };
 
@@ -131,12 +128,11 @@ private:
             auto maybe = buffer.pop();
             if(!maybe) break;
             auto [cloud, header] = std::move(*maybe);
-            static_assert(std::is_same_v<decltype(cloud), cloud::Cloud>);
+            static_assert(std::is_same_v<decltype(cloud), util::Cloud>);
             static_assert(std::is_same_v<decltype(header), std_msgs::msg::Header>);
             // perform the inference
-            const std::vector<Eigen::Vector3f>& points = cloud.get_points();
-            // TODO: It would be GREAT if we could avoid constructing this vector every frame
-            std::vector<float> intensity = cloud.get_field<float>("intensity");
+            const std::vector<Eigen::Vector3f>& points = cloud.points();
+            const std::vector<float>& intensity = cloud.field<float>("intensity");
             py::tuple result = infer(py::cast(points, py::return_value_policy::reference),
                 py::cast(intensity, py::return_value_policy::reference)).cast<py::tuple>();
             // output
