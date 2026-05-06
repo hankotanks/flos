@@ -168,3 +168,22 @@ Cloud::FieldWriter::FieldWriter(sensor_msgs::msg::PointCloud2& msg, uint8_t data
     }
 }()) { /* STUB */ }
 }
+
+#ifdef GENERATE_CLOUD_PYBIND_MODULE
+#include "stl_vector_eigen.h"
+
+// binding code here still works because it just needs to be visible in the final binary
+PYBIND11_EMBEDDED_MODULE(cloud_bindings, m) {
+    // TODO: ENSURE THIS DOESN'T COPY!
+    pybind11::bind_vector<FieldInt8>(m, "FieldInt8");
+    pybind11::bind_vector<FieldUInt8>(m, "FieldUInt8");
+    pybind11::bind_vector<FieldInt16>(m, "FieldInt16");
+    pybind11::bind_vector<FieldUInt16>(m, "FieldUInt16");
+    pybind11::bind_vector<FieldInt32>(m, "FieldInt32");
+    pybind11::bind_vector<FieldUInt32>(m, "FieldUInt32");
+    pybind11::bind_vector<FieldFloat32>(m, "FieldFloat32");
+    pybind11::bind_vector<FieldFloat64>(m, "FieldFloat64");
+    // (n, 3) numpy array
+    pybind_eigen_vector_of_vector<Eigen::Vector3f>(m, "Points", "Points", pybind11::py_array_to_vectors<Eigen::Vector3f>);
+}
+#endif // GENERATE_CLOUD_PYBIND_MODULE

@@ -1,5 +1,3 @@
-// pybind
-#include "forest_segmentor_bindings.h"
 // system
 #include <atomic>
 #include <cassert>
@@ -131,13 +129,12 @@ private:
             static_assert(std::is_same_v<decltype(cloud), util::Cloud>);
             static_assert(std::is_same_v<decltype(header), std_msgs::msg::Header>);
             // perform the inference
-            const std::vector<Eigen::Vector3f>& points = cloud.points();
-            const std::vector<float>& intensity = cloud.field<float>("intensity");
-            py::tuple result = infer(py::cast(points, py::return_value_policy::reference),
-                py::cast(intensity, py::return_value_policy::reference)).cast<py::tuple>();
+            py::object points = cloud.points_as_py_object();
+            py::object intensity = cloud.field_as_py_object<float>("intensity");
+            py::tuple result = infer(points, intensity).cast<py::tuple>();
             // output
-            cloud.add_field("class", result[0].cast<VectorUINT8>());
-            cloud.add_field("confidence", result[1].cast<VectorFLOAT32>());
+            cloud.add_field_from_py_object<uint8_t>("class", result[0]);
+            cloud.add_field_from_py_object<float>("confidence", result[1]);
             outgoing_points_publisher->publish(std::move(cloud.message(header)));
         }
     }

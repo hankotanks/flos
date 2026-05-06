@@ -11,6 +11,17 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
 
+#ifdef GENERATE_CLOUD_PYBIND_MODULE
+#define PYBIND11_DETAILED_ERROR_MESSAGES
+#include <pybind11/eigen.h>
+#include <pybind11/embed.h> // everything needed for embedding
+#include <pybind11/numpy.h>
+#include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
+#include <pybind11/stl_bind.h>
+namespace py = pybind11;
+#endif // GENERATE_CLOUD_PYBIND_MODULE
+
 namespace {
 template<typename>
 inline constexpr bool False = false;
@@ -84,6 +95,33 @@ public:
         return Cloud::size() == 0;
     }
 
+    const std::vector<Eigen::Vector3f>& points() const noexcept {
+        return points_;
+    }
+
+#ifdef GENERATE_CLOUD_PYBIND_MODULE
+    py::object points_as_py_object() const noexcept {
+        return py::cast(points_, py::return_value_policy::reference);
+    }
+#endif // GENERATE_CLOUD_PYBIND_MODULE
+
+    // TODO: better error handling
+    template<typename T>
+    const std::vector<T>& field(const std::string& name) const {
+        try {
+            return std::get<std::vector<T>>(fields_[desc_.names_.at(name)].data_);
+        } catch(const std::out_of_range& e) {
+            throw std::runtime_error("field not found in cloud");
+        }
+    }
+
+#ifdef GENERATE_CLOUD_PYBIND_MODULE
+    template<typename T>
+    py::object field_as_py_object(const std::string& name) const {
+        return py::cast(Cloud::field<T>(name), py::return_value_policy::reference);
+    }
+#endif // GENERATE_CLOUD_PYBIND_MODULE
+
     void add_point(const Cloud& other, size_t i) noexcept;
 
     template<typename T>
@@ -106,19 +144,12 @@ public:
         fields_.emplace_back(scalars);
     }
 
-    const std::vector<Eigen::Vector3f>& points() const noexcept {
-        return points_;
-    }
-
-    // TODO: better error handling
+#ifdef GENERATE_CLOUD_PYBIND_MODULE
     template<typename T>
-    const std::vector<T>& field(const std::string& name) const {
-        try {
-            return std::get<std::vector<T>>(fields_[desc_.names_.at(name)].data_);
-        } catch(const std::out_of_range& e) {
-            throw std::runtime_error("field not found in cloud");
-        }
+    void add_field_from_py_object(const std::string& name, py::object obj) {
+        Cloud::add_field(name, obj.cast<std::vector<T>>());
     }
+#endif // GENERATE_CLOUD_PYBIND_MODULE
 
 private:
     Cloud(const Cloud&) = delete;
@@ -178,5 +209,28 @@ private:
     std::vector<Eigen::Vector3f> points_;
     std::vector<Field> fields_;
 };
-
 }
+
+#ifdef GENERATE_CLOUD_PYBIND_MODULE
+// TODO: I would like to automatically generate these bindings somehow
+// for every type in sensor_msgs::msg::PointField
+
+using FieldInt8 = std::vector<int8_t>;
+using FieldUInt8 = std::vector<uint8_t>;
+using FieldInt16 = std::vector<int16_t>;
+using FieldUInt16 = std::vector<uint16_t>;
+using FieldInt32 = std::vector<int32_t>;
+using FieldUInt32 = std::vector<uint32_t>;
+using FieldFloat32 = std::vector<float>;
+using FieldFloat64 = std::vector<double>;
+
+PYBIND11_MAKE_OPAQUE(FieldInt8);
+PYBIND11_MAKE_OPAQUE(FieldUInt8);
+PYBIND11_MAKE_OPAQUE(FieldInt16);
+PYBIND11_MAKE_OPAQUE(FieldUInt16);
+PYBIND11_MAKE_OPAQUE(FieldInt32);
+PYBIND11_MAKE_OPAQUE(FieldUInt32);
+PYBIND11_MAKE_OPAQUE(FieldFloat32);
+PYBIND11_MAKE_OPAQUE(FieldFloat64);
+PYBIND11_MAKE_OPAQUE(std::vector<Eigen::Vector3f>);
+#endif // GENERATE_CLOUD_PYBIND_MODULE
