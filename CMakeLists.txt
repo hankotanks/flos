@@ -14,6 +14,10 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(rosbag2_cpp REQUIRED)
+find_package(rosbag2_storage REQUIRED)
 
 add_custom_target(python_requirements ALL
   COMMAND python3 -m pip install --root-user-action=ignore -r ${CMAKE_CURRENT_SOURCE_DIR}/src/python/requirements.txt
