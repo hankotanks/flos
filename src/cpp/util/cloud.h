@@ -22,11 +22,6 @@
 namespace py = pybind11;
 #endif // GENERATE_CLOUD_PYBIND_MODULE
 
-namespace {
-template<typename>
-inline constexpr bool False = false;
-} // private scope
-
 namespace util {
 
 class Cloud {
@@ -137,7 +132,7 @@ public:
         else if constexpr (std::is_same_v<T, uint32_t>) datatype = sensor_msgs::msg::PointField::UINT32;
         else if constexpr (std::is_same_v<T, float>)    datatype = sensor_msgs::msg::PointField::FLOAT32;
         else if constexpr (std::is_same_v<T, double>)   datatype = sensor_msgs::msg::PointField::FLOAT64;
-        else static_assert(False<T>, "unsupported field type");
+        else static_assert(Cloud::False<T>, "unsupported field type");
         
         desc_.add_field(datatype, name);
 
@@ -156,6 +151,10 @@ private:
     Cloud& operator=(const Cloud&) = delete;
     
 private:
+    // C++ shenanigans to prevent static_assert from being optimized out of std::visit calls
+    template<typename>
+    inline static const constexpr bool False = false;
+
     struct Field {
         template<typename... T>
         using Data_ = std::variant<std::vector<T>...>;

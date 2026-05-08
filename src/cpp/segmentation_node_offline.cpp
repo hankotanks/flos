@@ -1,10 +1,12 @@
 #include <stdexcept>
+#include <filesystem>
 // ros
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/float32_multi_array.hpp>
 // other
 #include "util/base_node.h"
-#include "util/rosbag.hpp"
+#include "util/rosbag.h"
+#include "util/profiler.h"
 
 namespace {
 template <typename T>
@@ -16,9 +18,9 @@ std::shared_ptr<T> deserialize_next_msg(const rclcpp::SerializedMessage& msg_ser
 }
 } // namespace
 
-class OfflineSegmentationNode : public util::BaseNode {
+class OfflineSegmentationNode : public util::BaseNode, util::Profiler {
 public:
-    OfflineSegmentationNode() : util::BaseNode() {
+    OfflineSegmentationNode() : util::BaseNode(), util::Profiler(std::filesystem::path(__FILE__).stem()) {
         // declare and store parameters
         this->declare_parameter<std::string>("path_to_bag");
         this->get_parameter("path_to_bag", path_to_bag);
@@ -88,6 +90,12 @@ private:
         msg.data[1] = seconds_remaining;
 
         bag_progress_publisher->publish(msg);
+    }
+
+    void infer(py::object infer, util::Cloud& cloud, const std_msgs::msg::Header& header) noexcept final override {
+        util::Profiler* this_profiler = this;
+        util::Profiler profiler("inference", this_profiler);
+        BaseNode::infer(infer, cloud, header);
     }
 private:
     static constexpr size_t buffer_threshold = static_cast<size_t>(0.9 * static_cast<double>(Buffer::capacity));

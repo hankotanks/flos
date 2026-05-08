@@ -59,8 +59,9 @@ protected:
     std::atomic<bool> segmentation_active{false};
 protected:
     void loop();
+    virtual void infer(py::object infer, util::Cloud& cloud, const std_msgs::msg::Header& header) noexcept;
     void callback(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg) noexcept { 
-        buffer.push(this->get_logger(), msg); 
+        buffer.push(this->get_logger(), msg);
     }
 };
 }

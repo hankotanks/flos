@@ -90,15 +90,20 @@ void BaseNode::loop() {
         static_assert(std::is_same_v<decltype(cloud), util::Cloud>);
         static_assert(std::is_same_v<decltype(header), std_msgs::msg::Header>);
         // perform the inference
-        py::object points = cloud.points_as_py_object();
-        py::object intensity = cloud.field_as_py_object<float>("intensity");
-        py::tuple result = infer(points, intensity).cast<py::tuple>();
-        // output
-        cloud.add_field_from_py_object<uint8_t>("class", result[0]);
-        cloud.add_field_from_py_object<float>("confidence", result[1]);
+        this->infer(infer, cloud, header);
+        // publish the result
         outgoing_points_publisher->publish(std::move(cloud.message(header)));
         segmentation_active = false;
     }
-    buffer.stop();
+}
+
+void BaseNode::infer(py::object infer, util::Cloud& cloud, const std_msgs::msg::Header& header) noexcept {
+    py::object points = cloud.points_as_py_object();
+    py::object intensity = cloud.field_as_py_object<float>("intensity");
+    // perform inference
+    py::tuple result = infer(points, intensity).cast<py::tuple>();
+    // output
+    cloud.add_field_from_py_object<uint8_t>("class", result[0]);
+    cloud.add_field_from_py_object<float>("confidence", result[1]);
 }
 }

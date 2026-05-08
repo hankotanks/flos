@@ -22,7 +22,7 @@
 // SOFTWARE.
 
 // copied and modified from kinematic icp
-#include "rosbag.hpp"
+#include "rosbag.h"
 // ROS
 #include <rclcpp/serialized_message.hpp>
 #include <rclcpp/version.h>
