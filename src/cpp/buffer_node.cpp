@@ -1,7 +1,40 @@
 #include "buffer_node.h"
 
 // ros
+#include <tsl/robin_map.h>
 #include <rcl_interfaces/msg/parameter_descriptor.hpp>
+
+template <>
+struct std::hash<Eigen::Vector3i> {
+    std::size_t operator()(const Eigen::Vector3i& voxel) const {
+        const uint32_t *vec = reinterpret_cast<const uint32_t *>(voxel.data());
+        return (vec[0] * 73856093 ^ vec[1] * 19349669 ^ vec[2] * 83492791);
+    }
+};
+
+namespace {
+inline Eigen::Vector3i point_to_voxel(const Eigen::Vector3f& point, double voxel_size) {
+    return {
+        static_cast<int>(std::floor(point.x() / voxel_size)),
+        static_cast<int>(std::floor(point.y() / voxel_size)),
+        static_cast<int>(std::floor(point.z() / voxel_size))
+    };
+}
+
+void voxel_downsample(util::Cloud &cloud, const double voxel_size) {
+    tsl::robin_map<Eigen::Vector3i, size_t> grid;
+    grid.reserve(cloud.size());
+    const std::vector<Eigen::Vector3f>& points = cloud.points();
+    for(size_t i = 0; i < points.size(); ++i) {
+        const Eigen::Vector3i voxel = point_to_voxel(points[i], voxel_size);
+        if(!grid.contains(voxel)) grid.insert({voxel, i});
+    }
+    util::Cloud cloud_original{std::move(cloud)};
+    std::for_each(grid.cbegin(), grid.cend(), [&](const auto& voxel_and_index) {
+        cloud.add_point(cloud_original, voxel_and_index.second);
+    });
+}
+} // private scope
 
 BufferNode::BufferNode() : rclcpp::Node(PROJECT_NAME), voxel_size(std::nullopt) {
     // declare parameters
@@ -28,7 +61,6 @@ BufferNode::~BufferNode() {
 }
 
 void BufferNode::push(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg) noexcept {
-    // TODO: voxel downsampling w.r.t. voxel_size
     if(msg->width * msg->height == 0) return;
     { // ensure capacity isn't reached
         std::unique_lock lock(mutex_);
@@ -38,6 +70,11 @@ void BufferNode::push(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg) 
         }
         // push the cloud
         buffer_.emplace(msg, msg->header);
+        // downsample if voxel_size is specified
+        if(voxel_size) {
+            util::Cloud& cloud = buffer_.back().first;
+            voxel_downsample(cloud, *voxel_size);
+        }
         cv_.notify_one();
     }   
 }

@@ -53,6 +53,8 @@ public:
 public:
     Cloud(const Descriptor& desc) noexcept;
 
+    static Cloud like(const Cloud& other) noexcept { return Cloud(other.desc_); }
+
     Cloud(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg) noexcept;
 
     Cloud(const sensor_msgs::msg::PointCloud2::SharedPtr& msg) noexcept :
@@ -61,7 +63,7 @@ public:
     Cloud(Cloud&& other) noexcept : desc_(other.desc_), points_(std::move(other.points_)), fields_(std::move(other.fields_)) {
         other.points_.clear();
         other.fields_.clear();
-        for(size_t i = 0; i < other.fields_.size(); ++i) {
+        for(size_t i = 0; i < fields_.size(); ++i) {
             other.fields_.emplace_back(other.desc_.attrs_[i].first);
         }
     }
@@ -73,7 +75,7 @@ public:
         fields_ = std::move(other.fields_);
         other.points_.clear();
         other.fields_.clear();
-        for(size_t i = 0; i < other.fields_.size(); ++i) {
+        for(size_t i = 0; i < fields_.size(); ++i) {
             other.fields_.emplace_back(other.desc_.attrs_[i].first);
         }
         return *this;

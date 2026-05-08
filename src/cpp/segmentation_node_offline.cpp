@@ -49,12 +49,13 @@ public:
         // set total message count
         msg_count = bag->message_count();
         // infer lidar messages from the given bag
+        rclcpp::Rate rate(20);
         while(rclcpp::ok() && !bag->finished()) {
             if(BufferNode::size() >= buffer_threshold) {
                 RCLCPP_WARN_STREAM_ONCE(this->get_logger(), "throttling bag read " << 
                     "[buffer size: " << BufferNode::size() << ", capacity: " << BufferNode::capacity << "]");
                 // TODO: better method for throttling
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                rate.sleep();
                 continue;
             }
             // get next message from bag
