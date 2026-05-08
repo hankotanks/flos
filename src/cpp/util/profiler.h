@@ -1,14 +1,11 @@
 #pragma once
 
+// system
 #include <chrono>
 #include <map>
 #include <tuple>
 #include <iostream>
 #include <iomanip>
-
-namespace {
-
-} // private scope
 
 namespace util {
 class Profiler {
@@ -85,7 +82,7 @@ private:
     // C++ shenanigans to prevent static_assert from being optimized out of std::visit calls
     template<typename>
     inline static const constexpr bool False = false;
-
+    
     std::variant<Profiler*, std::map<std::string, Statistics>> parent_or_stats_;
     std::string name_;
     Profiler::instant start_;

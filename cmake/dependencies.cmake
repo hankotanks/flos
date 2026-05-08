@@ -21,13 +21,13 @@ function(find_dep PACKAGE_NAME TARGET_NAME FETCH_CMAKE_FILE)
 endfunction()
 
 option(USE_SYSTEM_EIGEN3 "${PROJECT_NAME}: Use system Eigen3" ON)
-find_dep(
-  "Eigen3"
-  "Eigen3::Eigen"
+find_dep("Eigen3" "Eigen3::Eigen"
   "${CMAKE_CURRENT_LIST_DIR}/dependencies/eigen/eigen.cmake")
 
 option(USE_SYSTEM_PYBIND11 "${PROJECT_NAME}: Use system pybind11" ON)
-find_dep(
-  "pybind11"
-  "pybind11::embed"
+find_dep("pybind11" "pybind11::embed"
   "${CMAKE_CURRENT_LIST_DIR}/dependencies/pybind11/pybind11.cmake")
+
+option(USE_SYSTEM_TSL_ROBIN_MAP "${PROJECT_NAME}: Use sytem tsl-robin-map" ON)
+find_dep("tsl-robin-map" "tsl::robin_map" 
+  "${CMAKE_CURRENT_LIST_DIR}/dependencies/tsl_robin/tsl_robin.cmake")

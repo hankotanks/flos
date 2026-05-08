@@ -1,11 +1,11 @@
 // ros
 #include <rclcpp/rclcpp.hpp>
-// other
-#include "util/base_node.h"
+// forest_segmentation
+#include "base_node.h"
 
-class SegmentationNode : public util::BaseNode {
+class SegmentationNode : public BaseNode {
 public:
-    SegmentationNode() : util::BaseNode() { /* STUB */ }
+    SegmentationNode() : BaseNode() { /* STUB */ }
     SegmentationNode(const SegmentationNode&) = delete;
     SegmentationNode(SegmentationNode&&) = delete;
     SegmentationNode& operator=(const SegmentationNode&) = delete;

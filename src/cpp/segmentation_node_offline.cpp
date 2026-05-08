@@ -3,8 +3,9 @@
 // ros
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/float32_multi_array.hpp>
-// other
-#include "util/base_node.h"
+// forest_segmentation
+#include "base_node.h"
+// util
 #include "util/rosbag.h"
 #include "util/profiler.h"
 
@@ -18,9 +19,9 @@ std::shared_ptr<T> deserialize_next_msg(const rclcpp::SerializedMessage& msg_ser
 }
 } // namespace
 
-class OfflineSegmentationNode : public util::BaseNode, util::Profiler {
+class OfflineSegmentationNode : public BaseNode, util::Profiler {
 public:
-    OfflineSegmentationNode() : util::BaseNode(), util::Profiler(std::filesystem::path(__FILE__).stem()) {
+    OfflineSegmentationNode() : BaseNode(), util::Profiler(std::filesystem::path(__FILE__).stem()) {
         // declare and store parameters
         this->declare_parameter<std::string>("path_to_bag");
         this->get_parameter("path_to_bag", path_to_bag);
@@ -49,9 +50,9 @@ public:
         msg_count = bag->message_count();
         // infer lidar messages from the given bag
         while(rclcpp::ok() && !bag->finished()) {
-            if(buffer.size() >= buffer_threshold) {
-                RCLCPP_WARN_STREAM_ONCE(this->get_logger(), "throttling bag read [buffer size: " << buffer.size()
-                    << ", capacity: " << Buffer::capacity << "]");
+            if(BufferNode::size() >= buffer_threshold) {
+                RCLCPP_WARN_STREAM_ONCE(this->get_logger(), "throttling bag read " << 
+                    "[buffer size: " << BufferNode::size() << ", capacity: " << BufferNode::capacity << "]");
                 // TODO: better method for throttling
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
                 continue;
@@ -62,7 +63,7 @@ public:
             const rclcpp::SerializedMessage msg_ser(*serialized_bag_msg.serialized_data);
             // this condition should always be truthy... but whatever...
             if(topic == incoming_points_topic) {
-                util::BaseNode::callback(deserialize_next_msg<sensor_msgs::msg::PointCloud2>(msg_ser));
+                BufferNode::push(deserialize_next_msg<sensor_msgs::msg::PointCloud2>(msg_ser));
             }
             // increment processed message count
             msg_processed++;
@@ -70,7 +71,7 @@ public:
             OfflineSegmentationNode::publish_bag_progress();
         }
         // wait until the remaining scans are consumed by the segmentation loop
-        buffer.wait_until_empty(segmentation_active);
+        BufferNode::wait_until_drained();
     }
 private:
     void publish_bag_progress() {
@@ -98,7 +99,7 @@ private:
         BaseNode::infer(infer, cloud, header);
     }
 private:
-    static constexpr size_t buffer_threshold = static_cast<size_t>(0.9 * static_cast<double>(Buffer::capacity));
+    static constexpr size_t buffer_threshold = static_cast<size_t>(0.9 * static_cast<double>(BufferNode::capacity));
     std::string path_to_bag;
     std::unique_ptr<util::BufferableBag> bag;
     size_t msg_count = 0;

@@ -5,6 +5,10 @@ if(POLICY CMP0148)
   cmake_policy(SET CMP0148 OLD)
 endif()
 
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
+  cmake_policy(SET CMP0135 NEW)
+endif()
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(StandardProjectOptions)
