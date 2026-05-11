@@ -14,7 +14,7 @@ template<typename Entry, typename Message>
 class BufferNode : public rclcpp::Node {
 public:
     BufferNode() = delete;
-    explicit BufferNode(const rclcpp::NodeOptions& options, const std::string& incoming_topic_name, const std::string& incoming_topic_default);
+    explicit BufferNode(const std::string& incoming_topic_name, const std::string& incoming_topic_default);
     BufferNode(const BufferNode&) = delete;
     BufferNode(BufferNode&&) = delete;
     BufferNode& operator=(const BufferNode&) = delete;
@@ -47,9 +47,7 @@ private:
 };
 
 template<typename Entry, typename Message>
-BufferNode<Entry, Message>::BufferNode(const rclcpp::NodeOptions& options,
-    const std::string& incoming_topic_name, 
-    const std::string& incoming_topic_default) : rclcpp::Node(PROJECT_NAME, options) {
+BufferNode<Entry, Message>::BufferNode(const std::string& incoming_topic_name, const std::string& incoming_topic_default) : rclcpp::Node(PROJECT_NAME) {
     // declare parameters
     this->declare_parameter<std::string>(incoming_topic_name, incoming_topic_default);
     // store parameters

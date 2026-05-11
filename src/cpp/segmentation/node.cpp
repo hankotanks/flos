@@ -1,6 +1,7 @@
-#include "segmentation_node.h"
+#include "node.h"
 
 // tsl
+#include <pybind11/embed.h>
 #include <tsl/robin_map.h>
 // ros
 #include <rclcpp/logging.hpp>
@@ -38,7 +39,7 @@ void voxel_downsample(util::Cloud &cloud, const double voxel_size) {
 }
 } // private scope
 
-SegmentationNode::SegmentationNode(const rclcpp::NodeOptions& options) : BufferNode(options, "incoming_points_topic", "/hesai/pandar"), voxel_size(std::nullopt) {
+SegmentationNode::SegmentationNode() : BufferNode("incoming_points_topic", "/hesai/pandar"), voxel_size(std::nullopt) {
     // get path to default model
     std::filesystem::path path_to_model_default{PROJECT_ROOT};
     while(path_to_model_default.filename() != PROJECT_NAME) 
@@ -106,16 +107,3 @@ std::pair<util::Cloud, std_msgs::msg::Header> SegmentationNode::read(const std::
     if(voxel_size) voxel_downsample(cloud, *voxel_size);
     return std::make_pair(std::move(cloud), msg->header);
 }
-
-#if 0
-int main(int argc, char* argv[]) {
-    rclcpp::init(argc, argv);
-    auto node = std::make_shared<SegmentationNode>();
-    rclcpp::spin(std::static_pointer_cast<rclcpp::Node>(node));
-    rclcpp::shutdown();
-    return 0;
-}
-#endif
-
-#include <rclcpp_components/register_node_macro.hpp>
-RCLCPP_COMPONENTS_REGISTER_NODE(SegmentationNode)

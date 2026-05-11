@@ -15,8 +15,7 @@
 
 class SegmentationNode : public BufferNode<std::pair<util::Cloud, std_msgs::msg::Header>, sensor_msgs::msg::PointCloud2> {
 public:
-    SegmentationNode() = delete;
-    explicit SegmentationNode(const rclcpp::NodeOptions& options);
+    explicit SegmentationNode();
     SegmentationNode(const SegmentationNode&) = delete;
     SegmentationNode(SegmentationNode&&) = delete;
     SegmentationNode& operator=(const SegmentationNode&) = delete;

@@ -1,31 +1,31 @@
-set(SHARED_SOURCES
+set(SEGMENTATION_SOURCES
+  segmentation/node.cpp
   util/cloud.cpp)
 
-set(SHARED_HEADERS
-  segmentation_node.h
+set(SEGMENTATION_HEADERS
+  segmentation/node.h
   util/buffer_node.h
   util/cloud.h
   util/stl_vector_eigen.h)
 
-set(SHARED_LIBRARIES
+set(SEGMENTATION_LIBRARIES
   Eigen3::Eigen
   pybind11::embed
   tsl::robin_map)
 
-set(SHARED_PACKAGES
-  rclcpp::rclcpp rclcpp_components::component
+set(SEGMENTATION_PACKAGES
+  rclcpp::rclcpp
   sensor_msgs::sensor_msgs_library)
 
 function(configure_node name)
   set(options)
   set(oneValueArgs)
-  set(multiValueArgs SOURCES HEADERS PACKAGES)
+  set(multiValueArgs SOURCES HEADERS LIBRARIES PACKAGES)
   cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
   target_sources(${name}
-    PRIVATE "${name}.cpp" ${SHARED_SOURCES} ${ARG_SOURCES}
-    PRIVATE FILE_SET HEADERS FILES ${SHARED_HEADERS} ${ARG_HEADERS})
-  target_link_libraries(${name} 
-    ${SHARED_LIBRARIES} ${SHARED_PACKAGES} ${ARG_PACKAGES})
+    PRIVATE ${ARG_SOURCES}
+    PRIVATE FILE_SET HEADERS FILES ${ARG_HEADERS})
+  target_link_libraries(${name} ${ARG_LIBRARIES} ${ARG_PACKAGES})
   target_compile_definitions(${name} 
     PRIVATE
       PROJECT_ROOT="${CMAKE_CURRENT_LIST_DIR}"
@@ -34,19 +34,55 @@ function(configure_node name)
   target_compile_options(${name} PRIVATE -Wno-alloc-size-larger-than)
 endfunction()
 
-rclcpp_components_register_node(segmentation_node PLUGIN "SegmentationNode" EXECUTABLE segmentation_node)
-configure_node(segmentation_node)
+add_executable(segmentation_node)
+configure_node(segmentation_node
+  SOURCES 
+    ${SEGMENTATION_SOURCES}
+    segmentation/node_online.cpp
+  HEADERS
+    ${SEGMENTATION_HEADERS}
+  LIBRARIES
+    ${SEGMENTATION_LIBRARIES}
+  PACKAGES
+    ${SEGMENTATION_PACKAGES})
+
 add_executable(segmentation_node_offline)
 configure_node(segmentation_node_offline 
   SOURCES 
-    segmentation_node.cpp
+    ${SEGMENTATION_SOURCES}
+    segmentation/node_offline.cpp
     util/rosbag.cpp 
   HEADERS
-    segmentation_node.h
+    ${SEGMENTATION_HEADERS}
     util/rosbag.h
     util/profiler.h
+  LIBRARIES
+    ${SEGMENTATION_LIBRARIES}
   PACKAGES 
+    ${SEGMENTATION_PACKAGES}
     tf2::tf2 tf2_ros::tf2_ros 
     rosbag2_cpp::rosbag2_cpp rosbag2_storage::rosbag2_storage)
 
-install(TARGETS segmentation_node segmentation_node_offline DESTINATION lib/${PROJECT_NAME})
+add_executable(odometry_node)
+configure_node(odometry_node
+  SOURCES
+    odom/node.cpp
+    odom/voxel_map.cpp
+    odom/system.cpp
+    util/cloud.cpp
+  HEADERS
+    odom/voxel_map.h
+    odom/system.h
+    util/cloud.h
+    util/profiler.h
+  LIBRARIES
+    Eigen3::Eigen
+    pybind11::embed
+    tsl::robin_map
+    Sophus::Sophus
+  PACKAGES
+    rclcpp::rclcpp
+    sensor_msgs::sensor_msgs_library)
+
+install(TARGETS segmentation_node segmentation_node_offline odometry_node 
+  DESTINATION lib/${PROJECT_NAME})

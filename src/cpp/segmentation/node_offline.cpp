@@ -4,7 +4,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/float32_multi_array.hpp>
 // package
-#include "segmentation_node.h"
+#include "node.h"
 // util
 #include "util/rosbag.h"
 #include "util/profiler.h"
@@ -21,7 +21,7 @@ std::shared_ptr<T> deserialize_next_msg(const rclcpp::SerializedMessage& msg_ser
 
 class OfflineSegmentationNode : public SegmentationNode, util::Profiler {
 public:
-    explicit OfflineSegmentationNode(const rclcpp::NodeOptions& options) : SegmentationNode(options), util::Profiler(std::filesystem::path(__FILE__).stem()) {
+    explicit OfflineSegmentationNode() : util::Profiler(std::filesystem::path(__FILE__).stem()) {
         // declare and store parameters
         this->declare_parameter<std::string>("path_to_bag");
         this->get_parameter("path_to_bag", path_to_bag);
@@ -110,8 +110,7 @@ private:
 
 int main(int argc, char* argv[]) {
     rclcpp::init(argc, argv);
-    rclcpp::NodeOptions options{};
-    auto node = std::make_shared<OfflineSegmentationNode>(options);
+    auto node = std::make_shared<OfflineSegmentationNode>();
     node->run();
     rclcpp::shutdown();
     return 0;

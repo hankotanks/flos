@@ -28,6 +28,10 @@ option(USE_SYSTEM_PYBIND11 "${PROJECT_NAME}: Use system pybind11" ON)
 find_dep("pybind11" "pybind11::embed"
   "${CMAKE_CURRENT_LIST_DIR}/dependencies/pybind11/pybind11.cmake")
 
-option(USE_SYSTEM_TSL_ROBIN_MAP "${PROJECT_NAME}: Use sytem tsl-robin-map" ON)
+option(USE_SYSTEM_TSL-ROBIN-MAP "${PROJECT_NAME}: Use sytem tsl_robin_map" ON)
 find_dep("tsl-robin-map" "tsl::robin_map" 
   "${CMAKE_CURRENT_LIST_DIR}/dependencies/tsl_robin/tsl_robin.cmake")
+
+option(USE_SYSTEM_SOPHUS "${PROJECT_NAME}: Use system Sophus" ON)
+find_dep("Sophus" "Sophus::Sophus" 
+  "${CMAKE_CURRENT_LIST_DIR}/dependencies/sophus/sophus.cmake")

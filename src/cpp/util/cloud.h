@@ -1,16 +1,17 @@
 #pragma once
 
+// system
 #include <deque>
 #include <map>
 #include <variant>
 #include <vector>
-
+// eigen
 #include <Eigen/Dense>
-
+// ros
 #include <std_msgs/msg/header.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
-
+// pybind
 #ifdef GENERATE_CLOUD_PYBIND_MODULE
 #define PYBIND11_DETAILED_ERROR_MESSAGES
 #include <pybind11/eigen.h>
@@ -23,7 +24,6 @@ namespace py = pybind11;
 #endif // GENERATE_CLOUD_PYBIND_MODULE
 
 namespace util {
-
 class Cloud {
 public:
     class Descriptor {
@@ -49,16 +49,35 @@ public:
         std::deque<std::pair<uint8_t, std::string>> attrs_;
         std::map<std::string_view, size_t> names_;
     };
+
+    class Point {
+        friend class Cloud;
+    public:
+        Point(const Point&) = default;
+        Point(Point&&) = default;
+        Point& operator=(const Point&) = default;
+        Point& operator=(Point&&) = default;
+        ~Point() = default;
+    private:
+        Point() = delete;
+        Point(const Cloud* owner, size_t index) : owner_(const_cast<Cloud*>(owner)), index(index) { /* STUB */ }
+    public:
+        Eigen::Vector3f& point() const noexcept { return owner_->points_[index]; }
+        template<typename T>
+        T& field(const std::string& name) const { return owner_->field<T>(name)[index]; }
+    public:
+        size_t index;
+    private:
+        Cloud* owner_{nullptr};
+    };
     
 public:
+    Cloud() = default;
     Cloud(const Descriptor& desc) noexcept;
-
-    static Cloud like(const Cloud& other) noexcept { return Cloud(other.desc_); }
-
     Cloud(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg) noexcept;
-
     Cloud(const sensor_msgs::msg::PointCloud2::SharedPtr& msg) noexcept :
         Cloud(std::const_pointer_cast<const sensor_msgs::msg::PointCloud2>(msg)) { /* STUB */ }
+    Cloud(const Cloud& other) noexcept : desc_(other.desc_), points_(other.points_), fields_(other.fields_) { /* STUB */ }
 
     Cloud(Cloud&& other) noexcept : desc_(other.desc_), points_(std::move(other.points_)), fields_(std::move(other.fields_)) {
         other.points_.clear();
@@ -81,18 +100,21 @@ public:
         return *this;
     }
 
+    // used to get a mutable index into a point and its fields
+    Point operator[](size_t index) const { return {this, index}; }
+
 public:
     sensor_msgs::msg::PointCloud2 message(const std_msgs::msg::Header& header) noexcept;
 
-    size_t size() const noexcept {
+    inline size_t size() const noexcept {
         return points_.size();
     }
 
-    bool empty() const noexcept {
+    inline bool empty() const noexcept {
         return Cloud::size() == 0;
     }
 
-    const std::vector<Eigen::Vector3f>& points() const noexcept {
+    inline const std::vector<Eigen::Vector3f>& points() const noexcept {
         return points_;
     }
 
@@ -104,7 +126,7 @@ public:
 
     // TODO: better error handling
     template<typename T>
-    const std::vector<T>& field(const std::string& name) const {
+    inline const std::vector<T>& field(const std::string& name) const {
         try {
             return std::get<std::vector<T>>(fields_[desc_.names_.at(name)].data_);
         } catch(const std::out_of_range& e) {
@@ -114,15 +136,17 @@ public:
 
 #ifdef GENERATE_CLOUD_PYBIND_MODULE
     template<typename T>
-    py::object field_as_py_object(const std::string& name) const {
+    inline py::object field_as_py_object(const std::string& name) const {
         return py::cast(Cloud::field<T>(name), py::return_value_policy::reference);
     }
 #endif // GENERATE_CLOUD_PYBIND_MODULE
 
     void add_point(const Cloud& other, size_t i) noexcept;
 
+    Point add_point(const Point& point) noexcept;
+
     template<typename T>
-    void add_field(const std::string& name, const std::vector<T>& scalars = {}) noexcept {
+    inline void add_field(const std::string& name, const std::vector<T>& scalars = {}) noexcept {
         assert(Cloud::size() == scalars.size());
 
         uint8_t datatype;
@@ -143,13 +167,12 @@ public:
 
 #ifdef GENERATE_CLOUD_PYBIND_MODULE
     template<typename T>
-    void add_field_from_py_object(const std::string& name, py::object obj) {
+    inline void add_field_from_py_object(const std::string& name, py::object obj) {
         Cloud::add_field(name, obj.cast<std::vector<T>>());
     }
 #endif // GENERATE_CLOUD_PYBIND_MODULE
 
 private:
-    Cloud(const Cloud&) = delete;
     Cloud& operator=(const Cloud&) = delete;
     
 private:

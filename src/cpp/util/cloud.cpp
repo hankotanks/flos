@@ -112,6 +112,12 @@ void Cloud::add_point(const Cloud& other, size_t i) noexcept {
     }
 }
 
+Cloud::Point Cloud::add_point(const Cloud::Point& point) noexcept {
+    size_t index = Cloud::size();
+    Cloud::add_point(*point.owner_, point.index);
+    return {this, index};
+}
+
 Cloud::Field::Field(uint8_t datatype) : data_([&]() -> Cloud::Field::Data {
     using namespace sensor_msgs::msg;
     switch(datatype) {
