@@ -3,8 +3,8 @@
 // ros
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/float32_multi_array.hpp>
-// forest_segmentation
-#include "base_node.h"
+// package
+#include "segmentation_node.h"
 // util
 #include "util/rosbag.h"
 #include "util/profiler.h"
@@ -19,9 +19,9 @@ std::shared_ptr<T> deserialize_next_msg(const rclcpp::SerializedMessage& msg_ser
 }
 } // namespace
 
-class OfflineSegmentationNode : public BaseNode, util::Profiler {
+class OfflineSegmentationNode : public SegmentationNode, util::Profiler {
 public:
-    OfflineSegmentationNode() : BaseNode(), util::Profiler(std::filesystem::path(__FILE__).stem()) {
+    explicit OfflineSegmentationNode(const rclcpp::NodeOptions& options) : SegmentationNode(options), util::Profiler(std::filesystem::path(__FILE__).stem()) {
         // declare and store parameters
         this->declare_parameter<std::string>("path_to_bag");
         this->get_parameter("path_to_bag", path_to_bag);
@@ -45,7 +45,7 @@ public:
         bag = std::make_unique<util::BufferableBag>(path_to_bag, 
             // NOTE: this REQUIRES OfflineSegmentationNode to be constructed with std::make_shared
             std::make_shared<util::BufferableBag::TFBridge>(this->shared_from_this()), 
-            std::vector{incoming_points_topic});
+            std::vector{incoming_topic});
         // set total message count
         msg_count = bag->message_count();
         // infer lidar messages from the given bag
@@ -63,7 +63,7 @@ public:
             const auto& topic = serialized_bag_msg.topic_name;
             const rclcpp::SerializedMessage msg_ser(*serialized_bag_msg.serialized_data);
             // this condition should always be truthy... but whatever...
-            if(topic == incoming_points_topic) {
+            if(topic == incoming_topic) {
                 BufferNode::push(deserialize_next_msg<sensor_msgs::msg::PointCloud2>(msg_ser));
             }
             // increment processed message count
@@ -97,7 +97,7 @@ private:
     void infer(py::object infer, util::Cloud& cloud, const std_msgs::msg::Header& header) noexcept final override {
         util::Profiler* this_profiler = this;
         util::Profiler profiler("inference", this_profiler);
-        BaseNode::infer(infer, cloud, header);
+        SegmentationNode::infer(infer, cloud, header);
     }
 private:
     static constexpr size_t buffer_threshold = static_cast<size_t>(0.9 * static_cast<double>(BufferNode::capacity));
@@ -110,7 +110,8 @@ private:
 
 int main(int argc, char* argv[]) {
     rclcpp::init(argc, argv);
-    auto node = std::make_shared<OfflineSegmentationNode>();
+    rclcpp::NodeOptions options{};
+    auto node = std::make_shared<OfflineSegmentationNode>(options);
     node->run();
     rclcpp::shutdown();
     return 0;
