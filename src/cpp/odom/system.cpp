@@ -9,12 +9,16 @@
 #include <tbb/parallel_reduce.h>
 // util
 #include "util/cloud.h"
+#include "util/voxel.h"
 
 namespace {
-static constexpr std::array<std::string, 4> names = {"timestamps", "time", "timestamp", "t"};
+// field names to search in get_timestamp_field_name
+static constexpr std::array<std::string, 4> timestamp_field_names = {"timestamps", "time", "timestamp", "t"};
+
 template<typename T>
 std::optional<std::string> get_timestamp_field_name(util::Cloud& points) noexcept {
-    for(const std::string& name : names) {
+    
+    for(const std::string& name : timestamp_field_names) {
         try {
             (void) points.field<T>(name);
         } catch(...) {
@@ -54,38 +58,32 @@ void deskew_frame(util::Cloud& points, const Sophus::SE3f &motion) noexcept {
     }
 }
 
-inline Eigen::Vector3i point_to_voxel(const Eigen::Vector3f& point, double voxel_size) {
-    return {
-        static_cast<int>(std::floor(point.x() / voxel_size)),
-        static_cast<int>(std::floor(point.y() / voxel_size)),
-        static_cast<int>(std::floor(point.z() / voxel_size))
-    };
-}
-
-// TODO: I can avoid another cloud allocation if I implement Point::remove and a reverse Iterator for Cloud
-void voxel_downsample(util::Cloud& cloud, const double voxel_size) {
-    tsl::robin_map<Eigen::Vector3i, size_t> grid;
-    grid.reserve(cloud.size());
-    const std::vector<Eigen::Vector3f>& points = cloud.points();
-    for(size_t i = 0; i < points.size(); ++i) {
-        const Eigen::Vector3i voxel = point_to_voxel(points[i], voxel_size);
-        if(!grid.contains(voxel)) grid.insert({voxel, i});
-    }
-    util::Cloud cloud_original{std::move(cloud)};
-    std::for_each(grid.cbegin(), grid.cend(), [&](const auto& voxel_and_index) {
-        cloud.add_point(cloud_original, voxel_and_index.second);
-    });
-}
-
+// TODO: Move this into /util
 void transform(util::Cloud& cloud, const Sophus::SE3f& t) {
     for(size_t i = 0; i < cloud.size(); ++i) {
         cloud[i].point() = t * cloud[i].point();
     }
-    // std::for_each(cloud.begin(), cloud.end(), [t](util::Cloud::Point point) {
-    //     point.point() = t * point.point();
-    // });
 }
 } // private scope
+
+const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud&& points) noexcept {
+    // TODO: deskewing should happen in the segmentation node
+    deskew_frame(points, last_delta_);
+    // downsample incoming points to obtain keypoints and the preprocessed frame
+    util::voxel_downsample(points, config_.map.voxel_size * 0.5);
+    util::Cloud points_source{points};
+    util::voxel_downsample(points_source, config_.map.voxel_size * 1.5);
+    // compute pose w/ ICP
+    const auto [pose, deviation] = OdometrySystem::align(points_source);
+    threshold_.update(deviation);
+    // append points to map
+    map_.update(std::move(points), pose);
+    // store new pose
+    last_delta_ = last_pose_.inverse() * pose;
+    last_pose_ = pose;
+    // return reference to the current pose
+    return last_pose_;
+}
 
 void OdometrySystem::AdaptiveThreshold::update(const Sophus::SE3f& deviation) noexcept {
     const double model_error = [&]() {
@@ -100,26 +98,12 @@ void OdometrySystem::AdaptiveThreshold::update(const Sophus::SE3f& deviation) no
     }
 }
 
-void OdometrySystem::register_to_map(util::Cloud&& points) noexcept {
-    deskew_frame(points, last_delta_);
+Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const util::Cloud& points, double sigma) const noexcept {
+    using Correspondences = tbb::concurrent_vector<std::pair<util::Cloud::Point, util::Cloud::Point>>;
 
-    voxel_downsample(points, config_.map.voxel_size * 0.5);
-
-    util::Cloud points_source{points};
-    voxel_downsample(points_source, config_.map.voxel_size * 1.5);
-
-    const auto [pose, deviation] = OdometrySystem::align_to_map(points_source);
-
-    threshold_.update(deviation);
-    map_.update(std::move(points), pose);
-    last_delta_ = last_pose_.inverse() * pose;
-    last_pose_ = pose;
-}
-
-OdometrySystem::Correspondences OdometrySystem::correspondences(const util::Cloud& points, double sigma) const {
     Correspondences correspondences;
     correspondences.reserve(points.size());
-    double correspondence_distance_max = sigma * config_.registration.correspondence_distance_multiplier;
+    double correspondence_distance_max = sigma * config_.registration.correspondence_multiplier;
     tbb::parallel_for(tbb::blocked_range<size_t>{0, points.size()}, [&](const tbb::blocked_range<size_t>& range) {
         for(size_t i = range.begin(); i < range.end(); ++i) {
             const auto& maybe = map_.closest(points[i]);
@@ -132,10 +116,7 @@ OdometrySystem::Correspondences OdometrySystem::correspondences(const util::Clou
             
         }
     });
-    return correspondences;
-}
 
-OdometrySystem::LinearSystem OdometrySystem::build_linear_system(const OdometrySystem::Correspondences& correspondences, double sigma) const noexcept {
     auto compute_jacobian_and_residual = [](const auto &correspondence) {
         const auto& [source, target] = correspondence;
         const Eigen::Vector3f residual = source.point() - target.point();
@@ -145,7 +126,9 @@ OdometrySystem::LinearSystem OdometrySystem::build_linear_system(const OdometryS
         return std::make_tuple(J_r, residual);
     };
 
-    auto sum_linear_systems = [](OdometrySystem::LinearSystem a, const OdometrySystem::LinearSystem &b) {
+    using System = std::pair<Eigen::Matrix<float, 6, 6>, Eigen::Matrix<float, 6, 1>>;
+
+    auto sum_linear_systems = [](System a, const System &b) {
         a.first += b.first;
         a.second += b.second;
         return a;
@@ -158,20 +141,20 @@ OdometrySystem::LinearSystem OdometrySystem::build_linear_system(const OdometryS
     using correspondence_iterator = Correspondences::const_iterator;
     const auto &[JTJ, JTr] = tbb::parallel_reduce(
         tbb::blocked_range<correspondence_iterator>{correspondences.cbegin(), correspondences.cend()},
-        LinearSystem(Eigen::Matrix<float, 6, 6>::Zero(), Eigen::Matrix<float, 6, 1>::Zero()),
-        [&](const tbb::blocked_range<correspondence_iterator>& range, LinearSystem J) -> LinearSystem {
+        System(Eigen::Matrix<float, 6, 6>::Zero(), Eigen::Matrix<float, 6, 1>::Zero()),
+        [&](const tbb::blocked_range<correspondence_iterator>& range, System J) -> System {
             return std::transform_reduce(
                 range.begin(), range.end(), J, sum_linear_systems, [&](const auto& correspondence) {
                     const auto& [J_r, residual] = compute_jacobian_and_residual(correspondence);
                     const double w = GM_weight(residual.squaredNorm());
-                    return LinearSystem(J_r.transpose() * w * J_r, J_r.transpose() * w * residual);
+                    return System(J_r.transpose() * w * J_r, J_r.transpose() * w * residual);
                 });
         }, sum_linear_systems);
 
-    return {JTJ, JTr};
+    return JTJ.ldlt().solve(-JTr);
 }
 
-std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align_to_map(const util::Cloud& points) const {
+std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(const util::Cloud& points) const {
     const auto initial_guess = last_pose_ * last_delta_;
     if(map_.empty()) return std::make_pair(initial_guess, Sophus::SE3f{});
     double sigma = threshold_.compute();
@@ -179,11 +162,8 @@ std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align_to_map(const util::C
     transform(source, initial_guess);
     Sophus::SE3f T_icp = Sophus::SE3f();
     for(size_t j = 0; j < config_.registration.max_iterations; ++j) {
-        // Equation (10)
-        const auto correspondences = OdometrySystem::correspondences(source, sigma);
         // Equation (11)
-        const auto &[JTJ, JTr] = OdometrySystem::build_linear_system(correspondences, sigma);
-        const Eigen::Matrix<float, 6, 1> dx = JTJ.ldlt().solve(-JTr);
+        const Eigen::Matrix<float, 6, 1> dx = OdometrySystem::solve(source, sigma);
         const Sophus::SE3f est = Sophus::SE3f::exp(dx);
         // Equation (12)
         transform(source, est);;

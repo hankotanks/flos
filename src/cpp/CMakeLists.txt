@@ -1,11 +1,13 @@
 set(SEGMENTATION_SOURCES
   segmentation/node.cpp
-  util/cloud.cpp)
+  util/cloud.cpp
+  util/voxel.cpp)
 
 set(SEGMENTATION_HEADERS
   segmentation/node.h
   util/buffer_node.h
   util/cloud.h
+  util/voxel.h
   util/stl_vector_eigen.h)
 
 set(SEGMENTATION_LIBRARIES
@@ -70,10 +72,12 @@ configure_node(odometry_node
     odom/voxel_map.cpp
     odom/system.cpp
     util/cloud.cpp
+    util/voxel.cpp
   HEADERS
     odom/voxel_map.h
     odom/system.h
     util/cloud.h
+    util/voxel.h
     util/profiler.h
   LIBRARIES
     Eigen3::Eigen
@@ -83,6 +87,7 @@ configure_node(odometry_node
     TBB::tbb
   PACKAGES
     rclcpp::rclcpp
+    tf2_ros::tf2_ros
     sensor_msgs::sensor_msgs_library)
 
 install(TARGETS segmentation_node segmentation_node_offline odometry_node 

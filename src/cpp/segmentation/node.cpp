@@ -6,38 +6,8 @@
 // ros
 #include <rclcpp/logging.hpp>
 #include <rcl_interfaces/msg/parameter_descriptor.hpp>
-
-template <>
-struct std::hash<Eigen::Vector3i> {
-    std::size_t operator()(const Eigen::Vector3i& voxel) const {
-        const uint32_t *vec = reinterpret_cast<const uint32_t *>(voxel.data());
-        return (vec[0] * 73856093 ^ vec[1] * 19349669 ^ vec[2] * 83492791);
-    }
-};
-
-namespace {
-inline Eigen::Vector3i point_to_voxel(const Eigen::Vector3f& point, double voxel_size) {
-    return {
-        static_cast<int>(std::floor(point.x() / voxel_size)),
-        static_cast<int>(std::floor(point.y() / voxel_size)),
-        static_cast<int>(std::floor(point.z() / voxel_size))
-    };
-}
-
-void voxel_downsample(util::Cloud &cloud, const double voxel_size) {
-    tsl::robin_map<Eigen::Vector3i, size_t> grid;
-    grid.reserve(cloud.size());
-    const std::vector<Eigen::Vector3f>& points = cloud.points();
-    for(size_t i = 0; i < points.size(); ++i) {
-        const Eigen::Vector3i voxel = point_to_voxel(points[i], voxel_size);
-        if(!grid.contains(voxel)) grid.insert({voxel, i});
-    }
-    util::Cloud cloud_original{std::move(cloud)};
-    std::for_each(grid.cbegin(), grid.cend(), [&](const auto& voxel_and_index) {
-        cloud.add_point(cloud_original, voxel_and_index.second);
-    });
-}
-} // private scope
+// util
+#include "util/voxel.h"
 
 SegmentationNode::SegmentationNode() : BufferNode("incoming_points_topic", "/hesai/pandar"), voxel_size(std::nullopt) {
     // get path to default model
@@ -102,8 +72,8 @@ void SegmentationNode::infer(py::object infer, util::Cloud& cloud, const std_msg
     cloud.add_field_from_py_object<float>("confidence", result[1]);
 }
 
-std::pair<util::Cloud, std_msgs::msg::Header> SegmentationNode::read(const std::shared_ptr<sensor_msgs::msg::PointCloud2>& msg) const noexcept {
+std::pair<util::Cloud, std_msgs::msg::Header> SegmentationNode::read(const std::shared_ptr<sensor_msgs::msg::PointCloud2>& msg) noexcept {
     util::Cloud cloud{msg};
-    if(voxel_size) voxel_downsample(cloud, *voxel_size);
+    if(voxel_size) util::voxel_downsample(cloud, *voxel_size);
     return std::make_pair(std::move(cloud), msg->header);
 }

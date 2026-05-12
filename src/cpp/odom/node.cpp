@@ -2,6 +2,8 @@
 #include <limits>
 // ros
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp/logging.hpp>
+#include <tf2_ros/transform_broadcaster.hpp>
 // package
 #include "system.h"
 // util
@@ -9,8 +11,10 @@
 #include "util/cloud.h"
 
 namespace {
+// helper function for range bounded optional parameters
+// so I can keep defaults in OdometrySystem::Config directly
 template<typename T>
-std::optional<T> optional_positive_parameter(rclcpp::Node* node, const std::string& name, T to) {
+std::optional<T> parameter(rclcpp::Node* node, const std::string& name, T to) {
     static_assert(std::is_integral_v<T> || std::is_floating_point_v<T>);
     rcl_interfaces::msg::ParameterDescriptor desc{};
     desc.dynamic_typing = true;
@@ -35,37 +39,59 @@ std::optional<T> optional_positive_parameter(rclcpp::Node* node, const std::stri
 OdometrySystem::Config configure(rclcpp::Node* node) {
     OdometrySystem::Config config;
     // map
-    auto map_max_distance = optional_positive_parameter(node, "max_distance", std::numeric_limits<double>::max());
-    if(map_max_distance) config.map.max_distance = *map_max_distance;
-    auto map_voxel_size = optional_positive_parameter(node, "voxel_size", std::numeric_limits<double>::max());
-    if(map_voxel_size) config.map.voxel_size = *map_voxel_size;
-    auto map_voxel_capacity = optional_positive_parameter(node, "voxel_capacity", std::numeric_limits<size_t>::max());
-    if(map_voxel_capacity) config.map.voxel_capacity = *map_voxel_capacity;
+    auto max_distance = parameter(node, "max_distance", std::numeric_limits<double>::max());
+    if(max_distance) config.map.max_distance = *max_distance;
+    auto voxel_size = parameter(node, "voxel_size", std::numeric_limits<double>::max());
+    if(voxel_size) config.map.voxel_size = *voxel_size;
+    auto voxel_capacity = parameter(node, "voxel_capacity", std::numeric_limits<size_t>::max());
+    if(voxel_capacity) config.map.voxel_capacity = *voxel_capacity;
     // threshold
-    auto threshold_initial = optional_positive_parameter(node, "initial", std::numeric_limits<double>::max());
-    if(threshold_initial) config.threshold.initial = *threshold_initial;
-    auto threshold_min_motion = optional_positive_parameter(node, "min_motion", std::numeric_limits<double>::max());
-    if(threshold_min_motion) config.threshold.min_motion = *threshold_min_motion;
+    auto threshold_initial = parameter(node, "threshold_initial", std::numeric_limits<double>::max());
+    if(threshold_initial) config.threshold.threshold_initial = *threshold_initial;
+    auto min_motion = parameter(node, "min_motion", std::numeric_limits<double>::max());
+    if(min_motion) config.threshold.min_motion = *min_motion;
     // registration
-    auto registration_max_iterations = optional_positive_parameter(node, "max_iterations", std::numeric_limits<size_t>::max());
-    if(registration_max_iterations) config.registration.max_iterations = *registration_max_iterations;
-    auto registration_max_threads = optional_positive_parameter(node, "max_threads", std::numeric_limits<size_t>::max());
-    if(registration_max_threads) config.registration.max_threads = *registration_max_threads;
-    auto registration_convergence_criterion = optional_positive_parameter(node, "convergence_criterion", std::numeric_limits<double>::max());
-    if(registration_convergence_criterion) config.registration.convergence_criterion = *registration_convergence_criterion;
-    auto registration_correspondence_distance_multiplier = optional_positive_parameter(node, "correspondence_distance_multiplier", std::numeric_limits<size_t>::max());
-    if(registration_correspondence_distance_multiplier) config.registration.correspondence_distance_multiplier = *registration_correspondence_distance_multiplier;
+    auto max_iterations = parameter(node, "max_iterations", std::numeric_limits<size_t>::max());
+    if(max_iterations) config.registration.max_iterations = *max_iterations;
+    auto max_threads = parameter(node, "max_threads", std::numeric_limits<size_t>::max());
+    if(max_threads) config.registration.max_threads = *max_threads;
+    auto convergence_criterion = parameter(node, "convergence_criterion", std::numeric_limits<double>::max());
+    if(convergence_criterion) config.registration.convergence_criterion = *convergence_criterion;
+    auto correspondence_multiplier = parameter(node, "correspondence_distance_multiplier", std::numeric_limits<size_t>::max());
+    if(correspondence_multiplier) config.registration.correspondence_multiplier = *correspondence_multiplier;
     return config;
 }
 
+inline geometry_msgs::msg::Transform sophus_to_transform(const Sophus::SE3f &T) {
+    geometry_msgs::msg::Transform t;
+    t.translation.x = T.translation().x();
+    t.translation.y = T.translation().y();
+    t.translation.z = T.translation().z();
+
+    Eigen::Quaternionf q(T.so3().unit_quaternion());
+    t.rotation.x = q.x();
+    t.rotation.y = q.y();
+    t.rotation.z = q.z();
+    t.rotation.w = q.w();
+
+    return t;
+}
 } // private scope
 
-class OdometryNode : public BufferNode<util::Cloud, sensor_msgs::msg::PointCloud2> {
+class OdometryNode : public BufferNode<std::pair<util::Cloud, std_msgs::msg::Header>, sensor_msgs::msg::PointCloud2> {
 public:
     explicit OdometryNode() : BufferNode("incoming_points_topic", "/" PROJECT_NAME "/inference"), system(configure(this)) {
+        // declare parameters
         this->declare_parameter<std::string>("local_map_topic", "/" PROJECT_NAME "/local_map");
+        this->declare_parameter<std::string>("local_map_frame", "odom_frame");
+        // store parameters
         this->get_parameter("local_map_topic", local_map_topic);
+        this->get_parameter("local_map_frame", local_map_frame);
+        // initialize map publisher
         local_map_publisher = this->create_publisher<sensor_msgs::msg::PointCloud2>(local_map_topic, 10);  
+        // broadcaster for poses
+        tf_broadcaster = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
+        // spin up thread for odometry
         odometry_thread = std::thread(&OdometryNode::loop, this);
     }
 public:
@@ -76,13 +102,17 @@ public:
     ~OdometryNode() {
         if(odometry_thread.joinable()) odometry_thread.join();
     }
-
 protected:
-    // core of the node
-    OdometrySystem system;
+    // parameters (excluding those related to the system config itself)
     std::string local_map_topic;
+    std::string local_map_frame;
+protected:
+    // core
+    OdometrySystem system;
     // publisher for local map
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr local_map_publisher;
+    // pose broadcaster
+    std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster;
     // separate thread for processing
     std::thread odometry_thread;
 protected:
@@ -92,18 +122,28 @@ protected:
             auto maybe = BufferNode::pop();
             if(!maybe) break;
             active = true;
-            system.register_to_map(std::move(*maybe));
-            auto stamp = std::chrono::system_clock::now().time_since_epoch();
-            std_msgs::msg::Header header;
-            header.frame_id = "map";
-            header.stamp.sec = std::chrono::duration_cast<std::chrono::seconds>(stamp).count();
-            header.stamp.nanosec = std::chrono::duration_cast<std::chrono::nanoseconds>(stamp).count() % 1000000000;;
-            local_map_publisher->publish(std::move(system.cloud().message(header)));
+            // perform registration
+            auto [cloud, header] = std::move(*maybe); // TODO: Need to think about whether this should be the original cloud's timestamp or overwritten with this->now()
+            const Sophus::SE3f& pose = system.register_to_map(std::move(cloud));
+            {
+                geometry_msgs::msg::TransformStamped msg;
+                msg.header.stamp = header.stamp;
+                msg.header.frame_id = header.frame_id;
+                msg.child_frame_id = local_map_frame;
+                msg.transform = sophus_to_transform(pose);
+                tf_broadcaster->sendTransform(msg);
+            }
+            // send the local map
+            header.frame_id = local_map_frame;
+            local_map_publisher->publish(std::move(system.cloud().message(header))); // TODO: add a parameter to enable publishing since it is costly
             active = false;
         }
     }
     
-    virtual util::Cloud read(const std::shared_ptr<sensor_msgs::msg::PointCloud2>& msg) const noexcept final override { return msg; }
+    virtual std::pair<util::Cloud, std_msgs::msg::Header> read(const std::shared_ptr<sensor_msgs::msg::PointCloud2>& msg) noexcept final override {
+        util::Cloud cloud{msg};
+        return std::make_pair(std::move(cloud), msg->header);
+    }
 };
 
 int main(int argc, char* argv[]) {

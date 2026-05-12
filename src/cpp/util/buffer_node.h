@@ -32,7 +32,7 @@ protected:
     // block until the buffer is empty and there is no ongoing segmentation
     void wait_until_drained() noexcept;
     // pure virtual function for converting `Message` to `Entry`
-    virtual Entry read(const std::shared_ptr<Message>& msg) const noexcept = 0;
+    virtual Entry read(const std::shared_ptr<Message>& msg) noexcept = 0;
 protected:
     // total capacity of the buffer
     static constexpr size_t capacity = 5;

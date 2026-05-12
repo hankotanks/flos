@@ -8,14 +8,7 @@
 #include <sophus/se3.hpp>
 // util
 #include "util/cloud.h"
-
-template <>
-struct std::hash<Eigen::Vector3i> {
-    std::size_t operator()(const Eigen::Vector3i& voxel) const {
-        const uint32_t *vec = reinterpret_cast<const uint32_t *>(voxel.data());
-        return (vec[0] * 73856093 ^ vec[1] * 19349669 ^ vec[2] * 83492791);
-    }
-};
+#include "util/voxel.h" // DO NOT REMOVE, required for the Eigen::Vector3i hash implementation
 
 struct VoxelMap {
     explicit VoxelMap(double max_distance, double voxel_size, size_t voxel_capacity) : 
@@ -26,13 +19,14 @@ struct VoxelMap {
     VoxelMap& operator=(VoxelMap&&) = delete;
     ~VoxelMap() = default;
 public:
+    inline const util::Cloud& cloud() const noexcept { return cloud_; }
     inline void clear() { map_.clear(); }
     inline bool empty() const { return map_.empty(); }
     void update(util::Cloud&& points, const Eigen::Vector3f& origin);
     void update(util::Cloud&& points, const Sophus::SE3f& pose);
     void extend(util::Cloud&& points);
+    // returns std::nullopt when no correspondence is found
     std::optional<std::pair<util::Cloud::Point, double>> closest(const util::Cloud::Point &query) const;
-    inline const util::Cloud& cloud() const noexcept { return cloud_; }
 private:
     // configuration options
     double max_distance_;

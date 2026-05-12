@@ -1,14 +1,6 @@
 #include "voxel_map.h"
 
 namespace {
-inline Eigen::Vector3i point_to_voxel(const Eigen::Vector3f& point, double voxel_size) {
-    return {
-        static_cast<int>(std::floor(point.x() / voxel_size)),
-        static_cast<int>(std::floor(point.y() / voxel_size)),
-        static_cast<int>(std::floor(point.z() / voxel_size))
-    };
-}
-
 static const std::array<Eigen::Vector3i, 27> voxel_shifts{
     Eigen::Vector3i{ 0,  0,  0},
     Eigen::Vector3i{ 1,  0,  0},
@@ -69,7 +61,7 @@ void VoxelMap::extend(util::Cloud&& points) {
     }
     const double map_resolution = std::sqrt(voxel_size_ * voxel_size_ / voxel_capacity_);
     for(size_t i = start; i < cloud_.size(); ++i) {
-        const Eigen::Vector3i& voxel = point_to_voxel(cloud_[i].point(), voxel_size_);
+        const Eigen::Vector3i& voxel = util::point_to_voxel(cloud_[i].point(), voxel_size_);
         auto search = map_.find(voxel);
         if(search == map_.end()) {
             std::vector<util::Cloud::Point> inner;
@@ -88,7 +80,7 @@ void VoxelMap::extend(util::Cloud&& points) {
 
 std::optional<std::pair<util::Cloud::Point, double>> VoxelMap::closest(const util::Cloud::Point &query) const {
     if(map_.empty()) return std::nullopt;
-    const Eigen::Vector3i& voxel = point_to_voxel(query.point(), voxel_size_);
+    const Eigen::Vector3i& voxel = util::point_to_voxel(query.point(), voxel_size_);
     std::optional<std::pair<util::Cloud::Point, double>> closest = std::nullopt;
     std::for_each(voxel_shifts.cbegin(), voxel_shifts.cend(), [&](const auto& voxel_shift) {
         const Eigen::Vector3i& query_voxel = voxel + voxel_shift;

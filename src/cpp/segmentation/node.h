@@ -37,6 +37,6 @@ protected:
     void loop();
     virtual void infer(py::object infer, util::Cloud& cloud, const std_msgs::msg::Header& header) noexcept;
     // overload of the BufferNode::read method
-    virtual std::pair<util::Cloud, std_msgs::msg::Header> read(const std::shared_ptr<sensor_msgs::msg::PointCloud2>& msg) const noexcept final override;
+    virtual std::pair<util::Cloud, std_msgs::msg::Header> read(const std::shared_ptr<sensor_msgs::msg::PointCloud2>& msg) noexcept final override;
 };
 
