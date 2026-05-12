@@ -80,6 +80,7 @@ configure_node(odometry_node
     pybind11::embed
     tsl::robin_map
     Sophus::Sophus
+    TBB::tbb
   PACKAGES
     rclcpp::rclcpp
     sensor_msgs::sensor_msgs_library)

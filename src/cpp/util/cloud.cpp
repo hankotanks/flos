@@ -54,7 +54,7 @@ Cloud::Cloud(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg) noexcept 
     }
 }
 
-sensor_msgs::msg::PointCloud2 Cloud::message(const std_msgs::msg::Header& header) noexcept {
+sensor_msgs::msg::PointCloud2 Cloud::message(const std_msgs::msg::Header& header) const noexcept {
     sensor_msgs::msg::PointCloud2 msg;
     sensor_msgs::PointCloud2Modifier modifier(msg);
     msg.header = header;

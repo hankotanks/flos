@@ -50,6 +50,7 @@ public:
         std::map<std::string_view, size_t> names_;
     };
 
+    // TODO: fix the mutability issues in this class
     class Point {
         friend class Cloud;
     public:
@@ -64,7 +65,7 @@ public:
     public:
         Eigen::Vector3f& point() const noexcept { return owner_->points_[index]; }
         template<typename T>
-        T& field(const std::string& name) const { return owner_->field<T>(name)[index]; }
+        T& field(const std::string& name) const { return const_cast<T&>(owner_->field<T>(name)[index]); }
     public:
         size_t index;
     private:
@@ -104,7 +105,7 @@ public:
     Point operator[](size_t index) const { return {this, index}; }
 
 public:
-    sensor_msgs::msg::PointCloud2 message(const std_msgs::msg::Header& header) noexcept;
+    sensor_msgs::msg::PointCloud2 message(const std_msgs::msg::Header& header) const noexcept;
 
     inline size_t size() const noexcept {
         return points_.size();
@@ -228,10 +229,81 @@ private:
             }, it_);
         }
     };
-    
+
+private:
     Descriptor desc_;
     std::vector<Eigen::Vector3f> points_;
     std::vector<Field> fields_;
+
+public:
+#if 0
+    class Iterator {
+        Cloud* cloud_{nullptr};
+        size_t index_{0};
+    public:
+        // iterator traits
+        using difference_type = ptrdiff_t;
+        using value_type = Point;
+        using pointer = Point*;
+        using reference = Point&;
+        using iterator_category = std::random_access_iterator_tag;
+    public:
+        Iterator() = delete;
+        Iterator(Cloud* cloud) : cloud_(cloud) { /* STUB */ };
+        Iterator(Cloud* cloud, size_t index) : cloud_(cloud), index_(index) { /* STUB */ };
+        Iterator(const Iterator& other) : cloud_(other.cloud_), index_(other.index_) { /* STUB */ };
+        Iterator(Iterator&&) = default;
+        Iterator& operator=(const Iterator& other) noexcept { cloud_ = other.cloud_; index_ = other.index_; return *this; };
+        Iterator& operator=(Iterator&& other) = default;
+        ~Iterator() = default;
+        Iterator& operator++() { index_++; return *this; }
+        Iterator operator++(int) { Iterator ret = *this; ++(*this); return ret; }
+        bool operator==(const Iterator& other) const { 
+            if(cloud_ != other.cloud_) throw std::logic_error("don't compare iterators of different clouds");
+            return index_ == other.index_;
+        }
+        bool operator!=(const Iterator& other) const { return !(*this == other); }
+        value_type operator*() { return (*cloud_)[index_]; }
+        Iterator operator+(difference_type n) const { return Iterator(cloud_, index_ + n); }
+        friend Iterator operator+(difference_type n, const Iterator& it) { 
+            return it + n; 
+        }
+        Iterator operator-(difference_type n) const {
+            return Iterator(cloud_, static_cast<size_t>(static_cast<ptrdiff_t>(index_) - n)); 
+        }
+        friend Iterator operator-(difference_type n, const Iterator& it) {
+            return Iterator(it.cloud_, static_cast<size_t>(n - static_cast<ptrdiff_t>(it.index_))); 
+        }
+        Iterator& operator+=(difference_type n) { 
+            index_ = static_cast<size_t>(static_cast<ptrdiff_t>(index_) + n); 
+            return *this; 
+        }
+        Iterator& operator-=(difference_type n) { 
+            index_ = static_cast<size_t>(static_cast<ptrdiff_t>(index_) - n); 
+            return *this;
+        }
+        bool operator<(const Iterator& other) const { 
+            if(cloud_ != other.cloud_) throw std::logic_error("don't compare iterators of different clouds");
+            return index_ < other.index_; 
+        }
+        bool operator>(const Iterator& other) const { 
+            if(cloud_ != other.cloud_) throw std::logic_error("don't compare iterators of different clouds");
+            return index_ > other.index_; 
+        }
+        bool operator<=(const Iterator& other) const { 
+            if(cloud_ != other.cloud_) throw std::logic_error("don't compare iterators of different clouds");
+            return index_ <= other.index_; 
+        }
+        bool operator>=(const Iterator& other) const { 
+            if(cloud_ != other.cloud_) throw std::logic_error("don't compare iterators of different clouds");
+            return index_ >= other.index_; 
+        }
+        difference_type operator-(const Iterator& other) const { return static_cast<ptrdiff_t>(index_) - static_cast<ptrdiff_t>(other.index_); }
+    };
+
+    Iterator begin() { return Iterator(this); }
+    Iterator end() { return Iterator(this, Cloud::size()); }
+#endif
 };
 }
 

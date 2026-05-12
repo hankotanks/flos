@@ -35,3 +35,7 @@ find_dep("tsl-robin-map" "tsl::robin_map"
 option(USE_SYSTEM_SOPHUS "${PROJECT_NAME}: Use system Sophus" ON)
 find_dep("Sophus" "Sophus::Sophus" 
   "${CMAKE_CURRENT_LIST_DIR}/dependencies/sophus/sophus.cmake")
+
+option(USE_SYSTEM_TBB "${PROJECT_NAME}: Use system TBB" ON)
+find_dep("TBB" "TBB::tbb" 
+  "${CMAKE_CURRENT_LIST_DIR}/dependencies/tbb/tbb.cmake")

@@ -18,9 +18,8 @@ struct std::hash<Eigen::Vector3i> {
 };
 
 struct VoxelMap {
-    explicit VoxelMap(double max_distance, double voxel_size, size_t voxel_capacity) : voxel_size(voxel_size),
-        max_distance(max_distance), voxel_capacity(voxel_capacity) { /* STUB */ }
-    VoxelMap() = default;
+    explicit VoxelMap(double max_distance, double voxel_size, size_t voxel_capacity) : 
+        max_distance_(max_distance), voxel_size_(voxel_size), voxel_capacity_(voxel_capacity) { /* STUB */ }
     VoxelMap(const VoxelMap&) = delete;
     VoxelMap(VoxelMap&&) = delete;
     VoxelMap& operator=(const VoxelMap&) = delete;
@@ -33,10 +32,12 @@ public:
     void update(util::Cloud&& points, const Sophus::SE3f& pose);
     void extend(util::Cloud&& points);
     std::optional<std::pair<util::Cloud::Point, double>> closest(const util::Cloud::Point &query) const;
-public:
-    double max_distance = 100.0;
-    double voxel_size = 1.0;
-    size_t voxel_capacity = 20;
+    inline const util::Cloud& cloud() const noexcept { return cloud_; }
+private:
+    // configuration options
+    double max_distance_;
+    double voxel_size_;
+    size_t voxel_capacity_;
 private:
     tsl::robin_map<Eigen::Vector3i, std::vector<util::Cloud::Point>> map_;
     util::Cloud cloud_;
