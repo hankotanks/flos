@@ -19,21 +19,20 @@ struct VoxelMap {
     VoxelMap& operator=(VoxelMap&&) = delete;
     ~VoxelMap() = default;
 public:
-    inline const util::Cloud& cloud() const noexcept { return cloud_; }
     inline void clear() { map_.clear(); }
     inline bool empty() const { return map_.empty(); }
     void update(util::Cloud&& points, const Eigen::Vector3f& origin);
     void update(util::Cloud&& points, const Sophus::SE3f& pose);
     void extend(util::Cloud&& points);
+    const util::Cloud& cloud() const noexcept;
     // returns std::nullopt when no correspondence is found
-    std::optional<std::pair<util::Cloud::Point, double>> closest(const util::Cloud::Point &query) const;
+    std::optional<std::pair<util::Cloud::ConstPoint, double>> closest(const util::Cloud::ConstPoint &query) const;
 private:
     // configuration options
     double max_distance_;
     double voxel_size_;
     size_t voxel_capacity_;
 private:
-    tsl::robin_map<Eigen::Vector3i, std::vector<util::Cloud::Point>> map_;
-    util::Cloud cloud_;
-
+    tsl::robin_map<Eigen::Vector3i, util::Cloud> map_;
+    std::shared_ptr<const util::Cloud::Descriptor> desc_{nullptr};
 };

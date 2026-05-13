@@ -37,7 +37,7 @@ void VoxelMap::update(util::Cloud&& points, const Eigen::Vector3f& origin) {
     const auto max_distance_sq = max_distance_ * max_distance_;
     for(auto it = map_.begin(); it != map_.end();) {
         const auto& [voxel, inner] = *it;
-        if((inner.front().point() - origin).squaredNorm() >= max_distance_sq) {
+        if((voxel.cast<float>() - origin).squaredNorm() >= max_distance_sq) {
             it = map_.erase(it);
         } else ++it;
     }
@@ -51,45 +51,58 @@ void VoxelMap::update(util::Cloud&& points, const Sophus::SE3f& pose) {
 }
 
 void VoxelMap::extend(util::Cloud&& points) {
-    size_t start = cloud_.size();
-    if(cloud_.empty()) {
-        cloud_ = std::move(points);
-    } else {
-        for(size_t i = 0; i < points.size(); ++i) {
-            cloud_.add_point(points[i]);
-        }
-    }
-    const double map_resolution = std::sqrt(voxel_size_ * voxel_size_ / voxel_capacity_);
-    for(size_t i = start; i < cloud_.size(); ++i) {
-        const Eigen::Vector3i& voxel = util::point_to_voxel(cloud_[i].point(), voxel_size_);
+    if(desc_ == nullptr) desc_ = points.descriptor();
+
+    const double map_resolution = std::sqrt(voxel_size_ * voxel_size_ / static_cast<double>(voxel_capacity_));
+    for(size_t i = 0; i < points.size(); ++i) {
+        const Eigen::Vector3i& voxel = util::point_to_voxel(points[i].point(), voxel_size_);
         auto search = map_.find(voxel);
         if(search == map_.end()) {
-            std::vector<util::Cloud::Point> inner;
+            util::Cloud inner{desc_, true};
             inner.reserve(voxel_capacity_);
-            inner.emplace_back(cloud_[i]);
-            map_.insert({voxel, inner});
+            inner.add_point(points[i]);
+            map_.insert({voxel, std::move(inner)});
         } else {
             auto& inner = search.value();
-            if(inner.size() == voxel_capacity_) continue;
-            if(std::any_of(inner.cbegin(), inner.cend(), [&](const auto& inner_point) { 
-                return (inner_point.point() - cloud_[i].point()).norm() < map_resolution; })) continue;
-            inner.emplace_back(cloud_[i]);
+            if(inner.size() >= voxel_capacity_) continue;
+            bool flag = false;
+            for(size_t j = 0; j < inner.size(); ++j) {
+                if((inner[j].point() - points[i].point()).norm() >= map_resolution) continue;
+                flag = true;
+                break;
+            }
+            if(flag) continue;
+            inner.add_point(points[i]);
         }
     }
 }
 
-std::optional<std::pair<util::Cloud::Point, double>> VoxelMap::closest(const util::Cloud::Point &query) const {
+const util::Cloud& VoxelMap::cloud() const noexcept {
+    static util::Cloud cloud{desc_}; // TODO: evil static cloud to avoid repeated reconstruction
+    cloud.clear();
+    for(auto it = map_.begin(); it != map_.end();) {
+        const auto& [voxel, inner] = *it;
+        for(size_t i = 0; i < inner.size(); ++i) {
+            cloud.add_point(inner[i]);
+        }
+    }
+    return cloud;
+}
+
+std::optional<std::pair<util::Cloud::ConstPoint, double>> VoxelMap::closest(const util::Cloud::ConstPoint &query) const {
     if(map_.empty()) return std::nullopt;
     const Eigen::Vector3i& voxel = util::point_to_voxel(query.point(), voxel_size_);
-    std::optional<std::pair<util::Cloud::Point, double>> closest = std::nullopt;
+    std::optional<std::pair<util::Cloud::ConstPoint, double>> closest = std::nullopt;
     std::for_each(voxel_shifts.cbegin(), voxel_shifts.cend(), [&](const auto& voxel_shift) {
         const Eigen::Vector3i& query_voxel = voxel + voxel_shift;
         auto search = map_.find(query_voxel);
         if(search == map_.end()) return;
         const auto& points = search.value();
-        const util::Cloud::Point& neighbor = *std::min_element(points.cbegin(), points.cend(), [&](const auto &lhs, const auto &rhs) {
-            return (lhs.point() - query.point()).norm() < (rhs.point() - query.point()).norm();
-        });
+        util::Cloud::ConstPoint neighbor = points[0];
+        for(size_t i = 1; i < points.size(); ++i) {
+            if((neighbor.point() - query.point()).norm() < (points[i].point() - query.point()).norm()) continue;
+            neighbor = points[i];
+        }
         double distance = (neighbor.point() - query.point()).norm();
         if(!closest || (closest && distance < std::get<1>(*closest))) closest.emplace(neighbor, distance);
     });

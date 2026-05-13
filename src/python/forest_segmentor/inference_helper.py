@@ -31,6 +31,7 @@ class InferenceHelper:
         with torch.no_grad(): pred, conf = self.model.infer(batch)
         # note that the vector type should match the pybind side, otherwise might end up with copies 
         np_pred = pred.cpu().numpy().reshape(-1).astype(np.uint8)
-        np_conf = conf.cpu().numpy().reshape(-1).astype(np.float32)
+        np_conf = conf.cpu().numpy().astype(np.float32)
+        np_conf = np_conf[np.arange(np_conf.shape[0]), np_pred]
         # although the return is very likely still a copy
         return cloud_bindings.FieldUInt8(np_pred), cloud_bindings.FieldFloat32(np_conf)

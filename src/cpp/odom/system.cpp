@@ -3,6 +3,7 @@
 // system
 #include <algorithm>
 #include <optional>
+#include <span>
 // tbb
 #include <tbb/parallel_for.h>
 #include <tbb/concurrent_vector.h>
@@ -31,8 +32,8 @@ std::optional<std::string> get_timestamp_field_name(util::Cloud& points) noexcep
 
 template<typename T>
 void deskew_frame_inner(util::Cloud& points, const std::string& name, const Sophus::SE3f &motion) noexcept {
-    const std::vector<T>& timestamps = points.field<T>(name);
-    const auto& [t_min, t_max] = std::minmax_element(timestamps.cbegin(), timestamps.cend());
+    std::span<const T> timestamps = points.field<T>(name);
+    const auto& [t_min, t_max] = std::minmax_element(timestamps.begin(), timestamps.end());
     const auto t_norm = [&](const double t) { 
         return (t - *t_min) / (*t_max - *t_min); 
     };
@@ -99,7 +100,7 @@ void OdometrySystem::AdaptiveThreshold::update(const Sophus::SE3f& deviation) no
 }
 
 Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const util::Cloud& points, double sigma) const noexcept {
-    using Correspondences = tbb::concurrent_vector<std::pair<util::Cloud::Point, util::Cloud::Point>>;
+    using Correspondences = tbb::concurrent_vector<std::pair<util::Cloud::ConstPoint, util::Cloud::ConstPoint>>;
 
     Correspondences correspondences;
     correspondences.reserve(points.size());

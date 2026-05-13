@@ -3,6 +3,7 @@
 // system
 #include <deque>
 #include <map>
+#include <span>
 #include <variant>
 #include <vector>
 // eigen
@@ -28,282 +29,121 @@ class Cloud {
 public:
     class Descriptor {
         friend class Cloud;
-    private:
+    public:
         Descriptor() = default;
         Descriptor(const Descriptor&) = default;
         Descriptor(Descriptor&&) = delete;
         Descriptor& operator=(const Descriptor&) = default;
         Descriptor& operator=(Descriptor&&) = delete;
     private:
-        bool operator==(const Descriptor& other) const noexcept {
-            return attrs_ == other.attrs_ && names_ == other.names_;
-        }
-    private:
-        void add_field(uint8_t datatype, const std::string& name) {
-            size_t field_count = attrs_.size();
-            attrs_.emplace_back(datatype, name);
-            const std::string& name_ref = attrs_.back().second;
-            names_.emplace(std::string_view(name_ref), field_count);
-        }
+        void add_field(uint8_t datatype, const std::string& name);
+        bool operator==(const Descriptor& other) const noexcept;
+        bool operator!=(const Descriptor& other) const noexcept;  
     private:
         std::deque<std::pair<uint8_t, std::string>> attrs_;
         std::map<std::string_view, size_t> names_;
     };
-
-    // TODO: fix the mutability issues in this class
-    class Point {
-        friend class Cloud;
-    public:
-        Point(const Point&) = default;
-        Point(Point&&) = default;
-        Point& operator=(const Point&) = default;
-        Point& operator=(Point&&) = default;
-        ~Point() = default;
-    private:
-        Point() = delete;
-        Point(const Cloud* owner, size_t index) : owner_(const_cast<Cloud*>(owner)), index(index) { /* STUB */ }
-    public:
-        Eigen::Vector3f& point() const noexcept { return owner_->points_[index]; }
-        template<typename T>
-        T& field(const std::string& name) const { return const_cast<T&>(owner_->field<T>(name)[index]); }
-    public:
-        size_t index;
-    private:
-        Cloud* owner_{nullptr};
-    };
-    
+    // forward declaration of Cloud::Point_, which is wrapped by Point and ConstPoint
+    template<typename C> class Point_;
 public:
     Cloud() = default;
-    Cloud(const Descriptor& desc) noexcept;
+    // if shared is truthy, the fields of the cloud are fixed
+    Cloud(const std::shared_ptr<const Descriptor>& desc, bool shared = false) noexcept;
     Cloud(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg) noexcept;
-    Cloud(const sensor_msgs::msg::PointCloud2::SharedPtr& msg) noexcept :
-        Cloud(std::const_pointer_cast<const sensor_msgs::msg::PointCloud2>(msg)) { /* STUB */ }
-    Cloud(const Cloud& other) noexcept : desc_(other.desc_), points_(other.points_), fields_(other.fields_) { /* STUB */ }
-
-    Cloud(Cloud&& other) noexcept : desc_(other.desc_), points_(std::move(other.points_)), fields_(std::move(other.fields_)) {
-        other.points_.clear();
-        other.fields_.clear();
-        for(size_t i = 0; i < fields_.size(); ++i) {
-            other.fields_.emplace_back(other.desc_.attrs_[i].first);
-        }
-    }
-
-    Cloud& operator=(Cloud&& other) noexcept {
-        if(this == &other) return *this;
-        desc_ = other.desc_;
-        points_ = std::move(other.points_);
-        fields_ = std::move(other.fields_);
-        other.points_.clear();
-        other.fields_.clear();
-        for(size_t i = 0; i < fields_.size(); ++i) {
-            other.fields_.emplace_back(other.desc_.attrs_[i].first);
-        }
-        return *this;
-    }
-
-    // used to get a mutable index into a point and its fields
-    Point operator[](size_t index) const { return {this, index}; }
-
+    Cloud(const sensor_msgs::msg::PointCloud2::SharedPtr& msg) noexcept;
+    Cloud(const Cloud& other) noexcept;
+    Cloud(Cloud&& other) noexcept;
+    Cloud& operator=(const Cloud&) = delete; // NOTE: copying large clouds is non-trivial, so it requires explicit construction
+    Cloud& operator=(Cloud&& other) noexcept;
 public:
+    // types representing references to points within the cloud
+    // allows accessing its position and field
+    using Point = Point_<Cloud>;
+    using ConstPoint = Point_<const Cloud>;
+    // indexers
+    Point operator[](size_t index) { return Point{this, index}; }
+    ConstPoint operator[](size_t index) const { return ConstPoint{this, index}; }
+public:
+    // basic operations
+    size_t size() const noexcept;
+    bool empty() const noexcept;
+    void clear() noexcept;
+    void reserve(size_t n) noexcept;
+    // get the descriptor
+    std::shared_ptr<const Cloud::Descriptor> descriptor() const noexcept;
+public:
+    // access points
+    std::span<const Eigen::Vector3f> points() const noexcept;
+    std::span<Eigen::Vector3f> points() noexcept;
+    // access a given field by name, throws std::runtime_error if field doesn't exist
+    template<typename T>
+    std::span<const T> field(const std::string& name) const;
+    template<typename T>
+    std::span<T> field(const std::string& name);
+    // add a new point from another cloud with the same set of scalar fields
+    Point add_point(const ConstPoint& point) noexcept;
+    // add a new field to the cloud
+    // must provide a number of scalars equal to Cloud::size
+    // can throw std::runtime_error if
+    // - the number of scalars is wrong
+    // - the cloud's descriptor is fixed
+    template<typename T>
+    void add_field(const std::string& name, const std::vector<T>& scalars = {});
+    // python bindings
+#ifdef GENERATE_CLOUD_PYBIND_MODULE
+    // returns a python object containing a `Points` class
+    py::object points_as_py_object() const noexcept;
+    // returns a python object containing one of `FieldUInt8` `FieldFloat32` etc
+    template<typename T>
+    py::object field_as_py_object(const std::string& name) const;
+    // add a new field to the cloud from a python object containing one of `FieldUInt8` `FieldFloat32` etc
+    template<typename T>
+    void add_field_from_py_object(const std::string& name, py::object obj);
+#endif // GENERATE_CLOUD_PYBIND_MODULE
+public:
+    // construct a PointCloud2 message from the cloud containing all its scalar fields
     sensor_msgs::msg::PointCloud2 message(const std_msgs::msg::Header& header) const noexcept;
-
-    inline size_t size() const noexcept {
-        return points_.size();
-    }
-
-    inline bool empty() const noexcept {
-        return Cloud::size() == 0;
-    }
-
-    inline const std::vector<Eigen::Vector3f>& points() const noexcept {
-        return points_;
-    }
-
-#ifdef GENERATE_CLOUD_PYBIND_MODULE
-    py::object points_as_py_object() const noexcept {
-        return py::cast(points_, py::return_value_policy::reference);
-    }
-#endif // GENERATE_CLOUD_PYBIND_MODULE
-
-    // TODO: better error handling
-    template<typename T>
-    inline const std::vector<T>& field(const std::string& name) const {
-        try {
-            return std::get<std::vector<T>>(fields_[desc_.names_.at(name)].data_);
-        } catch(const std::out_of_range& e) {
-            throw std::runtime_error("field not found in cloud");
-        }
-    }
-
-#ifdef GENERATE_CLOUD_PYBIND_MODULE
-    template<typename T>
-    inline py::object field_as_py_object(const std::string& name) const {
-        return py::cast(Cloud::field<T>(name), py::return_value_policy::reference);
-    }
-#endif // GENERATE_CLOUD_PYBIND_MODULE
-
-    void add_point(const Cloud& other, size_t i) noexcept;
-
-    Point add_point(const Point& point) noexcept;
-
-    template<typename T>
-    inline void add_field(const std::string& name, const std::vector<T>& scalars = {}) noexcept {
-        assert(Cloud::size() == scalars.size());
-
-        uint8_t datatype;
-        if constexpr (std::is_same_v<T, int8_t>)        datatype = sensor_msgs::msg::PointField::INT8;
-        else if constexpr (std::is_same_v<T, uint8_t>)  datatype = sensor_msgs::msg::PointField::UINT8;
-        else if constexpr (std::is_same_v<T, int16_t>)  datatype = sensor_msgs::msg::PointField::INT16;
-        else if constexpr (std::is_same_v<T, uint16_t>) datatype = sensor_msgs::msg::PointField::UINT16;
-        else if constexpr (std::is_same_v<T, int32_t>)  datatype = sensor_msgs::msg::PointField::INT32;
-        else if constexpr (std::is_same_v<T, uint32_t>) datatype = sensor_msgs::msg::PointField::UINT32;
-        else if constexpr (std::is_same_v<T, float>)    datatype = sensor_msgs::msg::PointField::FLOAT32;
-        else if constexpr (std::is_same_v<T, double>)   datatype = sensor_msgs::msg::PointField::FLOAT64;
-        else static_assert(Cloud::False<T>, "unsupported field type");
-        
-        desc_.add_field(datatype, name);
-
-        fields_.emplace_back(scalars);
-    }
-
-#ifdef GENERATE_CLOUD_PYBIND_MODULE
-    template<typename T>
-    inline void add_field_from_py_object(const std::string& name, py::object obj) {
-        Cloud::add_field(name, obj.cast<std::vector<T>>());
-    }
-#endif // GENERATE_CLOUD_PYBIND_MODULE
-
-private:
-    Cloud& operator=(const Cloud&) = delete;
-    
+public:
+    // base Point_ class from which Cloud::Point and Cloud::ConstPoint derive
+    template<typename C>
+    class Point_ {
+        friend class Cloud;
+    public:
+        Point_() = delete;
+        template<typename C_, typename = std::enable_if_t<std::is_convertible_v<C_*, C*>>>
+        Point_(const Point_<C_>& other) : owner_(other.owner_), index_(other.index_) { /* STUB */ }
+    public:
+        auto& point() const noexcept { return owner_->points_[index_]; }
+        template<typename T>
+        auto& field(const std::string& name) const { return owner_->template field<T>(name)[index_]; }
+    private:
+        explicit Point_(C* owner, size_t index) : owner_(owner), index_(index) { /* STUB */ }
+        size_t index_;
+        C* owner_{nullptr};
+    };
 private:
     // C++ shenanigans to prevent static_assert from being optimized out of std::visit calls
     template<typename>
     inline static const constexpr bool False = false;
-
+    // this is a wrapper around all supported field types
     struct Field {
         template<typename... T>
         using Data_ = std::variant<std::vector<T>...>;
         using Data = Data_<int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, float, double>;
         Data data_;
-
         Field(uint8_t datatype);
-
         template<typename T>
         Field(const std::vector<T>& scalars) : data_(scalars) { /* STUB */ }
+        void clear() noexcept;
+        void reserve(size_t n) noexcept;
     };
-
-    struct FieldReader {
-        template<typename... T>
-        using It_ = std::variant<sensor_msgs::PointCloud2ConstIterator<T>...>;
-        using It = It_<int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, float, double>;
-        It it_;
-
-        template<typename T>
-        struct Type;
-        template<typename T>
-        struct Type<sensor_msgs::PointCloud2ConstIterator<T>> { using type = T; };
-
-        FieldReader(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg, uint8_t datatype, const std::string& name);
-        void read(Field& field) noexcept;
-    };
-
-    struct FieldWriter {
-        template<typename... T>
-        using It_ = std::variant<sensor_msgs::PointCloud2Iterator<T>...>;
-        using It = It_<int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, float, double>;
-        It it_;
-
-        template<typename T>
-        struct Type;
-        template<typename T>
-        struct Type<sensor_msgs::PointCloud2Iterator<T>> { using type = T; };
-
-        FieldWriter(sensor_msgs::msg::PointCloud2& msg, uint8_t datatype, const std::string& name);
-
-        template<typename T>
-        void write(T scalar) noexcept {
-            std::visit([scalar](auto&& it) {
-                *it = scalar;
-                ++it;
-            }, it_);
-        }
-    };
-
+    // allow FieldReader in the implementation access Field
+    friend struct FieldReader;
 private:
-    Descriptor desc_;
+    std::shared_ptr<Descriptor> desc_;
+    bool shared_{false};
     std::vector<Eigen::Vector3f> points_;
     std::vector<Field> fields_;
-
-public:
-#if 0
-    class Iterator {
-        Cloud* cloud_{nullptr};
-        size_t index_{0};
-    public:
-        // iterator traits
-        using difference_type = ptrdiff_t;
-        using value_type = Point;
-        using pointer = Point*;
-        using reference = Point&;
-        using iterator_category = std::random_access_iterator_tag;
-    public:
-        Iterator() = delete;
-        Iterator(Cloud* cloud) : cloud_(cloud) { /* STUB */ };
-        Iterator(Cloud* cloud, size_t index) : cloud_(cloud), index_(index) { /* STUB */ };
-        Iterator(const Iterator& other) : cloud_(other.cloud_), index_(other.index_) { /* STUB */ };
-        Iterator(Iterator&&) = default;
-        Iterator& operator=(const Iterator& other) noexcept { cloud_ = other.cloud_; index_ = other.index_; return *this; };
-        Iterator& operator=(Iterator&& other) = default;
-        ~Iterator() = default;
-        Iterator& operator++() { index_++; return *this; }
-        Iterator operator++(int) { Iterator ret = *this; ++(*this); return ret; }
-        bool operator==(const Iterator& other) const { 
-            if(cloud_ != other.cloud_) throw std::logic_error("don't compare iterators of different clouds");
-            return index_ == other.index_;
-        }
-        bool operator!=(const Iterator& other) const { return !(*this == other); }
-        value_type operator*() { return (*cloud_)[index_]; }
-        Iterator operator+(difference_type n) const { return Iterator(cloud_, index_ + n); }
-        friend Iterator operator+(difference_type n, const Iterator& it) { 
-            return it + n; 
-        }
-        Iterator operator-(difference_type n) const {
-            return Iterator(cloud_, static_cast<size_t>(static_cast<ptrdiff_t>(index_) - n)); 
-        }
-        friend Iterator operator-(difference_type n, const Iterator& it) {
-            return Iterator(it.cloud_, static_cast<size_t>(n - static_cast<ptrdiff_t>(it.index_))); 
-        }
-        Iterator& operator+=(difference_type n) { 
-            index_ = static_cast<size_t>(static_cast<ptrdiff_t>(index_) + n); 
-            return *this; 
-        }
-        Iterator& operator-=(difference_type n) { 
-            index_ = static_cast<size_t>(static_cast<ptrdiff_t>(index_) - n); 
-            return *this;
-        }
-        bool operator<(const Iterator& other) const { 
-            if(cloud_ != other.cloud_) throw std::logic_error("don't compare iterators of different clouds");
-            return index_ < other.index_; 
-        }
-        bool operator>(const Iterator& other) const { 
-            if(cloud_ != other.cloud_) throw std::logic_error("don't compare iterators of different clouds");
-            return index_ > other.index_; 
-        }
-        bool operator<=(const Iterator& other) const { 
-            if(cloud_ != other.cloud_) throw std::logic_error("don't compare iterators of different clouds");
-            return index_ <= other.index_; 
-        }
-        bool operator>=(const Iterator& other) const { 
-            if(cloud_ != other.cloud_) throw std::logic_error("don't compare iterators of different clouds");
-            return index_ >= other.index_; 
-        }
-        difference_type operator-(const Iterator& other) const { return static_cast<ptrdiff_t>(index_) - static_cast<ptrdiff_t>(other.index_); }
-    };
-
-    Iterator begin() { return Iterator(this); }
-    Iterator end() { return Iterator(this, Cloud::size()); }
-#endif
 };
 }
 
