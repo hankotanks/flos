@@ -25,9 +25,10 @@ namespace py = pybind11;
 #endif // GENERATE_CLOUD_PYBIND_MODULE
 
 namespace util {
-class Cloud {
+class CloudView {
 public:
     class Descriptor {
+        friend class CloudView;
         friend class Cloud;
     public:
         Descriptor() = default;
@@ -46,20 +47,19 @@ public:
     // forward declaration of Cloud::Point_, which is wrapped by Point and ConstPoint
     template<typename C> class Point_;
 public:
-    Cloud() = default;
-    // if shared is truthy, the fields of the cloud are fixed
-    Cloud(const std::shared_ptr<const Descriptor>& desc, bool shared = false) noexcept;
-    Cloud(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg) noexcept;
-    Cloud(const sensor_msgs::msg::PointCloud2::SharedPtr& msg) noexcept;
-    Cloud(const Cloud& other) noexcept;
-    Cloud(Cloud&& other) noexcept;
-    Cloud& operator=(const Cloud&) = delete; // NOTE: copying large clouds is non-trivial, so it requires explicit construction
-    Cloud& operator=(Cloud&& other) noexcept;
+    CloudView() = default;
+    CloudView(const std::shared_ptr<const Descriptor>& desc) noexcept;
+    CloudView(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg) noexcept;
+    CloudView(const sensor_msgs::msg::PointCloud2::SharedPtr& msg) noexcept;
+    CloudView(const CloudView& other) noexcept = default;
+    CloudView(CloudView&& other) noexcept;
+    CloudView& operator=(const CloudView&) noexcept = delete; // NOTE: copying large clouds is non-trivial, so it requires explicit construction
+    CloudView& operator=(CloudView&& other) noexcept;
 public:
     // types representing references to points within the cloud
     // allows accessing its position and field
-    using Point = Point_<Cloud>;
-    using ConstPoint = Point_<const Cloud>;
+    using Point = Point_<CloudView>;
+    using ConstPoint = Point_<const CloudView>;
     // indexers
     Point operator[](size_t index) { return Point{this, index}; }
     ConstPoint operator[](size_t index) const { return ConstPoint{this, index}; }
@@ -70,7 +70,7 @@ public:
     void clear() noexcept;
     void reserve(size_t n) noexcept;
     // get the descriptor
-    std::shared_ptr<const Cloud::Descriptor> descriptor() const noexcept;
+    std::shared_ptr<const Descriptor> descriptor() const noexcept;
 public:
     // access points
     std::span<const Eigen::Vector3f> points() const noexcept;
@@ -82,13 +82,6 @@ public:
     std::span<T> field(const std::string& name);
     // add a new point from another cloud with the same set of scalar fields
     Point add_point(const ConstPoint& point) noexcept;
-    // add a new field to the cloud
-    // must provide a number of scalars equal to Cloud::size
-    // can throw std::runtime_error if
-    // - the number of scalars is wrong
-    // - the cloud's descriptor is fixed
-    template<typename T>
-    void add_field(const std::string& name, const std::vector<T>& scalars = {});
     // python bindings
 #ifdef GENERATE_CLOUD_PYBIND_MODULE
     // returns a python object containing a `Points` class
@@ -96,9 +89,6 @@ public:
     // returns a python object containing one of `FieldUInt8` `FieldFloat32` etc
     template<typename T>
     py::object field_as_py_object(const std::string& name) const;
-    // add a new field to the cloud from a python object containing one of `FieldUInt8` `FieldFloat32` etc
-    template<typename T>
-    void add_field_from_py_object(const std::string& name, py::object obj);
 #endif // GENERATE_CLOUD_PYBIND_MODULE
 public:
     // construct a PointCloud2 message from the cloud containing all its scalar fields
@@ -107,7 +97,7 @@ public:
     // base Point_ class from which Cloud::Point and Cloud::ConstPoint derive
     template<typename C>
     class Point_ {
-        friend class Cloud;
+        friend class CloudView;
     public:
         Point_() = delete;
         template<typename C_, typename = std::enable_if_t<std::is_convertible_v<C_*, C*>>>
@@ -121,7 +111,7 @@ public:
         size_t index_;
         C* owner_{nullptr};
     };
-private:
+protected:
     // C++ shenanigans to prevent static_assert from being optimized out of std::visit calls
     template<typename>
     inline static const constexpr bool False = false;
@@ -139,11 +129,34 @@ private:
     };
     // allow FieldReader in the implementation access Field
     friend struct FieldReader;
-private:
-    std::shared_ptr<Descriptor> desc_;
-    bool shared_{false};
+protected:
+    std::shared_ptr<const Descriptor> desc_;
     std::vector<Eigen::Vector3f> points_;
     std::vector<Field> fields_;
+};
+
+class Cloud : public CloudView {
+public:
+    Cloud() = default;
+    Cloud(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg) noexcept : CloudView(msg) { /* STUB */ }
+    Cloud(const sensor_msgs::msg::PointCloud2::SharedPtr& msg) noexcept : CloudView(msg) { /* STUB */ }
+    Cloud(const Cloud& other) = delete;
+    Cloud(Cloud&& other) noexcept : CloudView(std::move(other)) { /* STUB */ };
+    Cloud& operator=(const Cloud&) = delete;
+    Cloud& operator=(Cloud&& other) noexcept { CloudView::operator=(std::move(other)); return *this; }
+public:
+    // add a new field to the cloud
+    // must provide a number of scalars equal to Cloud::size
+    // can throw std::runtime_error if
+    // - the number of scalars is wrong
+    // - the cloud's descriptor is fixed
+    template<typename T>
+    void add_field(const std::string& name, const std::vector<T>& scalars = {}) noexcept;
+#ifdef GENERATE_CLOUD_PYBIND_MODULE
+    // add a new field to the cloud from a python object containing one of `FieldUInt8` `FieldFloat32` etc
+    template<typename T>
+    void add_field_from_py_object(const std::string& name, py::object obj) noexcept;
+#endif // GENERATE_CLOUD_PYBIND_MODULE
 };
 }
 

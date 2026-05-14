@@ -32,6 +32,7 @@ function(configure_node name)
     PRIVATE
       PROJECT_ROOT="${CMAKE_CURRENT_LIST_DIR}"
       PROJECT_NAME="${PROJECT_NAME}"
+      NODE_NAME="${name}"
       GENERATE_CLOUD_PYBIND_MODULE)
   target_compile_options(${name} PRIVATE -Wno-alloc-size-larger-than)
 endfunction()

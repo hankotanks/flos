@@ -47,7 +47,7 @@ private:
 };
 
 template<typename Entry, typename Message>
-BufferNode<Entry, Message>::BufferNode(const std::string& incoming_topic_name, const std::string& incoming_topic_default) : rclcpp::Node(PROJECT_NAME) {
+BufferNode<Entry, Message>::BufferNode(const std::string& incoming_topic_name, const std::string& incoming_topic_default) : rclcpp::Node(NODE_NAME) {
     // declare parameters
     this->declare_parameter<std::string>(incoming_topic_name, incoming_topic_default);
     // store parameters
@@ -72,7 +72,7 @@ void BufferNode<Entry, Message>::push(const std::shared_ptr<Message>& msg) noexc
     { // ensure capacity isn't reached
         std::unique_lock lock(mutex_);
         if(buffer_.size() >= capacity) {
-            RCLCPP_WARN_ONCE(this->get_logger(), "segmentation_node can't keep up!");
+            RCLCPP_WARN_ONCE(this->get_logger(), NODE_NAME " can't keep up!");
             return;
         }
         // construct and push the entry
@@ -83,12 +83,12 @@ void BufferNode<Entry, Message>::push(const std::shared_ptr<Message>& msg) noexc
 
 template<typename Entry, typename Message>
 std::optional<Entry> BufferNode<Entry, Message>::pop() noexcept {
-    { // wait
-        std::unique_lock lock(mutex_);
-        cv_.wait(lock, [this] { return !running_ || !buffer_.empty(); });
-        if(!running_ && buffer_.empty()) return std::nullopt; // exhausted
+    std::unique_lock lock(mutex_);
+    while(buffer_.empty() && running_ && rclcpp::ok()) { // NOTE: I've add rclcpp::ok here for cleaner shutdown sequences
+        cv_.wait_for(lock, std::chrono::milliseconds(50));
     }
-    // pop points from buffer and return
+    if(!running_ && buffer_.empty()) return std::nullopt;
+    if(buffer_.empty()) return std::nullopt;
     auto entry = std::move(buffer_.front());
     buffer_.pop();
     return entry;

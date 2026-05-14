@@ -1,7 +1,6 @@
 #pragma once
 
 // system
-#include <cassert>
 #include <thread>
 // eigen
 #include <Eigen/Core>
@@ -11,7 +10,6 @@
 // util
 #include "util/buffer_node.h"
 #include "util/cloud.h"
-
 
 class SegmentationNode : public BufferNode<std::pair<util::Cloud, std_msgs::msg::Header>, sensor_msgs::msg::PointCloud2> {
 public:
@@ -35,7 +33,7 @@ protected:
     std::thread segmentation_thread;
 protected:
     void loop();
-    virtual void infer(py::object infer, util::Cloud& cloud, const std_msgs::msg::Header& header) noexcept;
+    virtual void infer(py::object infer, util::Cloud& cloud) const;
     // overload of the BufferNode::read method
     virtual std::pair<util::Cloud, std_msgs::msg::Header> read(const std::shared_ptr<sensor_msgs::msg::PointCloud2>& msg) noexcept final override;
 };

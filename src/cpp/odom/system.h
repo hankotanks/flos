@@ -16,7 +16,7 @@ public:
     struct Config {
         struct {
             double max_distance{100.0};
-            double voxel_size{1.0};
+            double voxel_size{1.0}; // NOTE: downsampling approach has changed from kiss-icp
             size_t voxel_capacity{20};
         } map;
         struct {
@@ -49,9 +49,9 @@ public:
     ~OdometrySystem() = default;
 public:
     // main registration function
-    const Sophus::SE3f& register_to_map(util::Cloud&& points) noexcept;
+    const Sophus::SE3f& register_to_map(util::CloudView&& points) noexcept;
     // returns the current local map
-    inline const util::Cloud& cloud() const noexcept { return map_.cloud(); }
+    inline const util::CloudView& cloud() const noexcept { return map_.cloud(); }
 private:
     class AdaptiveThreshold {
     public:
@@ -74,9 +74,9 @@ private:
     };
 private:
     // constructs and solves the linear system, returning dx
-    Eigen::Matrix<float, 6, 1> solve(const util::Cloud& points, double sigma) const noexcept;
+    Eigen::Matrix<float, 6, 1> solve(const util::CloudView& points, double sigma) const noexcept;
     // returns pose and deviation respectively
-    std::pair<Sophus::SE3f, Sophus::SE3f> align(const util::Cloud& points) const;
+    std::pair<Sophus::SE3f, Sophus::SE3f> align(const util::CloudView& points) const;
 private:
     Config config_;
     Sophus::SE3f last_pose_;

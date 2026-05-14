@@ -17,7 +17,7 @@ namespace {
 static constexpr std::array<std::string, 4> timestamp_field_names = {"timestamps", "time", "timestamp", "t"};
 
 template<typename T>
-std::optional<std::string> get_timestamp_field_name(util::Cloud& points) noexcept {
+std::optional<std::string> get_timestamp_field_name(util::CloudView& points) noexcept {
     
     for(const std::string& name : timestamp_field_names) {
         try {
@@ -31,7 +31,7 @@ std::optional<std::string> get_timestamp_field_name(util::Cloud& points) noexcep
 }
 
 template<typename T>
-void deskew_frame_inner(util::Cloud& points, const std::string& name, const Sophus::SE3f &motion) noexcept {
+void deskew_frame_inner(util::CloudView& points, const std::string& name, const Sophus::SE3f &motion) noexcept {
     std::span<const T> timestamps = points.field<T>(name);
     const auto& [t_min, t_max] = std::minmax_element(timestamps.begin(), timestamps.end());
     const auto t_norm = [&](const double t) { 
@@ -47,7 +47,7 @@ void deskew_frame_inner(util::Cloud& points, const std::string& name, const Soph
     });
 }
 
-void deskew_frame(util::Cloud& points, const Sophus::SE3f &motion) noexcept {
+void deskew_frame(util::CloudView& points, const Sophus::SE3f &motion) noexcept {
     auto field_name = get_timestamp_field_name<float>(points);
     if(field_name) {
         deskew_frame_inner<float>(points, *field_name, motion);
@@ -60,22 +60,21 @@ void deskew_frame(util::Cloud& points, const Sophus::SE3f &motion) noexcept {
 }
 
 // TODO: Move this into /util
-void transform(util::Cloud& cloud, const Sophus::SE3f& t) {
+void transform(util::CloudView& cloud, const Sophus::SE3f& t) {
     for(size_t i = 0; i < cloud.size(); ++i) {
         cloud[i].point() = t * cloud[i].point();
     }
 }
 } // private scope
 
-const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud&& points) noexcept {
+const Sophus::SE3f& OdometrySystem::register_to_map(util::CloudView&& points) noexcept {
     // TODO: deskewing should happen in the segmentation node
     deskew_frame(points, last_delta_);
     // downsample incoming points to obtain keypoints and the preprocessed frame
-    util::voxel_downsample(points, config_.map.voxel_size * 0.5);
-    util::Cloud points_source{points};
-    util::voxel_downsample(points_source, config_.map.voxel_size * 1.5);
+    util::CloudView points_kp{points};
+    util::voxel_downsample(points_kp, config_.map.voxel_size);
     // compute pose w/ ICP
-    const auto [pose, deviation] = OdometrySystem::align(points_source);
+    const auto [pose, deviation] = OdometrySystem::align(points_kp);
     threshold_.update(deviation);
     // append points to map
     map_.update(std::move(points), pose);
@@ -99,8 +98,8 @@ void OdometrySystem::AdaptiveThreshold::update(const Sophus::SE3f& deviation) no
     }
 }
 
-Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const util::Cloud& points, double sigma) const noexcept {
-    using Correspondences = tbb::concurrent_vector<std::pair<util::Cloud::ConstPoint, util::Cloud::ConstPoint>>;
+Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const util::CloudView& points, double sigma) const noexcept {
+    using Correspondences = tbb::concurrent_vector<std::pair<util::CloudView::ConstPoint, util::CloudView::ConstPoint>>;
 
     Correspondences correspondences;
     correspondences.reserve(points.size());
@@ -155,11 +154,11 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const util::Cloud& points, doub
     return JTJ.ldlt().solve(-JTr);
 }
 
-std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(const util::Cloud& points) const {
+std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(const util::CloudView& points) const {
     const auto initial_guess = last_pose_ * last_delta_;
     if(map_.empty()) return std::make_pair(initial_guess, Sophus::SE3f{});
     double sigma = threshold_.compute();
-    util::Cloud source{points};
+    util::CloudView source{points};
     transform(source, initial_guess);
     Sophus::SE3f T_icp = Sophus::SE3f();
     for(size_t j = 0; j < config_.registration.max_iterations; ++j) {

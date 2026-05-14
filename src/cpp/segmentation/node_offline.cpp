@@ -19,9 +19,9 @@ std::shared_ptr<T> deserialize_next_msg(const rclcpp::SerializedMessage& msg_ser
 }
 } // namespace
 
-class OfflineSegmentationNode : public SegmentationNode, util::Profiler {
+class OfflineSegmentationNode : util::Profiler, public SegmentationNode {
 public:
-    explicit OfflineSegmentationNode() : util::Profiler(std::filesystem::path(__FILE__).stem()) {
+    explicit OfflineSegmentationNode() : util::Profiler(NODE_NAME) {
         // declare and store parameters
         this->declare_parameter<std::string>("path_to_bag");
         this->get_parameter("path_to_bag", path_to_bag);
@@ -94,10 +94,10 @@ private:
         bag_progress_publisher->publish(msg);
     }
 
-    void infer(py::object infer, util::Cloud& cloud, const std_msgs::msg::Header& header) noexcept final override {
+    void infer(py::object infer, util::Cloud& cloud) noexcept final override {
         util::Profiler* this_profiler = this;
         util::Profiler profiler("inference", this_profiler);
-        SegmentationNode::infer(infer, cloud, header);
+        SegmentationNode::infer(infer, cloud);
     }
 private:
     static constexpr size_t buffer_threshold = static_cast<size_t>(0.9 * static_cast<double>(BufferNode::capacity));

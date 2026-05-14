@@ -24,5 +24,5 @@ inline Eigen::Vector3i point_to_voxel(const Eigen::Vector3f& point, double voxel
     };
 }
 
-void voxel_downsample(util::Cloud& cloud, const double voxel_size);
+void voxel_downsample(util::CloudView& cloud, const double voxel_size);
 }

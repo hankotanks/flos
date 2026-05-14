@@ -43,7 +43,7 @@ void SegmentationNode::loop() {
     // get the inference method from the python module
     py::object infer_module = py::module_::import("forest_segmentor.inference_helper");
     py::object infer_helper = infer_module.attr("InferenceHelper")(path_to_model);
-    RCLCPP_INFO_ONCE(this->get_logger(), "segmentation_node successfully loaded inference model");
+    RCLCPP_INFO_ONCE(this->get_logger(), NODE_NAME " successfully loaded inference model");
     py::object infer = infer_helper.attr("infer");
     // loop until node is stopped
     while(rclcpp::ok()) {
@@ -55,21 +55,23 @@ void SegmentationNode::loop() {
         static_assert(std::is_same_v<decltype(cloud), util::Cloud>);
         static_assert(std::is_same_v<decltype(header), std_msgs::msg::Header>);
         // perform the inference
-        this->infer(infer, cloud, header);
+        this->infer(infer, cloud);
         // publish the result
         outgoing_points_publisher->publish(std::move(cloud.message(header)));
         active = false;
     }
 }
 
-void SegmentationNode::infer(py::object infer, util::Cloud& cloud, const std_msgs::msg::Header& header) noexcept {
+void SegmentationNode::infer(py::object infer, util::Cloud& cloud) const {
     py::object points = cloud.points_as_py_object();
     py::object intensity = cloud.field_as_py_object<float>("intensity");
     // perform inference
-    py::tuple result = infer(points, intensity).cast<py::tuple>();
+    py::object result = infer(points, intensity).cast<py::tuple>();
+    if(!py::isinstance<py::tuple>(result)) throw std::runtime_error("inference failed");
+    py::tuple result_fields = result.cast<py::tuple>();
     // output
-    cloud.add_field_from_py_object<uint8_t>("class", result[0]);
-    cloud.add_field_from_py_object<float>("confidence", result[1]);
+    cloud.add_field_from_py_object<uint8_t>("class", result_fields[0]);
+    cloud.add_field_from_py_object<float>("confidence", result_fields[1]);
 }
 
 std::pair<util::Cloud, std_msgs::msg::Header> SegmentationNode::read(const std::shared_ptr<sensor_msgs::msg::PointCloud2>& msg) noexcept {

@@ -21,18 +21,18 @@ struct VoxelMap {
 public:
     inline void clear() { map_.clear(); }
     inline bool empty() const { return map_.empty(); }
-    void update(util::Cloud&& points, const Eigen::Vector3f& origin);
-    void update(util::Cloud&& points, const Sophus::SE3f& pose);
-    void extend(util::Cloud&& points);
-    const util::Cloud& cloud() const noexcept;
+    void update(util::CloudView&& points, const Eigen::Vector3f& origin);
+    void update(util::CloudView&& points, const Sophus::SE3f& pose);
+    void extend(util::CloudView&& points);
+    const util::CloudView& cloud() const noexcept;
     // returns std::nullopt when no correspondence is found
-    std::optional<std::pair<util::Cloud::ConstPoint, double>> closest(const util::Cloud::ConstPoint &query) const;
+    std::optional<std::pair<util::CloudView::ConstPoint, double>> closest(const util::CloudView::ConstPoint &query) const;
 private:
     // configuration options
     double max_distance_;
     double voxel_size_;
     size_t voxel_capacity_;
 private:
-    tsl::robin_map<Eigen::Vector3i, util::Cloud> map_;
-    std::shared_ptr<const util::Cloud::Descriptor> desc_{nullptr};
+    tsl::robin_map<Eigen::Vector3i, util::CloudView> map_;
+    std::shared_ptr<const util::CloudView::Descriptor> desc_{nullptr};
 };
