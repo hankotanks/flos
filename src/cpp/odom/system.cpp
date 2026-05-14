@@ -109,11 +109,10 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const util::CloudView& points, 
             const auto& maybe = map_.closest(points[i]);
             if(maybe) {
                 const auto& [neighbor, distance] = *maybe;
-                if(distance < correspondence_distance_max) {
-                    correspondences.emplace_back(points[i], neighbor);
-                }
+                if(neighbor.field<uint8_t>("class") != points[i].field<uint8_t>("class")) continue;
+                if(distance >= correspondence_distance_max) continue;
+                correspondences.emplace_back(points[i], neighbor);
             }
-            
         }
     });
 

@@ -33,6 +33,8 @@ public:
         }
         // publish statistics
         bag_progress_publisher = this->create_publisher<std_msgs::msg::Float32MultiArray>("/" PROJECT_NAME "/bag_progress", 10);
+        // publish original points
+        raw_points_publisher = this->create_publisher<sensor_msgs::msg::PointCloud2>(incoming_topic, 10);
     }
     // delete extraneous constructors
     OfflineSegmentationNode(const OfflineSegmentationNode&) = delete;
@@ -64,7 +66,9 @@ public:
             const rclcpp::SerializedMessage msg_ser(*serialized_bag_msg.serialized_data);
             // this condition should always be truthy... but whatever...
             if(topic == incoming_topic) {
-                BufferNode::push(deserialize_next_msg<sensor_msgs::msg::PointCloud2>(msg_ser));
+                std::shared_ptr<sensor_msgs::msg::PointCloud2> msg = deserialize_next_msg<sensor_msgs::msg::PointCloud2>(msg_ser);
+                BufferNode::push(msg);
+                raw_points_publisher->publish(*msg);
             }
             // increment processed message count
             msg_processed++;
@@ -94,18 +98,25 @@ private:
         bag_progress_publisher->publish(msg);
     }
 
-    void infer(py::object infer, util::Cloud& cloud) noexcept final override {
+    void infer(py::object infer, util::Cloud& cloud) final override {
         util::Profiler* this_profiler = this;
         util::Profiler profiler("inference", this_profiler);
         SegmentationNode::infer(infer, cloud);
     }
 private:
-    static constexpr size_t buffer_threshold = static_cast<size_t>(0.9 * static_cast<double>(BufferNode::capacity));
+    // parameters
     std::string path_to_bag;
+private:
+    // used for stalling the bag reader when the buffer is mostly full
+    static constexpr size_t buffer_threshold = static_cast<size_t>(0.9 * static_cast<double>(BufferNode::capacity));
+    // bag
     std::unique_ptr<util::BufferableBag> bag;
     size_t msg_count = 0;
     size_t msg_processed = 0;
+    // publish the bags progress (including estimated time to completion)
     rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr bag_progress_publisher;
+    // publish the original point topic
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr raw_points_publisher;
 };
 
 int main(int argc, char* argv[]) {

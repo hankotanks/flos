@@ -33,7 +33,7 @@ protected:
     std::thread segmentation_thread;
 protected:
     void loop();
-    virtual void infer(py::object infer, util::Cloud& cloud) const;
+    virtual void infer(py::object infer, util::Cloud& cloud);
     // overload of the BufferNode::read method
     virtual std::pair<util::Cloud, std_msgs::msg::Header> read(const std::shared_ptr<sensor_msgs::msg::PointCloud2>& msg) noexcept final override;
 };

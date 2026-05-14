@@ -62,7 +62,7 @@ void SegmentationNode::loop() {
     }
 }
 
-void SegmentationNode::infer(py::object infer, util::Cloud& cloud) const {
+void SegmentationNode::infer(py::object infer, util::Cloud& cloud) {
     py::object points = cloud.points_as_py_object();
     py::object intensity = cloud.field_as_py_object<float>("intensity");
     // perform inference
