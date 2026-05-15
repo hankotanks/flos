@@ -1,18 +1,19 @@
 #include "voxel.h"
 
 namespace util {
-// TODO: I can avoid another cloud allocation if I implement Point::remove and a reverse Iterator for Cloud
 void voxel_downsample(util::CloudView& cloud, const double voxel_size) {
+    // TODO: Could this be static to prevent allocation every frame??
     tsl::robin_map<Eigen::Vector3i, size_t> grid;
     grid.reserve(cloud.size());
-    std::span<const Eigen::Vector3f> points = cloud.points();
-    for(size_t i = 0; i < points.size(); ++i) {
-        const Eigen::Vector3i voxel = point_to_voxel(points[i], voxel_size);
-        if(!grid.contains(voxel)) grid.insert({voxel, i});
+    size_t i_write = 0;
+    for(size_t i_read = 0; i_read < cloud.size(); ++i_read) {
+        const Eigen::Vector3i voxel = point_to_voxel(cloud[i_read].point(), voxel_size);
+        if(!grid.contains(voxel)) {
+            grid.insert({voxel, i_write});
+            cloud[i_write].replace(cloud[i_read]);
+            ++i_write;
+        }
     }
-    util::CloudView cloud_original{std::move(cloud)};
-    std::for_each(grid.cbegin(), grid.cend(), [&](const auto& voxel_and_index) {
-        cloud.add_point(cloud_original[voxel_and_index.second]);
-    });
+    cloud.resize(i_write);
 }
 }

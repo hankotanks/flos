@@ -17,7 +17,8 @@ set(SEGMENTATION_LIBRARIES
 
 set(SEGMENTATION_PACKAGES
   rclcpp::rclcpp
-  sensor_msgs::sensor_msgs_library)
+  ${std_msgs_TARGETS}
+  ${sensor_msgs_TARGETS})
 
 function(configure_node name)
   set(options)
@@ -89,7 +90,10 @@ configure_node(odometry_node
   PACKAGES
     rclcpp::rclcpp
     tf2_ros::tf2_ros
-    sensor_msgs::sensor_msgs_library)
+    ${std_msgs_TARGETS}
+    ${geometry_msgs_TARGETS}
+    ${sensor_msgs_TARGETS}
+    ${nav_msgs_TARGETS})
 
 install(TARGETS segmentation_node segmentation_node_offline odometry_node 
   DESTINATION lib/${PROJECT_NAME})

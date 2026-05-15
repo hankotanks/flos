@@ -152,9 +152,14 @@ void CloudView::clear() noexcept {
     for(auto& field : fields_) field.clear();
 }
 
-void CloudView::reserve(size_t n) noexcept {
-    points_.reserve(n);
-    for(auto& field : fields_) field.reserve(n);
+void CloudView::reserve(size_t new_cap) {
+    points_.reserve(new_cap);
+    for(auto& field : fields_) field.reserve(new_cap);
+}
+
+void CloudView::resize(size_t count) {
+    points_.resize(count);
+    for(Field& field : fields_) field.resize(count);
 }
 
 std::shared_ptr<const CloudView::Descriptor> CloudView::descriptor() const noexcept {
@@ -242,6 +247,30 @@ template py::object CloudView::field_as_py_object<uint32_t>(const std::string&) 
 template py::object CloudView::field_as_py_object<float>(const std::string&) const;
 template py::object CloudView::field_as_py_object<double>(const std::string&) const;
 #endif // GENERATE_CLOUD_PYBIND_MODULE
+
+template<typename T>
+void CloudView::filter(const std::string& name, const std::function<bool(const T&)>& pred) {
+    std::span<const T> field = CloudView::field<T>(name);
+    for(size_t i = CloudView::size(); i-- > 0;) {
+        if(!(pred)(field[i])) {
+            points_.erase(points_.begin() + i);
+            for(Field& field : fields_) {
+                std::visit([i](auto& vec) { 
+                    vec.erase(vec.begin() + i); 
+                }, field.data_);
+            }
+        }
+    }
+}
+
+template void CloudView::filter<int8_t>(const std::string&, const std::function<bool(const int8_t&)>&);
+template void CloudView::filter<uint8_t>(const std::string&, const std::function<bool(const uint8_t&)>&);
+template void CloudView::filter<int16_t>(const std::string&, const std::function<bool(const int16_t&)>&);
+template void CloudView::filter<uint16_t>(const std::string&, const std::function<bool(const uint16_t&)>&);
+template void CloudView::filter<int32_t>(const std::string&, const std::function<bool(const int32_t&)>&);
+template void CloudView::filter<uint32_t>(const std::string&, const std::function<bool(const uint32_t&)>&);
+template void CloudView::filter<float>(const std::string&, const std::function<bool(const float&)>&);
+template void CloudView::filter<double>(const std::string&, const std::function<bool(const double&)>&);
 
 struct FieldWriter {
     template<typename... T>
@@ -345,8 +374,46 @@ void CloudView::Field::clear() noexcept {
     std::visit([](auto& vec) { vec.clear(); }, data_);
 }
 
-void CloudView::Field::reserve(size_t n) noexcept {
-    std::visit([n](auto& vec) { vec.reserve(n); }, data_);
+void CloudView::Field::reserve(size_t new_cap) {
+    std::visit([new_cap](auto& vec) { vec.reserve(new_cap); }, data_);
+}
+
+void CloudView::Field::resize(size_t count) {
+    std::visit([count](auto& vec) { vec.resize(count); }, data_);
+}
+
+template<typename T>
+T& CloudView::Field::operator[](size_t index) {
+    return std::get<std::vector<T>>(data_)[index];
+}
+
+template int8_t& CloudView::Field::operator[](size_t index);
+template uint8_t& CloudView::Field::operator[](size_t index);
+template int16_t& CloudView::Field::operator[](size_t index);
+template uint16_t& CloudView::Field::operator[](size_t index);
+template int32_t& CloudView::Field::operator[](size_t index);
+template uint32_t& CloudView::Field::operator[](size_t index);
+template float& CloudView::Field::operator[](size_t index);
+template double& CloudView::Field::operator[](size_t index);
+
+template<typename T>
+const T& CloudView::Field::operator[](size_t index) const {
+    return std::get<std::vector<T>>(data_)[index];
+}
+
+template const int8_t& CloudView::Field::operator[](size_t index) const;
+template const uint8_t& CloudView::Field::operator[](size_t index) const;
+template const int16_t& CloudView::Field::operator[](size_t index) const;
+template const uint16_t& CloudView::Field::operator[](size_t index) const;
+template const int32_t& CloudView::Field::operator[](size_t index) const;
+template const uint32_t& CloudView::Field::operator[](size_t index) const;
+template const float& CloudView::Field::operator[](size_t index) const;
+template const double& CloudView::Field::operator[](size_t index) const;
+
+void CloudView::Field::copy(const CloudView::Field& other, size_t from, size_t to) {
+    std::visit([from, to](auto& vec_to, const auto& vec_from) {
+        vec_to[to] = vec_from[from];
+    }, data_, other.data_);
 }
 
 template<typename T>
@@ -376,6 +443,12 @@ template void Cloud::add_field<int32_t>(const std::string&, const std::vector<in
 template void Cloud::add_field<uint32_t>(const std::string&, const std::vector<uint32_t>&) noexcept;
 template void Cloud::add_field<float>(const std::string&, const std::vector<float>&) noexcept;
 template void Cloud::add_field<double>(const std::string&, const std::vector<double>&) noexcept;
+
+template<typename T>
+void Cloud::add_field(const std::string& name, const T& scalar) noexcept {
+    std::vector<T> scalars{CloudView::size(), scalar};
+    Cloud::add_field(name, scalars);
+}
 
 #ifdef GENERATE_CLOUD_PYBIND_MODULE
 template<typename T>

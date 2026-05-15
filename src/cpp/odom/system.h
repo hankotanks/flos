@@ -16,7 +16,7 @@ public:
     struct Config {
         struct {
             double max_distance{100.0};
-            double voxel_size{1.0}; // NOTE: downsampling approach has changed from kiss-icp
+            double voxel_size{1.5}; // NOTE: downsampling approach has changed from kiss-icp
             size_t voxel_capacity{20};
         } map;
         struct {

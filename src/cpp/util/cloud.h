@@ -68,7 +68,8 @@ public:
     size_t size() const noexcept;
     bool empty() const noexcept;
     void clear() noexcept;
-    void reserve(size_t n) noexcept;
+    void reserve(size_t new_cap);
+    void resize(size_t count);
     // get the descriptor
     std::shared_ptr<const Descriptor> descriptor() const noexcept;
 public:
@@ -90,6 +91,9 @@ public:
     template<typename T>
     py::object field_as_py_object(const std::string& name) const;
 #endif // GENERATE_CLOUD_PYBIND_MODULE
+    // filter the cloud based on a certain field
+    template<typename T>
+    void filter(const std::string& name, const std::function<bool(const T&)>& pred);
 public:
     // construct a PointCloud2 message from the cloud containing all its scalar fields
     sensor_msgs::msg::PointCloud2 message(const std_msgs::msg::Header& header) const noexcept;
@@ -106,6 +110,15 @@ public:
         auto& point() const noexcept { return owner_->points_[index_]; }
         template<typename T>
         auto& field(const std::string& name) const { return owner_->template field<T>(name)[index_]; }
+        template<typename C_ = C, typename = std::enable_if_t<!std::is_const_v<C_>>>
+        void replace(const Point_<C_>& other) {
+            assert(owner_->desc_ == other.owner_->desc_);
+            assert(owner_->fields_.size() == other.owner_->fields_.size());
+            owner_->points_[index_] = other.point();
+            for(size_t i = 0; i < owner_->fields_.size(); ++i) {
+                owner_->fields_[i].copy(other.owner_->fields_[i], other.index_, index_);
+            }
+        }
     private:
         explicit Point_(C* owner, size_t index) : owner_(owner), index_(index) { /* STUB */ }
         size_t index_;
@@ -117,6 +130,7 @@ protected:
     inline static const constexpr bool False = false;
     // this is a wrapper around all supported field types
     struct Field {
+        friend Point;
         template<typename... T>
         using Data_ = std::variant<std::vector<T>...>;
         using Data = Data_<int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, float, double>;
@@ -125,7 +139,14 @@ protected:
         template<typename T>
         Field(const std::vector<T>& scalars) : data_(scalars) { /* STUB */ }
         void clear() noexcept;
-        void reserve(size_t n) noexcept;
+        void reserve(size_t new_cap);
+        void resize(size_t count);
+        template<typename T>
+        T& operator[](size_t index);
+        template<typename T>
+        const T& operator[](size_t index) const;
+    private:
+        void copy(const Field& other, size_t from, size_t to);
     };
     // allow FieldReader in the implementation access Field
     friend struct FieldReader;
@@ -152,6 +173,8 @@ public:
     // - the cloud's descriptor is fixed
     template<typename T>
     void add_field(const std::string& name, const std::vector<T>& scalars = {}) noexcept;
+    template<typename T>
+    void add_field(const std::string& name, const T& scalar) noexcept;
 #ifdef GENERATE_CLOUD_PYBIND_MODULE
     // add a new field to the cloud from a python object containing one of `FieldUInt8` `FieldFloat32` etc
     template<typename T>

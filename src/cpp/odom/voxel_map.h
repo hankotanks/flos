@@ -1,5 +1,7 @@
 #pragma once
 
+// system
+#include <functional>
 // eigen
 #include <Eigen/Dense>
 // tsl
@@ -27,6 +29,9 @@ public:
     const util::CloudView& cloud() const noexcept;
     // returns std::nullopt when no correspondence is found
     std::optional<std::pair<util::CloudView::ConstPoint, double>> closest(const util::CloudView::ConstPoint &query) const;
+    // a predicate can be supplied taking 2 points and returning a boolean, if truthy, the point is preserved
+    using Predicate = std::function<bool(const util::CloudView::ConstPoint& point, const util::CloudView::ConstPoint& query)>;
+    std::optional<std::pair<util::CloudView::ConstPoint, double>> closest(const util::CloudView::ConstPoint &query, const Predicate& pred) const;
 private:
     // configuration options
     double max_distance_;

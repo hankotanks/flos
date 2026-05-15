@@ -1,4 +1,5 @@
 #include "voxel_map.h"
+#include "util/cloud.h"
 
 namespace {
 static const std::array<Eigen::Vector3i, 27> voxel_shifts{
@@ -88,6 +89,8 @@ const util::CloudView& VoxelMap::cloud() const noexcept {
     return cloud;
 }
 
+// TODO: this can be implemented as a specialization of the predicate version of the function
+// I'm keeping it as is for now for diagnostic purposes
 std::optional<std::pair<util::CloudView::ConstPoint, double>> VoxelMap::closest(const util::CloudView::ConstPoint &query) const {
     if(map_.empty()) return std::nullopt;
     const Eigen::Vector3i& voxel = util::point_to_voxel(query.point(), voxel_size_);
@@ -99,6 +102,27 @@ std::optional<std::pair<util::CloudView::ConstPoint, double>> VoxelMap::closest(
         const auto& points = search.value();
         util::CloudView::ConstPoint neighbor = points[0];
         for(size_t i = 1; i < points.size(); ++i) {
+            if((neighbor.point() - query.point()).norm() < (points[i].point() - query.point()).norm()) continue;
+            neighbor = points[i];
+        }
+        double distance = (neighbor.point() - query.point()).norm();
+        if(!closest || (closest && distance < std::get<1>(*closest))) closest.emplace(neighbor, distance);
+    });
+    return closest;
+}
+
+std::optional<std::pair<util::CloudView::ConstPoint, double>> VoxelMap::closest(const util::CloudView::ConstPoint &query, const VoxelMap::Predicate& pred) const {
+    if(map_.empty()) return std::nullopt;
+    const Eigen::Vector3i& voxel = util::point_to_voxel(query.point(), voxel_size_);
+    std::optional<std::pair<util::CloudView::ConstPoint, double>> closest = std::nullopt;
+    std::for_each(voxel_shifts.cbegin(), voxel_shifts.cend(), [&](const auto& voxel_shift) {
+        const Eigen::Vector3i& query_voxel = voxel + voxel_shift;
+        auto search = map_.find(query_voxel);
+        if(search == map_.end()) return;
+        const auto& points = search.value();
+        util::CloudView::ConstPoint neighbor = points[0];
+        for(size_t i = 1; i < points.size(); ++i) {
+            if(!(pred)(points[i], query)) continue;
             if((neighbor.point() - query.point()).norm() < (points[i].point() - query.point()).norm()) continue;
             neighbor = points[i];
         }

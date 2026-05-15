@@ -72,6 +72,8 @@ void SegmentationNode::infer(py::object infer, util::Cloud& cloud) {
     // output
     cloud.add_field_from_py_object<uint8_t>("class", result_fields[0]);
     cloud.add_field_from_py_object<float>("confidence", result_fields[1]);
+    // TODO: right now I'm only considering ground points and tree stems, but this may change
+    cloud.filter<uint8_t>("class", [](const uint8_t& scalar) { return scalar != 0 && scalar != 2 && scalar != 4; });
 }
 
 std::pair<util::Cloud, std_msgs::msg::Header> SegmentationNode::read(const std::shared_ptr<sensor_msgs::msg::PointCloud2>& msg) noexcept {

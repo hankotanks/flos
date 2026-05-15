@@ -10,7 +10,6 @@
 #include <tbb/parallel_reduce.h>
 // util
 #include "util/cloud.h"
-#include "util/voxel.h"
 
 namespace {
 // field names to search in get_timestamp_field_name
@@ -18,7 +17,6 @@ static constexpr std::array<std::string, 4> timestamp_field_names = {"timestamps
 
 template<typename T>
 std::optional<std::string> get_timestamp_field_name(util::CloudView& points) noexcept {
-    
     for(const std::string& name : timestamp_field_names) {
         try {
             (void) points.field<T>(name);
@@ -68,7 +66,7 @@ void transform(util::CloudView& cloud, const Sophus::SE3f& t) {
 } // private scope
 
 const Sophus::SE3f& OdometrySystem::register_to_map(util::CloudView&& points) noexcept {
-    // TODO: deskewing should happen in the segmentation node
+    // deskewing
     deskew_frame(points, last_delta_);
     // downsample incoming points to obtain keypoints and the preprocessed frame
     util::CloudView points_kp{points};
@@ -101,15 +99,19 @@ void OdometrySystem::AdaptiveThreshold::update(const Sophus::SE3f& deviation) no
 Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const util::CloudView& points, double sigma) const noexcept {
     using Correspondences = tbb::concurrent_vector<std::pair<util::CloudView::ConstPoint, util::CloudView::ConstPoint>>;
 
+    // this predicate only allows matching between points with the same semantic information
+    VoxelMap::Predicate pred = [](const util::CloudView::ConstPoint& point, const util::CloudView::ConstPoint& query) -> bool {
+        return point.field<uint8_t>("class") != query.field<uint8_t>("class");
+    };
+
     Correspondences correspondences;
     correspondences.reserve(points.size());
     double correspondence_distance_max = sigma * config_.registration.correspondence_multiplier;
     tbb::parallel_for(tbb::blocked_range<size_t>{0, points.size()}, [&](const tbb::blocked_range<size_t>& range) {
         for(size_t i = range.begin(); i < range.end(); ++i) {
-            const auto& maybe = map_.closest(points[i]);
+            const auto& maybe = map_.closest(points[i], pred);
             if(maybe) {
                 const auto& [neighbor, distance] = *maybe;
-                if(neighbor.field<uint8_t>("class") != points[i].field<uint8_t>("class")) continue;
                 if(distance >= correspondence_distance_max) continue;
                 correspondences.emplace_back(points[i], neighbor);
             }
@@ -145,7 +147,9 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const util::CloudView& points, 
             return std::transform_reduce(
                 range.begin(), range.end(), J, sum_linear_systems, [&](const auto& correspondence) {
                     const auto& [J_r, residual] = compute_jacobian_and_residual(correspondence);
-                    const double w = GM_weight(residual.squaredNorm());
+                    const util::CloudView::ConstPoint& point = correspondence.first;
+                    // weight the kernel based on confidence from the segmentation model
+                    const double w = point.field<float>("confidence") * GM_weight(residual.squaredNorm());
                     return System(J_r.transpose() * w * J_r, J_r.transpose() * w * residual);
                 });
         }, sum_linear_systems);

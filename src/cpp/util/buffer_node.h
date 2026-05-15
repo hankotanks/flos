@@ -35,7 +35,7 @@ protected:
     virtual Entry read(const std::shared_ptr<Message>& msg) noexcept = 0;
 protected:
     // total capacity of the buffer
-    static constexpr size_t capacity = 5;
+    static constexpr size_t capacity = 15;
     // nodes deriving from this class should set this when actively processing a buffer entry
     std::atomic<bool> active{false};
 private:

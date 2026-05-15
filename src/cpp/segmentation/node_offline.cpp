@@ -3,6 +3,8 @@
 // ros
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/float32_multi_array.hpp>
+#include <tf2_ros/buffer.hpp>
+#include <tf2_ros/transform_listener.hpp>
 // package
 #include "node.h"
 // util
@@ -21,7 +23,7 @@ std::shared_ptr<T> deserialize_next_msg(const rclcpp::SerializedMessage& msg_ser
 
 class OfflineSegmentationNode : util::Profiler, public SegmentationNode {
 public:
-    explicit OfflineSegmentationNode() : util::Profiler(NODE_NAME) {
+    explicit OfflineSegmentationNode() : util::Profiler(NODE_NAME), delayed_publisher(this, "/" PROJECT_NAME "/raw") {
         // declare and store parameters
         this->declare_parameter<std::string>("path_to_bag");
         this->get_parameter("path_to_bag", path_to_bag);
@@ -33,14 +35,15 @@ public:
         }
         // publish statistics
         bag_progress_publisher = this->create_publisher<std_msgs::msg::Float32MultiArray>("/" PROJECT_NAME "/bag_progress", 10);
-        // publish original points
-        raw_points_publisher = this->create_publisher<sensor_msgs::msg::PointCloud2>(incoming_topic, 10);
     }
     // delete extraneous constructors
     OfflineSegmentationNode(const OfflineSegmentationNode&) = delete;
     OfflineSegmentationNode(OfflineSegmentationNode&&) = delete;
     OfflineSegmentationNode& operator=(const OfflineSegmentationNode&) = delete;
     OfflineSegmentationNode& operator=(OfflineSegmentationNode&&) = delete;
+    ~OfflineSegmentationNode() {
+        delayed_publisher.stop();
+    }
 public:
     void run() {
         // construct bag reader
@@ -51,12 +54,11 @@ public:
         // set total message count
         msg_count = bag->message_count();
         // infer lidar messages from the given bag
-        rclcpp::Rate rate(20);
+        rclcpp::Rate rate(10);
         while(rclcpp::ok() && !bag->finished()) {
             if(BufferNode::size() >= buffer_threshold) {
                 RCLCPP_WARN_STREAM_ONCE(this->get_logger(), "throttling bag read " << 
                     "[buffer size: " << BufferNode::size() << ", capacity: " << BufferNode::capacity << "]");
-                // TODO: better method for throttling
                 rate.sleep();
                 continue;
             }
@@ -68,7 +70,7 @@ public:
             if(topic == incoming_topic) {
                 std::shared_ptr<sensor_msgs::msg::PointCloud2> msg = deserialize_next_msg<sensor_msgs::msg::PointCloud2>(msg_ser);
                 BufferNode::push(msg);
-                raw_points_publisher->publish(*msg);
+                delayed_publisher.queue(msg);
             }
             // increment processed message count
             msg_processed++;
@@ -77,6 +79,8 @@ public:
         }
         // wait until the remaining scans are consumed by the segmentation loop
         BufferNode::wait_until_drained();
+        // clean up DelayedPublisher
+        delayed_publisher.stop();
     }
 private:
     void publish_bag_progress() {
@@ -100,12 +104,75 @@ private:
 
     void infer(py::object infer, util::Cloud& cloud) final override {
         util::Profiler* this_profiler = this;
-        util::Profiler profiler("inference", this_profiler);
+        util::Profiler profiler{"inference", this_profiler};
         SegmentationNode::infer(infer, cloud);
     }
 private:
     // parameters
     std::string path_to_bag;
+private:
+    class DelayedPublisher {
+    public:
+        DelayedPublisher(rclcpp::Node* node, const std::string& topic_name) {
+            // initialize TF2
+            tf_buffer_ = std::make_unique<tf2_ros::Buffer>(node->get_clock());
+            tf_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf_buffer_);
+            // publish original points (will be published by dedicated thread)
+            publisher_ = node->create_publisher<sensor_msgs::msg::PointCloud2>(topic_name, 10);
+            // launch publication thread
+            thread_ = std::thread(&DelayedPublisher::publish, this);
+        }
+
+        void stop() {
+            { // signal thread to terminate
+                std::unique_lock<std::mutex> lock(mutex_);
+                running_ = false;
+            }
+            cv_.notify_all();
+            if(thread_.joinable()) thread_.join();
+        }
+
+        void queue(const std::shared_ptr<sensor_msgs::msg::PointCloud2>& msg) {
+            {
+                std::unique_lock<std::mutex> lock(mutex_);
+                queue_.push(msg);
+            }
+            cv_.notify_one();
+        }
+
+        void publish() {
+            while(running_) {
+                std::shared_ptr<sensor_msgs::msg::PointCloud2> msg;
+                {
+                    std::unique_lock<std::mutex> lock(mutex_);
+                    cv_.wait(lock, [this] { return !queue_.empty() || !running_; });
+                    if(!running_ && queue_.empty()) break;
+                    if(queue_.empty()) continue;
+                    msg = queue_.front();
+                    queue_.pop();
+                }
+                try {
+                    // TODO: it's unacceptable that "odom_frame" is specified here as a literal
+                    tf_buffer_->lookupTransform("odom_frame", 
+                        msg->header.frame_id, 
+                        msg->header.stamp, 
+                        tf2::durationFromSec(10.0));
+                    publisher_->publish(*msg);
+                } catch(const tf2::TransformException& ex) {
+                    std::cout << "Transform lookup failed" << std::endl;
+                }
+            }
+        }
+    private:
+        std::queue<std::shared_ptr<sensor_msgs::msg::PointCloud2>> queue_;
+        std::mutex mutex_;
+        std::condition_variable cv_;
+        std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
+        std::unique_ptr<tf2_ros::TransformListener> tf_listener_;
+        std::thread thread_;
+        std::atomic<bool> running_{true};
+        rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr publisher_;
+    };
 private:
     // used for stalling the bag reader when the buffer is mostly full
     static constexpr size_t buffer_threshold = static_cast<size_t>(0.9 * static_cast<double>(BufferNode::capacity));
@@ -115,8 +182,8 @@ private:
     size_t msg_processed = 0;
     // publish the bags progress (including estimated time to completion)
     rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr bag_progress_publisher;
-    // publish the original point topic
-    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr raw_points_publisher;
+    // delayed publisher for raw point data
+    DelayedPublisher delayed_publisher;
 };
 
 int main(int argc, char* argv[]) {
