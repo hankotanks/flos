@@ -1,27 +1,3 @@
-# MIT License
-#
-# Copyright (c) 2022 Ignacio Vizzo, Tiziano Guadagnino, Benedikt Mersch, Cyrill
-# Stachniss.
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-import os
-
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
@@ -32,54 +8,118 @@ from launch.actions import OpaqueFunction
 
 PACKAGE_NAME = "forest_segmentation"
 
-# TODO: expose all node parameters
+def param_str(context, params, name):
+    assert isinstance(params, dict) or isinstance(params, list)
+    if isinstance(params, dict): params = [params]
+    value = LaunchConfiguration(name).perform(context)
+    if value is None: return None
+    if len(value) > 0:
+        for p in params: p[name] = value
+        return value
+    return None
 
-def forest_segmentation_setup(context, *args, **kwargs):
-    path_to_bag = LaunchConfiguration("path_to_bag").perform(context) # REQUIRED: path to the rosbag
-    voxel_size = LaunchConfiguration("voxel_size").perform(context)
-    incoming_points_topic = LaunchConfiguration("incoming_points_topic").perform(context)
+def param_bool(context, params, name):
+    assert isinstance(params, dict) or isinstance(params, list)
+    if isinstance(params, dict): params = [params]
+    value = LaunchConfiguration(name).perform(context)
+    if value is None: return None
+    if len(value) > 0:
+        assert value in ["true", "false"]
+        for p in params: p[name] = True if value == "true" else False
+        return value
+    return None
 
-    segmentation_node_offline_parameters = {
-        'use_sim_time': True,
-        'path_to_bag': path_to_bag
+def param_int(context, params, name):
+    assert isinstance(params, dict) or isinstance(params, list)
+    if isinstance(params, dict): params = [params]
+    value = LaunchConfiguration(name).perform(context)
+    if value is None: return None
+    if len(value) > 0:
+        value = int(value)
+        for p in params: p[name] = value
+        return value
+    return None
+
+def param_float(context, params, name):
+    assert isinstance(params, dict) or isinstance(params, list)
+    if isinstance(params, dict): params = [params]
+    value = LaunchConfiguration(name).perform(context)
+    if value is None: return None
+    if len(value) > 0:
+        value = float(value)
+        for p in params: p[name] = value
+        return value
+    return None
+
+def setup(context, *args, **kwargs):
+    p_seg = {
+        'use_sim_time': True
     }
 
-    if len(incoming_points_topic) > 0:
-        segmentation_node_offline_parameters['incoming_points_topic'] = incoming_points_topic
-
-    voxel_size = float(voxel_size)
-    if voxel_size > 0:
-        segmentation_node_offline_parameters['voxel_size'] = voxel_size * 0.5
-
-    odometry_node_parameters = {
+    p_odom = {
         'use_sim_time': True,
         'debug': True,
     }
-
-    if voxel_size > 0:
-        odometry_node_parameters['voxel_size'] = voxel_size * 1.5
-
+    
+    # shared parameters 
+    assert (p := param_float(context, [p_seg, p_odom], "voxel_size")) is None or p > 0.0
+    assert (p := param_float(context, [p_seg, p_odom], "max_distance")) is None or p > 0.0
+    # segmentation parameters
+    assert param_str(context, p_seg, "path_to_bag") is not None
+    param_str(context, p_seg, "path_to_model")
+    param_str(context, p_seg, "incoming_points_topic")
+    param_bool(context, p_seg, "ignore_canopy")
+    param_bool(context, p_seg, "ignore_shrubs")
+    # odometry parameters
+    param_bool(context, p_odom, "confidence_based_insertion")
+    param_bool(context, p_odom, "confidence_weighting")
+    param_bool(context, p_odom, "correspondence_restriction")
+    assert (p := param_int(context, p_odom, "voxel_capacity")) is None or p > 0
+    assert (p := param_int(context, p_odom, "max_iterations")) is None or p > 0
+    assert (p := param_int(context, p_odom, "max_threads")) is None or p >= 0
+    assert (p := param_float(context, p_odom, "threshold_initial")) is None or p > 0.0
+    assert (p := param_float(context, p_odom, "min_motion")) is None or p > 0.0
+    assert (p := param_float(context, p_odom, "convergence_criterion")) is None or p > 0.0
+    assert (p := param_float(context, p_odom, "correspondence_multiplier")) is None or p > 0.0
+    
     return [
         Node(
             package=PACKAGE_NAME,
             executable='segmentation_node_offline',
-            parameters=[segmentation_node_offline_parameters]
+            parameters=[p_seg]
         ),
         Node(
             package=PACKAGE_NAME,
             executable="odometry_node",
-            parameters=[odometry_node_parameters]
+            parameters=[p_odom]
         ),
     ]
 
 def generate_launch_description():
-    visualize = LaunchConfiguration("visualize") # OPTIONAL: run rviz alongside the nodes
+    visualize = LaunchConfiguration("visualize")
 
     return LaunchDescription([
         DeclareLaunchArgument('visualize', default_value="true"),
+        # shared parameters
+        DeclareLaunchArgument('voxel_size', default_value=""),
+        DeclareLaunchArgument('max_distance', default_value=""),
+        # segmentation parameters
         DeclareLaunchArgument('path_to_bag'),
-        DeclareLaunchArgument('voxel_size', default_value="1"),
+        DeclareLaunchArgument('path_to_model', default_value=""),
         DeclareLaunchArgument('incoming_points_topic', default_value=""),
+        DeclareLaunchArgument('ignore_canopy', default_value=""),
+        DeclareLaunchArgument('ignore_shrubs', default_value=""),
+        # odometry parameter
+        DeclareLaunchArgument('confidence_based_insertion', default_value=""),
+        DeclareLaunchArgument('confidence_weighting', default_value=""),
+        DeclareLaunchArgument('correspondence_restriction', default_value=""),
+        DeclareLaunchArgument('voxel_capacity', default_value=""),
+        DeclareLaunchArgument('max_iterations', default_value=""),
+        DeclareLaunchArgument('max_threads', default_value=""),
+        DeclareLaunchArgument('threshold_initial', default_value=""),
+        DeclareLaunchArgument('min_motion', default_value=""),
+        DeclareLaunchArgument('convergence_criterion', default_value=""),
+        DeclareLaunchArgument('correspondence_multiplier', default_value=""),
         Node(
             package="rviz2",
             executable="rviz2",
@@ -88,5 +128,5 @@ def generate_launch_description():
             arguments=["-d", PathJoinSubstitution([FindPackageShare(PACKAGE_NAME), "rviz", "debug.rviz"])],
             parameters=[{ 'use_sim_time': True }]
         ),
-        OpaqueFunction(function=forest_segmentation_setup)
+        OpaqueFunction(function=setup)
     ])

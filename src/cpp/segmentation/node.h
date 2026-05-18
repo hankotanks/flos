@@ -13,30 +13,40 @@
 
 class SegmentationNode : public BufferNode<std::pair<util::Cloud, std_msgs::msg::Header>, sensor_msgs::msg::PointCloud2> {
 public:
+    struct Config {
+        double voxel_size{1.0};
+        double max_distance{25.0};
+        bool ignore_canopy{true};
+        bool ignore_shrubs{true};
+    };
+public:
     explicit SegmentationNode();
     SegmentationNode(const SegmentationNode&) = delete;
     SegmentationNode(SegmentationNode&&) = delete;
     SegmentationNode& operator=(const SegmentationNode&) = delete;
     SegmentationNode& operator=(SegmentationNode&&) = delete;
     ~SegmentationNode() {
-        if(segmentation_thread.joinable()) segmentation_thread.join();
+        if(segmentation_thread_.joinable()) segmentation_thread_.join();
     }
 protected:
     // parameters
-    std::string outgoing_points_topic;
-    std::string path_to_model;
-    std::optional<double> voxel_size;
-    bool ignore_canopy;
-    bool ignore_shrubs;
+    std::string outgoing_points_topic_;
+    std::string path_to_model_;
 protected:
+    Config config_;
+    // scalar for voxel_size
+    // NOTE: Config::voxel_size is scaled by this constant for unified parameter passing between segmentation and odometry
+    static constexpr double VOXEL_SIZE_SCALAR{0.5};
     // topic stuff  
-    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr outgoing_points_publisher;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr outgoing_points_publisher_;
     // separate thread for processing buffered clouds
-    std::thread segmentation_thread;
+    std::thread segmentation_thread_;
 protected:
     void loop();
     virtual void infer(py::object infer, util::Cloud& cloud);
     // overload of the BufferNode::read method
     virtual std::pair<util::Cloud, std_msgs::msg::Header> read(const std::shared_ptr<sensor_msgs::msg::PointCloud2>& msg) noexcept final override;
+private:
+    static SegmentationNode::Config configure(rclcpp::Node* node);
 };
 

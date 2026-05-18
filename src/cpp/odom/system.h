@@ -88,6 +88,8 @@ private:
     std::pair<Sophus::SE3f, Sophus::SE3f> align(const util::CloudView& points) const;
 private:
     Config config_;
+    // NOTE: see note in segmentation/node.h
+    static constexpr double VOXEL_SIZE_SCALAR{1.5};
     Sophus::SE3f last_pose_;
     Sophus::SE3f last_delta_;
     VoxelMap map_;

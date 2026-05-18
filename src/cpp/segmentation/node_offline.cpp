@@ -29,17 +29,17 @@ public:
         this->declare_parameter<std::string>("path_to_bag");
         std::string local_map_frame;
         this->get_parameter("local_map_frame", local_map_frame);
-        this->get_parameter("path_to_bag", path_to_bag);
+        this->get_parameter("path_to_bag", path_to_bag_);
         // validate path_to_bag
-        if(path_to_bag.empty()) {
+        if(path_to_bag_.empty()) {
             throw std::runtime_error("path_to_bag is required");
-        } else if(!std::filesystem::exists(path_to_bag)) {
-            throw std::runtime_error("path_to_bag does not exist: " + path_to_bag);
+        } else if(!std::filesystem::exists(path_to_bag_)) {
+            throw std::runtime_error("path_to_bag does not exist: " + path_to_bag_);
         }
         // publish statistics
-        bag_progress_publisher = this->create_publisher<std_msgs::msg::Float32MultiArray>("/" PROJECT_NAME "/bag_progress", 10);
+        bag_progress_publisher_ = this->create_publisher<std_msgs::msg::Float32MultiArray>("/" PROJECT_NAME "/bag_progress", 10);
         // initialize DelayedPublisher
-        delayed_publisher.initialize(this, "/" PROJECT_NAME "/raw", local_map_frame);
+        delayed_publisher_.initialize(this, "/" PROJECT_NAME "/raw", local_map_frame);
     }
     // delete extraneous constructors
     OfflineSegmentationNode(const OfflineSegmentationNode&) = delete;
@@ -47,64 +47,64 @@ public:
     OfflineSegmentationNode& operator=(const OfflineSegmentationNode&) = delete;
     OfflineSegmentationNode& operator=(OfflineSegmentationNode&&) = delete;
     ~OfflineSegmentationNode() {
-        delayed_publisher.stop();
+        delayed_publisher_.stop();
     }
 public:
     void run() {
         // construct bag reader
-        bag = std::make_unique<util::BufferableBag>(path_to_bag, 
+        bag_ = std::make_unique<util::BufferableBag>(path_to_bag_, 
             // NOTE: this REQUIRES OfflineSegmentationNode to be constructed with std::make_shared
             std::make_shared<util::BufferableBag::TFBridge>(this->shared_from_this()), 
-            std::vector{incoming_topic});
+            std::vector{incoming_topic_});
         // set total message count
-        msg_count = bag->message_count();
+        msg_count_ = bag_->message_count();
         // infer lidar messages from the given bag
         rclcpp::Rate rate(10);
-        while(rclcpp::ok() && !bag->finished()) {
-            if(BufferNode::size() >= buffer_threshold) {
+        while(rclcpp::ok() && !bag_->finished()) {
+            if(BufferNode::size() >= BUFFER_THRESHOLD) {
                 RCLCPP_WARN_STREAM_ONCE(this->get_logger(), "throttling bag read " << 
-                    "[buffer size: " << BufferNode::size() << ", capacity: " << BufferNode::capacity << "]");
+                    "[buffer size: " << BufferNode::size() << ", capacity: " << BufferNode::CAPACITY << "]");
                 rate.sleep();
                 continue;
             }
             // get next message from bag
-            const rosbag2_storage::SerializedBagMessage serialized_bag_msg = bag->PopNextMessage();
+            const rosbag2_storage::SerializedBagMessage serialized_bag_msg = bag_->PopNextMessage();
             const auto& topic = serialized_bag_msg.topic_name;
             const rclcpp::SerializedMessage msg_ser(*serialized_bag_msg.serialized_data);
             // this condition should always be truthy... but whatever...
-            if(topic == incoming_topic) {
+            if(topic == incoming_topic_) {
                 std::shared_ptr<sensor_msgs::msg::PointCloud2> msg = deserialize_next_msg<sensor_msgs::msg::PointCloud2>(msg_ser);
                 BufferNode::push(msg);
-                delayed_publisher.queue(msg);
+                delayed_publisher_.queue(msg);
             }
             // increment processed message count
-            msg_processed++;
+            msg_processed_++;
             // publish updated progress
             OfflineSegmentationNode::publish_bag_progress();
         }
         // wait until the remaining scans are consumed by the segmentation loop
         BufferNode::wait_until_drained();
         // clean up DelayedPublisher
-        delayed_publisher.stop();
+        delayed_publisher_.stop();
     }
 private:
     void publish_bag_progress() {
-        if(msg_count == 0) return;
+        if(msg_count_ == 0) return;
 
         static const auto start_time = std::chrono::steady_clock::now();
         const auto now = std::chrono::steady_clock::now();
         const float elapsed_seconds = std::chrono::duration<float>(now - start_time).count();
 
-        const float percent_complete = 100.f * static_cast<float>(msg_processed) / static_cast<float>(msg_count);
-        const float avg_time_per_msg = (msg_processed > 0) ? elapsed_seconds / static_cast<float>(msg_processed) : 0.f;
-        const float seconds_remaining = avg_time_per_msg * static_cast<float>(msg_count - msg_processed);
+        const float percent_complete = 100.f * static_cast<float>(msg_processed_) / static_cast<float>(msg_count_);
+        const float avg_time_per_msg = (msg_processed_ > 0) ? elapsed_seconds / static_cast<float>(msg_processed_) : 0.f;
+        const float seconds_remaining = avg_time_per_msg * static_cast<float>(msg_count_ - msg_processed_);
 
         std_msgs::msg::Float32MultiArray msg;
         msg.data.resize(2);
         msg.data[0] = percent_complete;
         msg.data[1] = seconds_remaining;
 
-        bag_progress_publisher->publish(msg);
+        bag_progress_publisher_->publish(msg);
     }
 
     void infer(py::object infer, util::Cloud& cloud) final override {
@@ -114,7 +114,7 @@ private:
     }
 private:
     // parameters
-    std::string path_to_bag;
+    std::string path_to_bag_;
 private:
     class DelayedPublisher {
     public:
@@ -202,15 +202,15 @@ private:
     };
 private:
     // used for stalling the bag reader when the buffer is mostly full
-    static constexpr size_t buffer_threshold = static_cast<size_t>(0.9 * static_cast<double>(BufferNode::capacity));
+    static constexpr size_t BUFFER_THRESHOLD{static_cast<size_t>(0.9 * static_cast<double>(BufferNode::CAPACITY))};
     // bag
-    std::unique_ptr<util::BufferableBag> bag;
-    size_t msg_count = 0;
-    size_t msg_processed = 0;
+    std::unique_ptr<util::BufferableBag> bag_;
+    size_t msg_count_{0};
+    size_t msg_processed_{0};
     // publish the bags progress (including estimated time to completion)
-    rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr bag_progress_publisher;
+    rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr bag_progress_publisher_;
     // delayed publisher for raw point data
-    DelayedPublisher delayed_publisher;
+    DelayedPublisher delayed_publisher_;
 };
 
 int main(int argc, char* argv[]) {

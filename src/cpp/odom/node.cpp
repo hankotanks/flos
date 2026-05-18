@@ -1,6 +1,5 @@
 // system
 #include <chrono>
-#include <limits>
 // ros
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/logging.hpp>
@@ -13,30 +12,32 @@
 #include "util/buffer_node.h"
 #include "util/cloud.h"
 #include "util/profiler.h"
+#include "util/rosargs.h"
 
-class OdometryNode : util::Profiler, public BufferNode<std::pair<util::CloudView, std_msgs::msg::Header>, sensor_msgs::msg::PointCloud2> {
+class OdometryNode : 
+    util::Profiler, 
+    public BufferNode<std::pair<util::CloudView, std_msgs::msg::Header>, sensor_msgs::msg::PointCloud2> {
 public:
     explicit OdometryNode() : util::Profiler(NODE_NAME),
         BufferNode("incoming_points_topic", "/" PROJECT_NAME "/inference"), 
-        system(OdometryNode::configure(this)) {
+        system_(OdometryNode::configure(this)) {
         // declare parameters
         this->declare_parameter<bool>("debug", false);
         this->declare_parameter<std::string>("local_map_topic", "/" PROJECT_NAME "/local_map");
         this->declare_parameter<std::string>("local_map_frame", "odom_frame");
         // store parameters
-        this->get_parameter("debug", debug);
-        this->get_parameter("local_map_topic", local_map_topic);
-        this->get_parameter("local_map_frame", local_map_frame);
-        if(debug) {
-            // initialize map publisher
-            local_map_publisher = this->create_publisher<sensor_msgs::msg::PointCloud2>(local_map_topic, 10);
+        this->get_parameter("debug", debug_);
+        this->get_parameter("local_map_topic", local_map_topic_);
+        this->get_parameter("local_map_frame", local_map_frame_);
+        if(debug_) { // initialize map publisher
+            local_map_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(local_map_topic_, 10);
         }
         // initialize odometry publisher
-        odom_publisher = this->create_publisher<nav_msgs::msg::Odometry>("/" PROJECT_NAME "/odometry", 10);
+        odom_publisher_ = this->create_publisher<nav_msgs::msg::Odometry>("/" PROJECT_NAME "/odometry", 10);
         // broadcaster for poses
-        tf_broadcaster = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
+        tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
         // spin up thread for odometry
-        odometry_thread = std::thread(&OdometryNode::loop, this);
+        odometry_thread_ = std::thread(&OdometryNode::loop, this);
     }
 public:
     OdometryNode(const OdometryNode&) = delete;
@@ -44,25 +45,25 @@ public:
     OdometryNode& operator=(const OdometryNode&) = delete;
     OdometryNode& operator=(OdometryNode&&) = delete;
     ~OdometryNode() {
-        if(odometry_thread.joinable()) odometry_thread.join();
+        if(odometry_thread_.joinable()) odometry_thread_.join();
     }
 protected:
     // parameters (excluding those related to the system config itself)
-    bool debug;
-    std::string local_map_topic;
-    std::string local_map_frame;
+    bool debug_;
+    std::string local_map_topic_;
+    std::string local_map_frame_;
 protected:
-    static constexpr double local_map_rate = 5.0; // number of seconds between map publications
+    static constexpr double LOCAL_MAP_RATE = 5.0; // number of seconds between map publications
     // core
-    OdometrySystem system;
+    OdometrySystem system_;
     // publisher for local map
-    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr local_map_publisher{nullptr};
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr local_map_publisher_{nullptr};
     // odometry publisher
-    rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher;
+    rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher_;
     // pose broadcaster
-    std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster;
+    std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
     // separate thread for processing
-    std::thread odometry_thread;
+    std::thread odometry_thread_;
 protected:
     void loop() {
         using steady_clock = std::chrono::steady_clock;
@@ -72,19 +73,19 @@ protected:
             // get the next batch of points
             auto maybe = BufferNode::pop();
             if(!maybe) break;
-            active = true;
+            active_ = true;
             auto [cloud, header] = std::move(*maybe);
             // perform registration
             Sophus::SE3f pose;
             {   
                 util::Profiler* this_profiler = this;
                 util::Profiler profiler("registration", this_profiler);
-                pose = system.register_to_map(std::move(cloud));
+                pose = system_.register_to_map(std::move(cloud));
             }
             { // send the transformation from the lidar frame to the local map frame
                 geometry_msgs::msg::TransformStamped msg;
                 msg.header.stamp = header.stamp;
-                msg.header.frame_id = local_map_frame;
+                msg.header.frame_id = local_map_frame_;
                 msg.child_frame_id = header.frame_id;
                 msg.transform.translation.x = pose.translation().x();
                 msg.transform.translation.y = pose.translation().y();
@@ -95,12 +96,12 @@ protected:
                 msg.transform.rotation.z = q.z();
                 msg.transform.rotation.w = q.w();
                 // publish the transform
-                tf_broadcaster->sendTransform(std::move(msg));
+                tf_broadcaster_->sendTransform(std::move(msg));
             }
             { // odometry
                 nav_msgs::msg::Odometry msg;
                 msg.header.stamp = header.stamp;
-                msg.header.frame_id = local_map_frame;
+                msg.header.frame_id = local_map_frame_;
                 msg.child_frame_id = header.frame_id;
                 msg.pose.pose.position.x = pose.translation().x();
                 msg.pose.pose.position.y = pose.translation().y();
@@ -117,20 +118,20 @@ protected:
                 msg.pose.covariance[21] = 0.1;
                 msg.pose.covariance[28] = 0.1;
                 msg.pose.covariance[35] = 0.1;
-                odom_publisher->publish(std::move(msg));
+                odom_publisher_->publish(std::move(msg));
             }
-            if(debug) {
+            if(debug_) {
                 auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(steady_clock::now() - local_map_last_publication);
-                if(elapsed.count() >= local_map_rate * 1000) {
+                if(elapsed.count() >= LOCAL_MAP_RATE * 1000) {
                     std_msgs::msg::Header local_map_header;
                     local_map_header.stamp = header.stamp;
-                    local_map_header.frame_id = local_map_frame;
-                    const util::CloudView& cloud = system.cloud();
-                    local_map_publisher->publish(std::move(cloud.message(local_map_header)));
+                    local_map_header.frame_id = local_map_frame_;
+                    const util::CloudView& cloud = system_.cloud();
+                    local_map_publisher_->publish(std::move(cloud.message(local_map_header)));
                 }
                 
             }
-            active = false;
+            active_ = false;
         }
     }
 
@@ -139,61 +140,35 @@ protected:
         return std::make_pair(std::move(cloud), msg->header);
     }
 private:
-    // helper function for range bounded optional parameters
-    // so I can keep defaults in OdometrySystem::Config directly
-    template<typename T>
-    static std::optional<T> parameter(rclcpp::Node* node, const std::string& name, std::optional<T> to = std::nullopt) {
-        static_assert(std::is_integral_v<T> || std::is_floating_point_v<T>);
-        rcl_interfaces::msg::ParameterDescriptor desc{};
-        desc.dynamic_typing = true;
-        if constexpr (std::is_integral_v<T>) {
-            rcl_interfaces::msg::IntegerRange range{};
-            range.from_value = 0;
-            range.to_value = to ? static_cast<rcl_interfaces::msg::IntegerRange::_to_value_type>(*to) : \
-                std::numeric_limits<rcl_interfaces::msg::IntegerRange::_to_value_type>::max();
-            desc.integer_range.push_back(range);
-        } else if constexpr (std::is_floating_point_v<T>) {
-            rcl_interfaces::msg::FloatingPointRange range{};
-            range.from_value = 0.0;
-            range.to_value = to ? static_cast<rcl_interfaces::msg::FloatingPointRange::_to_value_type>(*to) : \
-                std::numeric_limits<rcl_interfaces::msg::FloatingPointRange::_to_value_type>::max();
-            desc.floating_point_range.push_back(range);
-        }
-        node->declare_parameter(name, rclcpp::ParameterValue{}, desc);
-        T value;
-        if(node->get_parameter(name, value)) return value;
-        return std::nullopt;
-    }
-
     // TODO: Consider the upper bounds of these parameters
     static OdometrySystem::Config configure(rclcpp::Node* node) {
         OdometrySystem::Config config;
         // map
-        auto confidence_based_insertion = OdometryNode::parameter<bool>(node, "confidence_based_insertion");
+        auto confidence_based_insertion = util::numeric_param<bool>(node, "confidence_based_insertion");
         if(confidence_based_insertion) config.map.confidence_based_insertion = *confidence_based_insertion;
-        auto max_distance = OdometryNode::parameter<double>(node, "max_distance");
+        auto max_distance = util::numeric_param<double>(node, "max_distance");
         if(max_distance) config.map.max_distance = *max_distance;
-        auto voxel_size = OdometryNode::parameter<double>(node, "voxel_size");
+        auto voxel_size = util::numeric_param<double>(node, "voxel_size");
         if(voxel_size) config.map.voxel_size = *voxel_size;
-        auto voxel_capacity = OdometryNode::parameter<size_t>(node, "voxel_capacity");
+        auto voxel_capacity = util::numeric_param<size_t>(node, "voxel_capacity");
         if(voxel_capacity) config.map.voxel_capacity = *voxel_capacity;
         // threshold
-        auto threshold_initial = OdometryNode::parameter<double>(node, "threshold_initial");
+        auto threshold_initial = util::numeric_param<double>(node, "threshold_initial");
         if(threshold_initial) config.threshold.threshold_initial = *threshold_initial;
-        auto min_motion = OdometryNode::parameter<double>(node, "min_motion");
+        auto min_motion = util::numeric_param<double>(node, "min_motion");
         if(min_motion) config.threshold.min_motion = *min_motion;
         // registration
-        auto confidence_weighting = OdometryNode::parameter<bool>(node, "confidence_weighting");
+        auto confidence_weighting = util::numeric_param<bool>(node, "confidence_weighting");
         if(confidence_weighting) config.registration.confidence_weighting = *confidence_weighting;
-        auto correspondence_restriction = OdometryNode::parameter<bool>(node, "correspondence_restriction");
+        auto correspondence_restriction = util::numeric_param<bool>(node, "correspondence_restriction");
         if(correspondence_restriction) config.registration.correspondence_restriction = *correspondence_restriction;
-        auto max_iterations = OdometryNode::parameter<size_t>(node, "max_iterations");
+        auto max_iterations = util::numeric_param<size_t>(node, "max_iterations");
         if(max_iterations) config.registration.max_iterations = *max_iterations;
-        auto max_threads = OdometryNode::parameter<size_t>(node, "max_threads");
+        auto max_threads = util::numeric_param<size_t>(node, "max_threads");
         if(max_threads) config.registration.max_threads = *max_threads;
-        auto convergence_criterion = OdometryNode::parameter<double>(node, "convergence_criterion");
+        auto convergence_criterion = util::numeric_param<double>(node, "convergence_criterion");
         if(convergence_criterion) config.registration.convergence_criterion = *convergence_criterion;
-        auto correspondence_multiplier = OdometryNode::parameter<double>(node, "correspondence_distance_multiplier");
+        auto correspondence_multiplier = util::numeric_param<double>(node, "correspondence_distance_multiplier");
         if(correspondence_multiplier) config.registration.correspondence_multiplier = *correspondence_multiplier;
         return config;
     }

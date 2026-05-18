@@ -22,7 +22,7 @@ public:
     ~BufferNode();
 protected:
     // parameters
-    std::string incoming_topic;
+    std::string incoming_topic_;
 protected:
     // return size of the buffer
     size_t size() const noexcept { return buffer_.size(); };
@@ -35,9 +35,9 @@ protected:
     virtual Entry read(const std::shared_ptr<Message>& msg) noexcept = 0;
 protected:
     // total capacity of the buffer
-    static constexpr size_t capacity = 15;
+    static constexpr size_t CAPACITY{15};
     // nodes deriving from this class should set this when actively processing a buffer entry
-    std::atomic<bool> active{false};
+    std::atomic<bool> active_{false};
 private:
     rclcpp::Subscription<Message>::SharedPtr incoming_subscriber_;
     std::mutex mutex_;
@@ -51,9 +51,9 @@ BufferNode<Entry, Message>::BufferNode(const std::string& incoming_topic_name, c
     // declare parameters
     this->declare_parameter<std::string>(incoming_topic_name, incoming_topic_default);
     // store parameters
-    this->get_parameter(incoming_topic_name, incoming_topic);
+    this->get_parameter(incoming_topic_name, incoming_topic_);
     // create subscriber
-    incoming_subscriber_ = this->create_subscription<Message>(incoming_topic, 10,
+    incoming_subscriber_ = this->create_subscription<Message>(incoming_topic_, 10,
         [this](const std::shared_ptr<Message> msg) { this->push(msg); });
 }
 
@@ -71,7 +71,7 @@ void BufferNode<Entry, Message>::push(const std::shared_ptr<Message>& msg) noexc
     if(msg->width * msg->height == 0) return;
     { // ensure capacity isn't reached
         std::unique_lock lock(mutex_);
-        if(buffer_.size() >= capacity) {
+        if(buffer_.size() >= CAPACITY) {
             RCLCPP_WARN_ONCE(this->get_logger(), NODE_NAME " can't keep up!");
             return;
         }
@@ -100,7 +100,7 @@ void BufferNode<Entry, Message>::wait_until_drained() noexcept {
     while(rclcpp::ok()) {
         { // wait for buffer to drain
             std::lock_guard<std::mutex> lock(mutex_);
-            if(buffer_.empty() && !active.load()) break;
+            if(buffer_.empty() && !active_.load()) break;
         }
         rate.sleep();
     }

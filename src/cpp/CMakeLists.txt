@@ -8,7 +8,8 @@ set(SEGMENTATION_HEADERS
   util/buffer_node.h
   util/cloud.h
   util/voxel.h
-  util/stl_vector_eigen.h)
+  util/stl_vector_eigen.h
+  util/rosargs.h)
 
 set(SEGMENTATION_LIBRARIES
   Eigen3::Eigen
@@ -81,6 +82,7 @@ configure_node(odometry_node
     util/cloud.h
     util/voxel.h
     util/profiler.h
+    util/rosargs.h
   LIBRARIES
     Eigen3::Eigen
     pybind11::embed
