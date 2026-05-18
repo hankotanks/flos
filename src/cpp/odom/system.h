@@ -15,6 +15,7 @@ class OdometrySystem {
 public:
     struct Config {
         struct {
+            bool confidence_based_insertion{true};
             double max_distance{100.0};
             double voxel_size{1.0}; // NOTE: downsampling approach has changed from kiss-icp
             size_t voxel_capacity{20};
@@ -24,6 +25,8 @@ public:
             double min_motion{0.1};
         } threshold;
         struct {
+            bool confidence_weighting{true};
+            bool correspondence_restriction{true};
             size_t max_iterations{500};
             size_t max_threads{0};
             double convergence_criterion{0.0001};

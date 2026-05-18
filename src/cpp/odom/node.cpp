@@ -169,6 +169,8 @@ private:
     static OdometrySystem::Config configure(rclcpp::Node* node) {
         OdometrySystem::Config config;
         // map
+        auto confidence_based_insertion = OdometryNode::parameter<bool>(node, "confidence_based_insertion");
+        if(confidence_based_insertion) config.map.confidence_based_insertion = *confidence_based_insertion;
         auto max_distance = OdometryNode::parameter<double>(node, "max_distance");
         if(max_distance) config.map.max_distance = *max_distance;
         auto voxel_size = OdometryNode::parameter<double>(node, "voxel_size");
@@ -181,6 +183,10 @@ private:
         auto min_motion = OdometryNode::parameter<double>(node, "min_motion");
         if(min_motion) config.threshold.min_motion = *min_motion;
         // registration
+        auto confidence_weighting = OdometryNode::parameter<bool>(node, "confidence_weighting");
+        if(confidence_weighting) config.registration.confidence_weighting = *confidence_weighting;
+        auto correspondence_restriction = OdometryNode::parameter<bool>(node, "correspondence_restriction");
+        if(correspondence_restriction) config.registration.correspondence_restriction = *correspondence_restriction;
         auto max_iterations = OdometryNode::parameter<size_t>(node, "max_iterations");
         if(max_iterations) config.registration.max_iterations = *max_iterations;
         auto max_threads = OdometryNode::parameter<size_t>(node, "max_threads");

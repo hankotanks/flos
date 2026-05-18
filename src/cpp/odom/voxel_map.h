@@ -23,9 +23,20 @@ struct VoxelMap {
 public:
     inline void clear() { map_.clear(); }
     inline bool empty() const { return map_.empty(); }
+    // update functions
     void update(util::CloudView&& points, const Eigen::Vector3f& origin);
     void update(util::CloudView&& points, const Sophus::SE3f& pose);
     void extend(util::CloudView&& points);
+    // additional set up of update functions which replaces based on a predicate over a scalar field
+    template<typename T>
+    using Replacement = std::function<bool(const T& current, const T& replacement)>;
+    template<typename T>
+    void update(util::CloudView&& points, const Eigen::Vector3f& origin, const std::string& name, const Replacement<T>& repl);
+    template<typename T>
+    void update(util::CloudView&& points, const Sophus::SE3f& pose, const std::string& name, const Replacement<T>& repl);
+    template<typename T>
+    void extend(util::CloudView&& points, const std::string& name, const Replacement<T>& repl);
+    // get all points in the voxel map (currently for debugging)
     const util::CloudView& cloud() const noexcept;
     // returns std::nullopt when no correspondence is found
     std::optional<std::pair<util::CloudView::ConstPoint, double>> closest(const util::CloudView::ConstPoint &query) const;

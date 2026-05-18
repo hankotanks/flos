@@ -69,16 +69,20 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::CloudView&& points) no
     // deskewing
     deskew_frame(points, last_delta_);
     // sort the points by confidence (highest first)
-    points.sort<float>("confidence", [](const float& fst, const float& snd) { return fst > snd; });
+    if(config_.map.confidence_based_insertion) {
+        points.sort<float>("confidence", [](const float& fst, const float& snd) { return fst > snd; });
+    }
     // downsample incoming points to obtain keypoints and the preprocessed frame
     util::CloudView points_kp{points};
     util::voxel_downsample(points_kp, config_.map.voxel_size);
     // compute pose w/ ICP
     const auto [pose, deviation] = OdometrySystem::align(points_kp);
     threshold_.update(deviation);
-    // append points to map
-    // TODO: When appending to map, we need to prefer high confidence points
-    map_.update(std::move(points), pose);
+    // append points to map (preserving the highest confidence points)
+    if(config_.map.confidence_based_insertion) {
+        map_.update<float>(std::move(points), pose, "confidence", 
+            [](const float& current, const float& replacement) { return replacement > current; });
+    } else map_.update(std::move(points), pose);
     // store new pose
     last_delta_ = last_pose_.inverse() * pose;
     last_pose_ = pose;
@@ -107,9 +111,15 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const util::CloudView& points, 
     using Correspondences = tbb::concurrent_vector<std::pair<util::CloudView::ConstPoint, util::CloudView::ConstPoint>>;
 
     // this predicate only allows matching between points with the same semantic information
-    VoxelMap::Predicate pred = [&semantics](const util::CloudView::ConstPoint& point, const util::CloudView::ConstPoint& query) -> bool {
-        return semantics.field_class[point.index] != semantics.field_class[query.index];
-    };
+    VoxelMap::Predicate pred;
+    if(config_.registration.correspondence_restriction) {
+        pred = [&semantics](const util::CloudView::ConstPoint& point, const util::CloudView::ConstPoint& query) -> bool {
+            return semantics.field_class[point.index] == semantics.field_class[query.index];
+        };
+    } else {
+        // TODO: it would be better to not supply a predicate to VoxelMap::closest altogether, in case the compiler can't optimize
+        pred = [](const util::CloudView::ConstPoint&, const util::CloudView::ConstPoint&) { return true; };
+    }
 
     Correspondences correspondences;
     correspondences.reserve(points.size());
@@ -156,7 +166,8 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const util::CloudView& points, 
                     const auto& [J_r, residual] = compute_jacobian_and_residual(correspondence);
                     const util::CloudView::ConstPoint& point = correspondence.first;
                     // weight the kernel based on confidence from the segmentation model
-                    const double w = semantics.field_confidence[point.index] * GM_weight(residual.squaredNorm());
+                    float w = config_.registration.confidence_weighting ? semantics.field_confidence[point.index] : 1.f;
+                    w *= GM_weight(residual.squaredNorm());
                     return System(J_r.transpose() * w * J_r, J_r.transpose() * w * residual);
                 });
         }, sum_linear_systems);
