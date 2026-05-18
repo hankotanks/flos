@@ -16,7 +16,7 @@ public:
     struct Config {
         struct {
             double max_distance{100.0};
-            double voxel_size{1.5}; // NOTE: downsampling approach has changed from kiss-icp
+            double voxel_size{1.0}; // NOTE: downsampling approach has changed from kiss-icp
             size_t voxel_capacity{20};
         } map;
         struct {
@@ -73,8 +73,14 @@ private:
         size_t num_sample_{1};
     };
 private:
+    struct Semantics {
+        std::span<const uint8_t> field_class;
+        std::span<const float> field_confidence;
+        Semantics(const util::CloudView& points);
+    };
+private:
     // constructs and solves the linear system, returning dx
-    Eigen::Matrix<float, 6, 1> solve(const util::CloudView& points, double sigma) const noexcept;
+    Eigen::Matrix<float, 6, 1> solve(const util::CloudView& points, double sigma, const Semantics& semantics) const noexcept;
     // returns pose and deviation respectively
     std::pair<Sophus::SE3f, Sophus::SE3f> align(const util::CloudView& points) const;
 private:

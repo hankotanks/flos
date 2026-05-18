@@ -214,11 +214,11 @@ CloudView::Point CloudView::add_point(const CloudView::ConstPoint& point) noexce
     assert(desc_ == point.owner_->desc_);
     assert(fields_.size() == point.owner_->fields_.size());
     size_t index = CloudView::size();    
-    points_.emplace_back(point.owner_->points_[point.index_]);
+    points_.emplace_back(point.owner_->points_[point.index]);
     for(size_t j = 0; j < fields_.size(); ++j) {
         std::visit([&](auto& vec) {
             using T = typename std::decay_t<decltype(vec)>;
-            vec.emplace_back(std::get<T>(point.owner_->fields_[j].data_)[point.index_]);
+            vec.emplace_back(std::get<T>(point.owner_->fields_[j].data_)[point.index]);
         }, fields_[j].data_);
     }
     return CloudView::Point{this, index};

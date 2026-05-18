@@ -1,4 +1,5 @@
 // system
+#include <chrono>
 #include <limits>
 // ros
 #include <rclcpp/rclcpp.hpp>
@@ -6,6 +7,7 @@
 #include <tf2_ros/transform_broadcaster.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 // package
+#include "sensor_msgs/msg/point_cloud2.hpp"
 #include "system.h"
 // util
 #include "util/buffer_node.h"
@@ -18,15 +20,17 @@ public:
         BufferNode("incoming_points_topic", "/" PROJECT_NAME "/inference"), 
         system(OdometryNode::configure(this)) {
         // declare parameters
+        this->declare_parameter<bool>("debug", false);
         this->declare_parameter<std::string>("local_map_topic", "/" PROJECT_NAME "/local_map");
         this->declare_parameter<std::string>("local_map_frame", "odom_frame");
-        this->declare_parameter<bool>("local_map", false);
         // store parameters
+        this->get_parameter("debug", debug);
         this->get_parameter("local_map_topic", local_map_topic);
         this->get_parameter("local_map_frame", local_map_frame);
-        this->get_parameter("local_map", local_map);
-        // initialize map publisher
-        local_map_publisher = this->create_publisher<sensor_msgs::msg::PointCloud2>(local_map_topic, 10);  
+        if(debug) {
+            // initialize map publisher
+            local_map_publisher = this->create_publisher<sensor_msgs::msg::PointCloud2>(local_map_topic, 10);
+        }
         // initialize odometry publisher
         odom_publisher = this->create_publisher<nav_msgs::msg::Odometry>("/" PROJECT_NAME "/odometry", 10);
         // broadcaster for poses
@@ -44,15 +48,15 @@ public:
     }
 protected:
     // parameters (excluding those related to the system config itself)
+    bool debug;
     std::string local_map_topic;
     std::string local_map_frame;
-    bool local_map;
 protected:
     static constexpr double local_map_rate = 5.0; // number of seconds between map publications
     // core
     OdometrySystem system;
     // publisher for local map
-    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr local_map_publisher;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr local_map_publisher{nullptr};
     // odometry publisher
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher;
     // pose broadcaster
@@ -61,7 +65,9 @@ protected:
     std::thread odometry_thread;
 protected:
     void loop() {
-        rclcpp::Time local_map_last_publication = this->now();
+        using steady_clock = std::chrono::steady_clock;
+        using time_point = steady_clock::time_point;
+        steady_clock::time_point local_map_last_publication = steady_clock::now();
         while(rclcpp::ok()) {
             // get the next batch of points
             auto maybe = BufferNode::pop();
@@ -113,19 +119,21 @@ protected:
                 msg.pose.covariance[35] = 0.1;
                 odom_publisher->publish(std::move(msg));
             }
-            // send the local map
-            if(local_map) {
-                if((this->now() - local_map_last_publication).seconds() >= OdometryNode::local_map_rate) {
-                    header.frame_id = local_map_frame;
+            if(debug) {
+                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(steady_clock::now() - local_map_last_publication);
+                if(elapsed.count() >= local_map_rate * 1000) {
+                    std_msgs::msg::Header local_map_header;
+                    local_map_header.stamp = header.stamp;
+                    local_map_header.frame_id = local_map_frame;
                     const util::CloudView& cloud = system.cloud();
-                    local_map_publisher->publish(std::move(cloud.message(header)));
-                    local_map_last_publication = this->now();
+                    local_map_publisher->publish(std::move(cloud.message(local_map_header)));
                 }
+                
             }
             active = false;
         }
     }
-    
+
     virtual std::pair<util::CloudView, std_msgs::msg::Header> read(const std::shared_ptr<sensor_msgs::msg::PointCloud2>& msg) noexcept final override {
         util::CloudView cloud{msg};
         return std::make_pair(std::move(cloud), msg->header);

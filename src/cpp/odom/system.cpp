@@ -75,6 +75,7 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::CloudView&& points) no
     const auto [pose, deviation] = OdometrySystem::align(points_kp);
     threshold_.update(deviation);
     // append points to map
+    // TODO: When appending to map, we need to prefer high confidence points
     map_.update(std::move(points), pose);
     // store new pose
     last_delta_ = last_pose_.inverse() * pose;
@@ -96,12 +97,16 @@ void OdometrySystem::AdaptiveThreshold::update(const Sophus::SE3f& deviation) no
     }
 }
 
-Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const util::CloudView& points, double sigma) const noexcept {
+OdometrySystem::Semantics::Semantics(const util::CloudView& points) : 
+    field_class(points.field<uint8_t>("class")),
+    field_confidence(points.field<float>("confidence")) { /* STUB */ }
+
+Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const util::CloudView& points, double sigma, const OdometrySystem::Semantics& semantics) const noexcept {
     using Correspondences = tbb::concurrent_vector<std::pair<util::CloudView::ConstPoint, util::CloudView::ConstPoint>>;
 
     // this predicate only allows matching between points with the same semantic information
-    VoxelMap::Predicate pred = [](const util::CloudView::ConstPoint& point, const util::CloudView::ConstPoint& query) -> bool {
-        return point.field<uint8_t>("class") != query.field<uint8_t>("class");
+    VoxelMap::Predicate pred = [&semantics](const util::CloudView::ConstPoint& point, const util::CloudView::ConstPoint& query) -> bool {
+        return semantics.field_class[point.index] != semantics.field_class[query.index];
     };
 
     Correspondences correspondences;
@@ -149,7 +154,7 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const util::CloudView& points, 
                     const auto& [J_r, residual] = compute_jacobian_and_residual(correspondence);
                     const util::CloudView::ConstPoint& point = correspondence.first;
                     // weight the kernel based on confidence from the segmentation model
-                    const double w = point.field<float>("confidence") * GM_weight(residual.squaredNorm());
+                    const double w = semantics.field_confidence[point.index] * GM_weight(residual.squaredNorm());
                     return System(J_r.transpose() * w * J_r, J_r.transpose() * w * residual);
                 });
         }, sum_linear_systems);
@@ -158,15 +163,21 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const util::CloudView& points, 
 }
 
 std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(const util::CloudView& points) const {
+    // determine starting point
     const auto initial_guess = last_pose_ * last_delta_;
     if(map_.empty()) return std::make_pair(initial_guess, Sophus::SE3f{});
+    // compute adaptive threshold
     double sigma = threshold_.compute();
+    // copy the frame for use in ICP
     util::CloudView source{points};
     transform(source, initial_guess);
+    // retrieve fields ahead of time to avoid repeated queries
+    Semantics source_semantics{source};
+    // perform ICP
     Sophus::SE3f T_icp = Sophus::SE3f();
     for(size_t j = 0; j < config_.registration.max_iterations; ++j) {
         // Equation (11)
-        const Eigen::Matrix<float, 6, 1> dx = OdometrySystem::solve(source, sigma);
+        const Eigen::Matrix<float, 6, 1> dx = OdometrySystem::solve(source, sigma, source_semantics);
         const Sophus::SE3f est = Sophus::SE3f::exp(dx);
         // Equation (12)
         transform(source, est);;

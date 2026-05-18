@@ -37,6 +37,6 @@ add_custom_target(python_package ALL
 
 add_subdirectory(src/cpp)
 
-install(DIRECTORY config models DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY config models launch rviz DESTINATION share/${PROJECT_NAME})
 
 ament_package()

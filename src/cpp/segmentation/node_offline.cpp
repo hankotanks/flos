@@ -23,9 +23,12 @@ std::shared_ptr<T> deserialize_next_msg(const rclcpp::SerializedMessage& msg_ser
 
 class OfflineSegmentationNode : util::Profiler, public SegmentationNode {
 public:
-    explicit OfflineSegmentationNode() : util::Profiler(NODE_NAME), delayed_publisher(this, "/" PROJECT_NAME "/raw") {
+    explicit OfflineSegmentationNode() : util::Profiler(NODE_NAME) {
         // declare and store parameters
+        this->declare_parameter<std::string>("local_map_frame", "odom_frame"); // NOTE: this must match the equivalent OdometryNode parameter
         this->declare_parameter<std::string>("path_to_bag");
+        std::string local_map_frame;
+        this->get_parameter("local_map_frame", local_map_frame);
         this->get_parameter("path_to_bag", path_to_bag);
         // validate path_to_bag
         if(path_to_bag.empty()) {
@@ -35,6 +38,8 @@ public:
         }
         // publish statistics
         bag_progress_publisher = this->create_publisher<std_msgs::msg::Float32MultiArray>("/" PROJECT_NAME "/bag_progress", 10);
+        // initialize DelayedPublisher
+        delayed_publisher.initialize(this, "/" PROJECT_NAME "/raw", local_map_frame);
     }
     // delete extraneous constructors
     OfflineSegmentationNode(const OfflineSegmentationNode&) = delete;
@@ -113,7 +118,16 @@ private:
 private:
     class DelayedPublisher {
     public:
-        DelayedPublisher(rclcpp::Node* node, const std::string& topic_name) {
+        DelayedPublisher() = default;
+        DelayedPublisher(const DelayedPublisher&) = delete;
+        DelayedPublisher(DelayedPublisher&&) = delete;
+        DelayedPublisher& operator=(const DelayedPublisher&) = delete;
+        DelayedPublisher& operator=(DelayedPublisher&&) = delete;
+        ~DelayedPublisher() = default;
+    public:
+        void initialize(rclcpp::Node* node, const std::string& topic_name, const std::string& local_map_frame) {
+            logger_ = node->get_logger();
+            local_map_frame_ = local_map_frame;
             // initialize TF2
             tf_buffer_ = std::make_unique<tf2_ros::Buffer>(node->get_clock());
             tf_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf_buffer_);
@@ -123,6 +137,7 @@ private:
             thread_ = std::thread(&DelayedPublisher::publish, this);
         }
 
+        // terminate the publisher
         void stop() {
             { // signal thread to terminate
                 std::unique_lock<std::mutex> lock(mutex_);
@@ -132,14 +147,18 @@ private:
             if(thread_.joinable()) thread_.join();
         }
 
+        // queue a scan
         void queue(const std::shared_ptr<sensor_msgs::msg::PointCloud2>& msg) {
             {
                 std::unique_lock<std::mutex> lock(mutex_);
+                if(!running_) return;
                 queue_.push(msg);
             }
             cv_.notify_one();
         }
 
+        // runs on a separate thread to publish raw scans in concert with their transforms
+        // otherwise, visualization is impossible with rviz2
         void publish() {
             while(running_) {
                 std::shared_ptr<sensor_msgs::msg::PointCloud2> msg;
@@ -153,17 +172,24 @@ private:
                 }
                 try {
                     // TODO: it's unacceptable that "odom_frame" is specified here as a literal
-                    tf_buffer_->lookupTransform("odom_frame", 
+                    tf_buffer_->lookupTransform(local_map_frame_, 
                         msg->header.frame_id, 
                         msg->header.stamp, 
                         tf2::durationFromSec(10.0));
                     publisher_->publish(*msg);
                 } catch(const tf2::TransformException& ex) {
-                    std::cout << "Transform lookup failed" << std::endl;
+                    if(logger_) {
+                        RCLCPP_WARN_STREAM_ONCE(*logger_, NODE_NAME << " didn't find transformations to " << 
+                            local_map_frame_ << ", halting publication of raw points");
+                    }
+                    std::unique_lock<std::mutex> lock(mutex_);
+                    running_ = false;
                 }
             }
         }
     private:
+        std::optional<rclcpp::Logger> logger_;
+        std::string local_map_frame_;
         std::queue<std::shared_ptr<sensor_msgs::msg::PointCloud2>> queue_;
         std::mutex mutex_;
         std::condition_variable cv_;
@@ -172,6 +198,7 @@ private:
         std::thread thread_;
         std::atomic<bool> running_{true};
         rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr publisher_;
+        
     };
 private:
     // used for stalling the bag reader when the buffer is mostly full

@@ -105,23 +105,24 @@ public:
     public:
         Point_() = delete;
         template<typename C_, typename = std::enable_if_t<std::is_convertible_v<C_*, C*>>>
-        Point_(const Point_<C_>& other) : owner_(other.owner_), index_(other.index_) { /* STUB */ }
+        Point_(const Point_<C_>& other) : owner_(other.owner_), index(other.index) { /* STUB */ }
     public:
-        auto& point() const noexcept { return owner_->points_[index_]; }
+        auto& point() const noexcept { return owner_->points_[index]; }
         template<typename T>
-        auto& field(const std::string& name) const { return owner_->template field<T>(name)[index_]; }
+        auto& field(const std::string& name) const { return owner_->template field<T>(name)[index]; }
         template<typename C_ = C, typename = std::enable_if_t<!std::is_const_v<C_>>>
         void replace(const Point_<C_>& other) {
             assert(owner_->desc_ == other.owner_->desc_);
             assert(owner_->fields_.size() == other.owner_->fields_.size());
-            owner_->points_[index_] = other.point();
+            owner_->points_[index] = other.point();
             for(size_t i = 0; i < owner_->fields_.size(); ++i) {
-                owner_->fields_[i].copy(other.owner_->fields_[i], other.index_, index_);
+                owner_->fields_[i].copy(other.owner_->fields_[i], other.index, index);
             }
         }
+    public:
+        size_t index;
     private:
-        explicit Point_(C* owner, size_t index) : owner_(owner), index_(index) { /* STUB */ }
-        size_t index_;
+        explicit Point_(C* owner, size_t index) : owner_(owner), index(index) { /* STUB */ }
         C* owner_{nullptr};
     };
 protected:

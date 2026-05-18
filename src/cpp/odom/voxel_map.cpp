@@ -53,7 +53,7 @@ void VoxelMap::update(util::CloudView&& points, const Sophus::SE3f& pose) {
 
 void VoxelMap::extend(util::CloudView&& points) {
     if(desc_ == nullptr) desc_ = points.descriptor();
-    const double map_resolution = std::sqrt(voxel_size_ * voxel_size_ / static_cast<double>(voxel_capacity_));
+    const double resolution = std::sqrt(voxel_size_ * voxel_size_ / static_cast<double>(voxel_capacity_));
     for(size_t i = 0; i < points.size(); ++i) {
         const Eigen::Vector3i& voxel = util::point_to_voxel(points[i].point(), voxel_size_);
         auto search = map_.find(voxel);
@@ -67,7 +67,7 @@ void VoxelMap::extend(util::CloudView&& points) {
             if(inner.size() >= voxel_capacity_) continue;
             bool flag = false;
             for(size_t j = 0; j < inner.size(); ++j) {
-                if((inner[j].point() - points[i].point()).norm() >= map_resolution) continue;
+                if((inner[j].point() - points[i].point()).norm() >= resolution) continue;
                 flag = true;
                 break;
             }
