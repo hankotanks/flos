@@ -94,6 +94,8 @@ public:
     // filter the cloud based on a certain field
     template<typename T>
     void filter(const std::string& name, const std::function<bool(const T&)>& pred);
+    // filter by distance
+    void filter_by_distance(const Eigen::Vector3f& origin, float distance);
     // sort the field based on a comparator over a field
     template<typename T> 
     void sort(const std::string& name, const std::function<bool(const T&, const T&)>& comp);

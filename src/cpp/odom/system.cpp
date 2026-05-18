@@ -68,6 +68,8 @@ void transform(util::CloudView& cloud, const Sophus::SE3f& t) {
 const Sophus::SE3f& OdometrySystem::register_to_map(util::CloudView&& points) noexcept {
     // deskewing
     deskew_frame(points, last_delta_);
+    // filter points by distance
+    points.filter_by_distance(Eigen::Vector3f::Zero(), static_cast<float>(config_.map.max_distance));
     // sort the points by confidence (highest first)
     if(config_.map.confidence_based_insertion) {
         points.sort<float>("confidence", [](const float& fst, const float& snd) { return fst > snd; });
