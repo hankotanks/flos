@@ -10,6 +10,28 @@ namespace {
 inline std::string fix_frame_id(const std::string &frame_id) {
     return std::regex_replace(frame_id, std::regex("^/"), "");
 }
+
+// this algorithm is sourced from Potatoswatter on StackOverflow: https://stackoverflow.com/a/1267878
+template<typename order_iterator, typename value_iterator>
+void reorder(order_iterator order_begin, order_iterator order_end, value_iterator v)  {   
+    typedef typename std::iterator_traits<value_iterator>::value_type value_t;
+    typedef typename std::iterator_traits<order_iterator>::value_type index_t;
+    typedef typename std::iterator_traits<order_iterator>::difference_type diff_t;
+    
+    diff_t remaining = order_end - 1 - order_begin;
+    for(index_t s = index_t(), d; remaining > 0; ++s) {
+        for(d = order_begin[s]; d > s; d = order_begin[d]);
+        if(d == s) {
+            --remaining;
+            value_t temp = v[s];
+            while(d = order_begin[d], d != s) {
+                std::swap(temp, v[d]);
+                --remaining;
+            }
+            v[s] = temp;
+        }
+    }
+}
 } // private scope
 
 namespace util {
@@ -271,6 +293,34 @@ template void CloudView::filter<int32_t>(const std::string&, const std::function
 template void CloudView::filter<uint32_t>(const std::string&, const std::function<bool(const uint32_t&)>&);
 template void CloudView::filter<float>(const std::string&, const std::function<bool(const float&)>&);
 template void CloudView::filter<double>(const std::string&, const std::function<bool(const double&)>&);
+
+template<typename T>
+void CloudView::sort(const std::string& name, const std::function<bool(const T&, const T&)>& comp) {
+    std::span<const T> scalars = CloudView::field<T>(name);
+    // build a list of sorted indices
+    std::vector<size_t> indices(CloudView::size());
+    std::iota(indices.begin(), indices.end(), 0);
+    std::sort(indices.begin(), indices.end(), [&scalars, &comp](size_t fst, size_t snd) {
+        return (comp)(scalars[fst], scalars[snd]);
+    });
+    // reorder points
+    reorder(indices.begin(), indices.end(), points_.begin());
+    // reorder fields
+    for(Field& field : fields_) {
+        std::visit([&indices](auto& vec) { 
+            reorder(indices.begin(), indices.end(), vec.begin());
+        }, field.data_);
+    }
+}
+
+template void CloudView::sort(const std::string& name, const std::function<bool(const int8_t&, const int8_t&)>&);
+template void CloudView::sort(const std::string& name, const std::function<bool(const uint8_t&, const uint8_t&)>&);
+template void CloudView::sort(const std::string& name, const std::function<bool(const int16_t&, const int16_t&)>&);
+template void CloudView::sort(const std::string& name, const std::function<bool(const uint16_t&, const uint16_t&)>&);
+template void CloudView::sort(const std::string& name, const std::function<bool(const int32_t&, const int32_t&)>&);
+template void CloudView::sort(const std::string& name, const std::function<bool(const uint32_t&, const uint32_t&)>&);
+template void CloudView::sort(const std::string& name, const std::function<bool(const float&, const float&)>&);
+template void CloudView::sort(const std::string& name, const std::function<bool(const double&, const double&)>&);
 
 struct FieldWriter {
     template<typename... T>

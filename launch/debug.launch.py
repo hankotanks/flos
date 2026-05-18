@@ -41,8 +41,10 @@ def forest_segmentation_setup(context, *args, **kwargs):
         'use_sim_time': True,
         'path_to_bag': path_to_bag
     }
+    
     if len(incoming_points_topic) > 0:
         segmentation_node_offline_parameters['incoming_points_topic'] = incoming_points_topic
+
     voxel_size = float(voxel_size)
     if voxel_size > 0:
         segmentation_node_offline_parameters['voxel_size'] = voxel_size
@@ -51,6 +53,7 @@ def forest_segmentation_setup(context, *args, **kwargs):
         'use_sim_time': True,
         'debug': True,
     }
+
     if voxel_size > 0:
         odometry_node_parameters['voxel_size'] = voxel_size * 1.5
 

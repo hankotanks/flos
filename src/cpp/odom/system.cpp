@@ -68,6 +68,8 @@ void transform(util::CloudView& cloud, const Sophus::SE3f& t) {
 const Sophus::SE3f& OdometrySystem::register_to_map(util::CloudView&& points) noexcept {
     // deskewing
     deskew_frame(points, last_delta_);
+    // sort the points by confidence (highest first)
+    points.sort<float>("confidence", [](const float& fst, const float& snd) { return fst > snd; });
     // downsample incoming points to obtain keypoints and the preprocessed frame
     util::CloudView points_kp{points};
     util::voxel_downsample(points_kp, config_.map.voxel_size);

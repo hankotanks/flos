@@ -94,6 +94,9 @@ public:
     // filter the cloud based on a certain field
     template<typename T>
     void filter(const std::string& name, const std::function<bool(const T&)>& pred);
+    // sort the field based on a comparator over a field
+    template<typename T> 
+    void sort(const std::string& name, const std::function<bool(const T&, const T&)>& comp);
 public:
     // construct a PointCloud2 message from the cloud containing all its scalar fields
     sensor_msgs::msg::PointCloud2 message(const std_msgs::msg::Header& header) const noexcept;
