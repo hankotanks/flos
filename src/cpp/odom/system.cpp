@@ -29,7 +29,7 @@ std::optional<std::string> get_timestamp_field_name(util::CloudView& points) noe
 }
 
 template<typename T>
-void deskew_frame_inner(util::CloudView& points, const std::string& name, const Sophus::SE3f &motion) noexcept {
+void deskew_frame_inner(util::CloudView& points, const std::string& name, const Sophus::SE3f& motion) noexcept {
     std::span<const T> timestamps = points.field<T>(name);
     const auto& [t_min, t_max] = std::minmax_element(timestamps.begin(), timestamps.end());
     const auto t_norm = [&](const double t) { 
@@ -45,7 +45,7 @@ void deskew_frame_inner(util::CloudView& points, const std::string& name, const 
     });
 }
 
-void deskew_frame(util::CloudView& points, const Sophus::SE3f &motion) noexcept {
+void deskew_frame(util::CloudView& points, const Sophus::SE3f& motion) noexcept {
     auto field_name = get_timestamp_field_name<float>(points);
     if(field_name) {
         deskew_frame_inner<float>(points, *field_name, motion);
@@ -152,7 +152,7 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const util::CloudView& points, 
         return a;
     };
 
-    auto GM_weight = [&](const double &residual2) {
+    auto GM_weight = [&](const float &residual2) {
         return (sigma * sigma) / ((sigma + residual2) * (sigma + residual2));
     };
 
@@ -166,7 +166,7 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const util::CloudView& points, 
                     const auto& [J_r, residual] = compute_jacobian_and_residual(correspondence);
                     const util::CloudView::ConstPoint& point = correspondence.first;
                     // weight the kernel based on confidence from the segmentation model
-                    float w = config_.registration.confidence_weighting ? semantics.field_confidence[point.index] : 1.f;
+                    float w = config_.registration.confidence_weighting ? semantics.field_confidence[point.index] : 1.0;
                     w *= GM_weight(residual.squaredNorm());
                     return System(J_r.transpose() * w * J_r, J_r.transpose() * w * residual);
                 });
@@ -187,7 +187,7 @@ std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(const util::CloudVie
     // retrieve fields ahead of time to avoid repeated queries
     Semantics source_semantics{source};
     // perform ICP
-    Sophus::SE3f T_icp = Sophus::SE3f();
+    Sophus::SE3f T_icp{};
     for(size_t j = 0; j < config_.registration.max_iterations; ++j) {
         // Equation (11)
         const Eigen::Matrix<float, 6, 1> dx = OdometrySystem::solve(source, sigma, source_semantics);

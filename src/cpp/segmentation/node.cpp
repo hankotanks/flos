@@ -22,11 +22,15 @@ SegmentationNode::SegmentationNode() : BufferNode("incoming_points_topic", "/hes
     rcl_interfaces::msg::ParameterDescriptor voxel_size_desc{};
     voxel_size_desc.dynamic_typing = true;
     this->declare_parameter("voxel_size", rclcpp::ParameterValue{}, voxel_size_desc);
+    this->declare_parameter("ignore_canopy", true);
+    this->declare_parameter("ignore_shrubs", true);
     // store the parameters
     this->get_parameter("outgoing_points_topic", outgoing_points_topic);
     this->get_parameter("path_to_model", path_to_model);
     double voxel_size_temp; // NOTE: extra careful because I'm not sure of get_parameter's type inferencing behavior
     if(this->get_parameter("voxel_size", voxel_size_temp)) voxel_size = voxel_size_temp;
+    this->get_parameter("ignore_canopy", ignore_canopy);
+    this->get_parameter("ignore_shrubs", ignore_shrubs);
     // ensure that model path exists
     if(path_to_model.empty()) path_to_model = path_to_model_default;
     if(!std::filesystem::exists(path_to_model))
@@ -73,7 +77,9 @@ void SegmentationNode::infer(py::object infer, util::Cloud& cloud) {
     cloud.add_field_from_py_object<uint8_t>("class", result_fields[0]);
     cloud.add_field_from_py_object<float>("confidence", result_fields[1]);
     // TODO: right now I'm only considering ground points and tree stems, but this may change
-    cloud.filter<uint8_t>("class", [](const uint8_t& scalar) { return scalar != 0 && scalar != 2 && scalar != 4; });
+    cloud.filter<uint8_t>("class", [this](const uint8_t& scalar) {
+        return (scalar != 0) && !(this->ignore_shrubs && scalar == 2) && !(this->ignore_canopy && scalar == 4);
+    });
 }
 
 std::pair<util::Cloud, std_msgs::msg::Header> SegmentationNode::read(const std::shared_ptr<sensor_msgs::msg::PointCloud2>& msg) noexcept {

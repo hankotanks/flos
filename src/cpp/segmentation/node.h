@@ -26,6 +26,8 @@ protected:
     std::string outgoing_points_topic;
     std::string path_to_model;
     std::optional<double> voxel_size;
+    bool ignore_canopy;
+    bool ignore_shrubs;
 protected:
     // topic stuff  
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr outgoing_points_publisher;

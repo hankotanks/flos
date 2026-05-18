@@ -32,6 +32,8 @@ from launch.actions import OpaqueFunction
 
 PACKAGE_NAME = "forest_segmentation"
 
+# TODO: expose all node parameters
+
 def forest_segmentation_setup(context, *args, **kwargs):
     path_to_bag = LaunchConfiguration("path_to_bag").perform(context) # REQUIRED: path to the rosbag
     voxel_size = LaunchConfiguration("voxel_size").perform(context)
@@ -41,13 +43,13 @@ def forest_segmentation_setup(context, *args, **kwargs):
         'use_sim_time': True,
         'path_to_bag': path_to_bag
     }
-    
+
     if len(incoming_points_topic) > 0:
         segmentation_node_offline_parameters['incoming_points_topic'] = incoming_points_topic
 
     voxel_size = float(voxel_size)
     if voxel_size > 0:
-        segmentation_node_offline_parameters['voxel_size'] = voxel_size
+        segmentation_node_offline_parameters['voxel_size'] = voxel_size * 0.5
 
     odometry_node_parameters = {
         'use_sim_time': True,

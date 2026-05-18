@@ -16,7 +16,7 @@ public:
     struct Config {
         struct {
             bool confidence_based_insertion{true};
-            double max_distance{100.0};
+            double max_distance{25.0};
             double voxel_size{1.0}; // NOTE: downsampling approach has changed from kiss-icp
             size_t voxel_capacity{20};
         } map;
