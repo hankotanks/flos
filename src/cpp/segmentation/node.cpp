@@ -78,7 +78,7 @@ void SegmentationNode::infer(py::object infer, util::Cloud& cloud) {
 std::pair<util::Cloud, std_msgs::msg::Header> SegmentationNode::read(const std::shared_ptr<sensor_msgs::msg::PointCloud2>& msg) noexcept {
     util::Cloud cloud{msg};
     util::voxel_downsample(cloud, config_.voxel_size * SegmentationNode::VOXEL_SIZE_SCALAR);
-    cloud.filter_by_distance(Eigen::Vector3f::Zero(), config_.max_distance);
+    cloud.filter_by_distance(Eigen::Vector3f::Zero(), config_.max_distance * SegmentationNode::MAX_DISTANCE_SCALAR);
     return std::make_pair(std::move(cloud), msg->header);
 }
 

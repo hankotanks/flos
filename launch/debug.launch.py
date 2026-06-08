@@ -86,12 +86,16 @@ def setup(context, *args, **kwargs):
         Node(
             package=PACKAGE_NAME,
             executable='segmentation_node_offline',
-            parameters=[p_seg]
+            parameters=[p_seg],
+            emulate_tty=True,
+            output='screen'
         ),
         Node(
             package=PACKAGE_NAME,
             executable="odometry_node",
-            parameters=[p_odom]
+            parameters=[p_odom],
+            emulate_tty=True,
+            output='screen'
         ),
     ]
 
@@ -109,7 +113,7 @@ def generate_launch_description():
         DeclareLaunchArgument('incoming_points_topic', default_value=""),
         DeclareLaunchArgument('ignore_canopy', default_value=""),
         DeclareLaunchArgument('ignore_shrubs', default_value=""),
-        # odometry parameter
+        # odometry parameters
         DeclareLaunchArgument('confidence_based_insertion', default_value=""),
         DeclareLaunchArgument('confidence_weighting', default_value=""),
         DeclareLaunchArgument('correspondence_restriction', default_value=""),

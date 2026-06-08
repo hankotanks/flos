@@ -152,7 +152,7 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const util::CloudView& points, 
         return a;
     };
 
-    auto GM_weight = [&](const float &residual2) {
+    auto weight = [&](const float &residual2) {
         return (sigma * sigma) / ((sigma + residual2) * (sigma + residual2));
     };
 
@@ -167,7 +167,7 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const util::CloudView& points, 
                     const util::CloudView::ConstPoint& point = correspondence.first;
                     // weight the kernel based on confidence from the segmentation model
                     float w = config_.registration.confidence_weighting ? semantics.field_confidence[point.index] : 1.0;
-                    w *= GM_weight(residual.squaredNorm());
+                    w *= weight(residual.squaredNorm());
                     return System(J_r.transpose() * w * J_r, J_r.transpose() * w * residual);
                 });
         }, sum_linear_systems);

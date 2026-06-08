@@ -81,6 +81,7 @@ configure_node(odometry_node
     odom/system.h
     util/cloud.h
     util/voxel.h
+    util/pose_writer.h
     util/profiler.h
     util/rosargs.h
   LIBRARIES
@@ -97,5 +98,18 @@ configure_node(odometry_node
     ${sensor_msgs_TARGETS}
     ${nav_msgs_TARGETS})
 
-install(TARGETS segmentation_node segmentation_node_offline odometry_node 
+add_executable(recorder_node)
+configure_node(recorder_node
+  SOURCES
+    recorder/node.cpp
+  LIBRARIES
+    Sophus::Sophus
+  PACKAGES
+    rclcpp::rclcpp
+    ${std_msgs_TARGETS}
+    ${geometry_msgs_TARGETS}
+    ${sensor_msgs_TARGETS}
+    ${nav_msgs_TARGETS})
+
+install(TARGETS segmentation_node segmentation_node_offline odometry_node recorder_node
   DESTINATION lib/${PROJECT_NAME})

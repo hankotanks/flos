@@ -37,6 +37,9 @@ protected:
     // scalar for voxel_size
     // NOTE: Config::voxel_size is scaled by this constant for unified parameter passing between segmentation and odometry
     static constexpr double VOXEL_SIZE_SCALAR{0.5};
+    // scalar for map distance
+    // NOTE: the idea is that we want the map to be larger than any incoming scan's max distance
+    static constexpr double MAX_DISTANCE_SCALAR{0.75};
     // topic stuff  
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr outgoing_points_publisher_;
     // separate thread for processing buffered clouds
