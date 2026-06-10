@@ -6,6 +6,7 @@ import enum
 # ros
 import launch
 import launch_ros
+import ament_index_python.packages as ament
 
 # util
 sys.path.append(str(pathlib.Path(__file__).parent))
@@ -35,6 +36,7 @@ PARAM_DESCRIPTOR = {
         'path_to_bag': 'path_to_bag',
         'path_to_model': None, 
         'incoming_points_topic': 'lidar_topic', 
+        'imu_topic': 'imu_topic',
         'voxel_size': None, 
         'max_distance': None, 
         'ignore_canopy': None,  
@@ -58,6 +60,47 @@ PARAM_DESCRIPTOR = {
         'path_to_record': 'path_to_results'
     }
 }
+
+class Package(enum.Enum):
+    RKO_LIO = (
+        "rko_lio", 
+        lambda config: launch_ros.actions.Node(
+            package = "rko_lio",
+            executable = "online_node",
+            output = "screen",
+            emulate_tty = True,
+            parameters = [
+                {
+                    'use_sim_time': True,
+                    'base_frame': config['lidar_frame'],
+                    'lidar_topic': "/forest_segmentation/raw/lidar",
+                    'lidar_frame': config['lidar_frame'],
+                    'imu_topic': "/forest_segmentation/raw/imu",
+                    'imu_frame': config['imu_frame']
+                },
+                config[Package.RKO_LIO]
+            ],
+        ))
+    KISS_ICP = (
+        "kiss_icp", 
+        lambda config: launch_ros.actions.Node(
+            package = "kiss_icp",
+            executable = "kiss_icp_node",
+            name = "kiss_icp_node",
+            parameters = [
+                {
+                    'use_sim_time': True,
+                    'visualize': False,
+                    'invert_odom_tf': False
+                },
+                config[Package.KISS_ICP]
+            ],
+            emulate_tty = True,
+            output = "screen",
+            remappings = [
+                ("pointcloud_topic", "/forest_segmentation/raw/lidar"),
+            ]
+        ))
 
 class Config:
     def __init__(self, path_to_config: str):
@@ -94,6 +137,7 @@ class Config:
                     LOGGER.error(f"config_file did not exist: {path_to_config_inner}")
                 with open(path_to_config, "r") as f:
                     return yaml.safe_load(f)
+            return {}
 
         self.param_raw = load(config_raw)
 
@@ -109,9 +153,21 @@ class Config:
 
         self.param = {c: load_param_for_component(c) for c in Component}
 
-    def __getitem__(self, key: Component | str):
+        for component, param in self.param.items():
+            print(f'{component}: {param}')
+
+        self.param_packages = {p: None for p in Package}
+        for package in Package:
+            if config_raw.get(package.value[0]) is None: continue
+            if config_raw[package.value[0]].get('active') is None: continue
+            if config_raw[package.value[0]]['active']:
+                self.param_packages[package] = load(config_raw[package.value[0]])
+
+    def __getitem__(self, key: Component | Package | str):
         if isinstance(key, Component):
             return self.param[key]
+        elif isinstance(key, Package):
+            return self.param_packages[key]
         elif isinstance(key, str):
             return self.param_root[key]
 
@@ -160,7 +216,7 @@ def setup(context, *args, **kwargs):
         ]
     )
 
-    return [
+    nodes = [
         node_segmentation,
         node_odometry,
         node_recorder,
@@ -172,6 +228,7 @@ def setup(context, *args, **kwargs):
                 ]
             )
         ),
+        # TODO: rewrite this to use the CLI-tools and generate an entire report
         launch.actions.RegisterEventHandler(
             event_handler = launch.event_handlers.OnShutdown(
                 on_shutdown = [
@@ -185,6 +242,17 @@ def setup(context, *args, **kwargs):
             )
         )
     ]
+
+    for package in Package:
+        if config[package] is None:
+            continue
+        try:
+            ament.get_package_share_directory(package.value[0])
+            nodes.append(package.value[1](config))
+        except ament.PackageNotFoundError:
+            LOGGER.warning(f'{package.value[0]} is not installed, skipping')
+
+    return nodes
 
 def generate_launch_description():
     visualize = launch.substitutions.LaunchConfiguration('visualize')
