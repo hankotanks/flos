@@ -100,22 +100,25 @@ private:
     void exit() {
         if(this->topics_.empty()) return;
         if(this->listener_->get_publisher_count() > 0) return;
-
+        // get the current final timestamp
         int64_t last = this->last_->load(std::memory_order_acquire);
-
+        // determine if any odometry systems are still working
         bool working = false;
         {
             std::lock_guard<std::mutex> lock(this->data_mutex_);
             for(const auto& [topic_name, data] : data_) {
                 if(data.empty()) continue;
-                std::cout << topic_name << ": " << last - ns_from_header(data.back().header) << std::endl;
-                if(last - ns_from_header(data.back().header) >= 5e+9) {
+                int64_t ns = ns_from_header(data.back().header);
+                if(ns >= last) continue;
+                int64_t delta = last - ns;
+                if(delta >= 1e+9) {
                     working = true;
+                    RCLCPP_INFO_STREAM(this->get_logger(), "waiting for " << topic_name << " [" 
+                        << (static_cast<double>(delta) / static_cast<double>(1e9)) << "s left]");
                     break;
                 }
             }
         }
-        
         // if everything is dead we can save and exit
         if(!working) {
             RecorderNode::save();

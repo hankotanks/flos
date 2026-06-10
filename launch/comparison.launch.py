@@ -153,9 +153,6 @@ class Config:
 
         self.param = {c: load_param_for_component(c) for c in Component}
 
-        for component, param in self.param.items():
-            print(f'{component}: {param}')
-
         self.param_packages = {p: None for p in Package}
         for package in Package:
             if config_raw.get(package.value[0]) is None: continue
