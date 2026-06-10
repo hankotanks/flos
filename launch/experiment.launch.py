@@ -1,14 +1,22 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, SetEnvironmentVariable, RegisterEventHandler, EmitEvent, TimerAction, ExecuteLocal
+from launch.event_handlers import OnProcessExit, OnShutdown
+from launch.events import Shutdown
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
-from launch_ros.actions import Node, SetEnvironmentVariable
+from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 from launch.actions import OpaqueFunction
 
 from rosbag2_py import SequentialReader, StorageOptions, ConverterOptions
 from rclpy.serialization import deserialize_message
 from sensor_msgs.msg import PointCloud2
+
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).parent))
+from util.trajectory_analysis import main as trajectory_analysis
 
 PACKAGE_NAME = "forest_segmentation"
 
@@ -96,6 +104,12 @@ def get_base_frame(bag_path, topic_name):
             return msg.header.frame_id
     return None
 
+param_desc = [
+    {
+        "voxel_size"
+    }
+]
+
 def setup(context, *args, **kwargs):
     p_seg = {
         'use_sim_time': True
@@ -109,13 +123,15 @@ def setup(context, *args, **kwargs):
     p_kiss = {
         'use_sim_time': True,
         'visualize': False,
-        'config_file': "/tmp/kiss_icp.yaml"
+        'config_file': "/tmp/kiss_icp.yaml",
+        'invert_odom_tf': False
     }
 
     p_rko_lio = {
         'use_sim_time': True,
         'lidar_topic': "/forest_segmentation/raw/lidar",
-        'imu_topic': "/forest_segmentation/raw/imu"
+        'imu_topic': "/forest_segmentation/raw/imu",
+        'async.max_lidar_buffer_size': 2500,
     }
 
     p_recorder = {
@@ -154,23 +170,26 @@ def setup(context, *args, **kwargs):
 
     # rko_lio parameters
     if not rko_lio_disable:
-        # base_frame = get_base_frame(p_seg["path_to_bag"], p_seg["incoming_points_topic"])
-        # assert base_frame is not None
         p_rko_lio['base_frame'] = "hesai_lidar_T_BL" # TODO: get this value programmatically
         p_rko_lio['imu_frame'] = "alphasense_imu_T_BI" # TODO: get this value programmatically
         p_rko_lio['lidar_frame'] = "hesai_lidar_T_BL" # TODO: get this value programmatically
 
     # recorder parameters
-    param_str(context, p_recorder, "path_to_record")
+    assert param_str(context, p_recorder, "path_to_record") is not None
+
+    p_analysis = {}
+    param_str(context, p_analysis, "path_to_ground_truth")
+
+    node_segmentation = Node(
+        package=PACKAGE_NAME,
+        executable='segmentation_node_offline',
+        parameters=[p_seg],
+        emulate_tty=True,
+        output='screen'
+    )
 
     nodes = [
-        Node(
-            package=PACKAGE_NAME,
-            executable='segmentation_node_offline',
-            parameters=[p_seg],
-            emulate_tty=True,
-            output='screen'
-        ),
+        node_segmentation,
         Node(
             package=PACKAGE_NAME,
             executable="odometry_node",
@@ -208,6 +227,20 @@ def setup(context, *args, **kwargs):
                 emulate_tty=True,
             )
         ])
+
+    if p_analysis.get('path_to_ground_truth') is not None:
+        nodes.append(RegisterEventHandler(
+            event_handler=OnShutdown(
+                on_shutdown=[
+                    OpaqueFunction(
+                        function=lambda context: trajectory_analysis(
+                            path_gt=Path(p_analysis['path_to_ground_truth']),
+                            path_out=Path(p_recorder['path_to_record'])
+                        )
+                    )
+                ]
+            )
+        ))
     
     return nodes
 
@@ -239,6 +272,7 @@ def generate_launch_description():
         DeclareLaunchArgument('correspondence_multiplier', default_value=""),
         # recorder parameters
         DeclareLaunchArgument('path_to_record', default_value=""),
+        DeclareLaunchArgument('path_to_ground_truth', default_value=""),
         # rko_lio parameters
         DeclareLaunchArgument('imu_topic', default_value=""),
         Node(

@@ -14,7 +14,7 @@ public:
         std::string path_to_record;
         this->get_parameter("path_to_record", path_to_record);
         if(path_to_record.empty()) {
-            RCLCPP_INFO_ONCE(this->get_logger(), "no output path provided, terminating RecorderNode...");
+            RCLCPP_ERROR_ONCE(this->get_logger(), "path_to_record is required");
             rclcpp::shutdown();
         }
         path_to_record_ = path_to_record;
@@ -98,8 +98,8 @@ private:
         }
         // if everything is dead we can save and exit
         if(!alive) {
-            RCLCPP_INFO(this->get_logger(), "finished recording odometry. saving...");
             RecorderNode::save();
+            RCLCPP_INFO_ONCE(this->get_logger(), "finished recording odometry. saving and shutting down");
             rclcpp::shutdown();
         }
     }

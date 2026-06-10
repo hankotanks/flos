@@ -61,7 +61,6 @@ configure_node(segmentation_node_offline
     ${SEGMENTATION_HEADERS}
     util/rosbag.h
     util/profiler.h
-    util/delayed_publisher.h
   LIBRARIES
     ${SEGMENTATION_LIBRARIES}
   PACKAGES 

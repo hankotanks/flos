@@ -49,6 +49,12 @@ def crop(traj: PoseTrajectory3D, t_start: float, t_end: float) -> PoseTrajectory
         orientations_quat_wxyz = traj.orientations_quat_wxyz[mask])
 
 def resample(traj: PoseTrajectory3D, stamps: np.ndarray) -> PoseTrajectory3D:
+    t_min = traj.timestamps[0]
+    t_max = traj.timestamps[-1]
+
+    mask = (stamps >= t_min) & (stamps <= t_max)
+    stamps = stamps[mask]
+    
     positions_xyz_interp = scipy.interpolate.interp1d(traj.timestamps, traj.positions_xyz, 
         axis = 0, kind = "linear", bounds_error = True)
     positions_xyz = positions_xyz_interp(stamps)
@@ -102,6 +108,7 @@ def main(path_gt: Path, path_out: Path):
 
     plot_traj(ax, traj_gt, "ground_truth", True)
 
+    """
     for path_i, traj_i in traj:
         traj_i_cropped = crop(traj_i, t_start, t_end)
         if len(traj_i_cropped.timestamps) < 2:
@@ -116,6 +123,40 @@ def main(path_gt: Path, path_out: Path):
             continue
 
         plot_traj(ax, traj_i_aligned, path_i.stem)
+    """
+    
+    for path_i, traj_i in traj:
+        traj_i_cropped = crop(traj_i, t_start, t_end)
+
+        if len(traj_i_cropped.timestamps) < 2:
+            print(f"skipping {path_i.name}: cropping left only {len(traj_i_cropped.timestamps)} samples")
+            continue
+
+        # --- resample onto GT timestamps ---
+        traj_i_resampled = resample(traj_i_cropped, traj_gt.timestamps)
+
+        # --- enforce identical shape for evo.align() ---
+        n = min(len(traj_i_resampled.timestamps), len(traj_gt.timestamps))
+
+        traj_i_resampled = PoseTrajectory3D(
+            timestamps=traj_i_resampled.timestamps[:n],
+            positions_xyz=traj_i_resampled.positions_xyz[:n],
+            orientations_quat_wxyz=traj_i_resampled.orientations_quat_wxyz[:n],
+        )
+
+        traj_gt_aligned = PoseTrajectory3D(
+            timestamps=traj_gt.timestamps[:n],
+            positions_xyz=traj_gt.positions_xyz[:n],
+            orientations_quat_wxyz=traj_gt.orientations_quat_wxyz[:n],
+        )
+
+        try:
+            traj_i_resampled.align(traj_gt_aligned, correct_scale=True)
+        except Exception as e:
+            print(f"skipping {path_i.name}: alignment failed: {e}")
+            continue
+
+        plot_traj(ax, traj_i_resampled, path_i.stem)
 
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
