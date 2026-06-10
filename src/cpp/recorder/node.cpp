@@ -1,9 +1,19 @@
 // system
+#include "sensor_msgs/msg/point_cloud2.hpp"
+#include <atomic>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 // ros
 #include <rclcpp/rclcpp.hpp>
 #include <nav_msgs/msg/odometry.hpp>
+
+namespace {
+int64_t ns_from_header(const std_msgs::msg::Header& header) {
+    const auto& stamp = header.stamp;
+    return static_cast<int64_t>(stamp.sec) * 1000000000LL + static_cast<int64_t>(stamp.nanosec);
+}
+} // namespace
 
 class RecorderNode : public rclcpp::Node {
 public:
@@ -22,13 +32,20 @@ public:
         if(!std::filesystem::exists(path_to_record_)) {
             std::filesystem::create_directory(path_to_record_);
         }
+        // keep track of last timestamp dispatched to odometry system
+        listener_ = this->create_subscription<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/raw/lidar", 10,
+            [this](sensor_msgs::msg::PointCloud2::SharedPtr msg) {
+                this->last_->store(ns_from_header(msg->header), std::memory_order_relaxed);
+            });
+        // latest time stamp of scan data
+        last_ = std::make_shared<std::atomic<int64_t>>(0);
         // callback for recording new topics
         timer_scan_ = this->create_wall_timer(
             std::chrono::seconds(1),
             std::bind(&RecorderNode::scan, this));
         // callback for exiting when all tracked topics are closed
         timer_exit_ = this->create_wall_timer(
-            std::chrono::seconds(2),
+            std::chrono::seconds(5),
             std::bind(&RecorderNode::exit, this));
     }
 public:
@@ -81,34 +98,41 @@ private:
     }
 
     void exit() {
-        if(topics_.empty()) return;
-        // poll topics to see if anything is alive
-        std::unordered_map<std::string, bool> alive_topics;
-        for(const auto& topic : this->get_topic_names_and_types()) {
-            for(const auto& tp : topic.second) {
-                if(tp == "nav_msgs/msg/Odometry") alive_topics[topic.first] = true;
+        if(this->topics_.empty()) return;
+        if(this->listener_->get_publisher_count() > 0) return;
+
+        int64_t last = this->last_->load(std::memory_order_acquire);
+
+        bool working = false;
+        {
+            std::lock_guard<std::mutex> lock(this->data_mutex_);
+            for(const auto& [topic_name, data] : data_) {
+                if(data.empty()) continue;
+                std::cout << topic_name << ": " << last - ns_from_header(data.back().header) << std::endl;
+                if(last - ns_from_header(data.back().header) >= 5e+9) {
+                    working = true;
+                    break;
+                }
             }
         }
-        bool alive = false;
-        for(const auto& topic : topics_) {
-            if(alive_topics[topic.first]) {
-                alive = true;
-                break;
-            }
-        }
+        
         // if everything is dead we can save and exit
-        if(!alive) {
+        if(!working) {
             RecorderNode::save();
             RCLCPP_INFO_ONCE(this->get_logger(), "finished recording odometry. saving and shutting down");
             rclcpp::shutdown();
         }
+        
     }
 private:
     std::filesystem::path path_to_record_;
+    rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr listener_;
+    std::shared_ptr<std::atomic<int64_t>> last_;
     rclcpp::TimerBase::SharedPtr timer_scan_;
     rclcpp::TimerBase::SharedPtr timer_exit_;
     std::map<std::string, rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr> topics_;
     std::map<std::string, std::vector<Pose>> data_;
+    std::mutex data_mutex_;
 };
 
 int main(int argc, char* argv[]) {

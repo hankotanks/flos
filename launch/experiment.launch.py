@@ -230,6 +230,14 @@ def setup(context, *args, **kwargs):
 
     if p_analysis.get('path_to_ground_truth') is not None:
         nodes.append(RegisterEventHandler(
+            event_handler=OnProcessExit(
+                target_action=node_segmentation,
+                on_exit=[
+                    EmitEvent(event=Shutdown()),
+                ]
+            )
+        ))
+        nodes.append(RegisterEventHandler(
             event_handler=OnShutdown(
                 on_shutdown=[
                     OpaqueFunction(

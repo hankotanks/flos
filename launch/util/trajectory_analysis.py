@@ -108,7 +108,6 @@ def main(path_gt: Path, path_out: Path):
 
     plot_traj(ax, traj_gt, "ground_truth", True)
 
-    """
     for path_i, traj_i in traj:
         traj_i_cropped = crop(traj_i, t_start, t_end)
         if len(traj_i_cropped.timestamps) < 2:
@@ -123,8 +122,8 @@ def main(path_gt: Path, path_out: Path):
             continue
 
         plot_traj(ax, traj_i_aligned, path_i.stem)
+
     """
-    
     for path_i, traj_i in traj:
         traj_i_cropped = crop(traj_i, t_start, t_end)
 
@@ -157,6 +156,7 @@ def main(path_gt: Path, path_out: Path):
             continue
 
         plot_traj(ax, traj_i_resampled, path_i.stem)
+    """
 
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
