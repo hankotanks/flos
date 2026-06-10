@@ -2,9 +2,13 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
-from launch_ros.actions import Node
+from launch_ros.actions import Node, SetEnvironmentVariable
 from launch_ros.substitutions import FindPackageShare
 from launch.actions import OpaqueFunction
+
+from rosbag2_py import SequentialReader, StorageOptions, ConverterOptions
+from rclpy.serialization import deserialize_message
+from sensor_msgs.msg import PointCloud2
 
 PACKAGE_NAME = "forest_segmentation"
 
@@ -80,6 +84,18 @@ def create_kiss_icp_config(p_odom, config_file):
         if (p := p_odom.get('max_threads')) is not None:
             f.write(f'  max_num_threads: {p}\n')
 
+def get_base_frame(bag_path, topic_name):
+    reader = SequentialReader()
+    storage_options = StorageOptions(uri = bag_path, storage_id = "mcap" if bag_path.endswith(".mcap") else "sqlite3")
+    converter_options = ConverterOptions(input_serialization_format = "cdr", output_serialization_format = "cdr")
+    reader.open(storage_options, converter_options)
+    while reader.has_next():
+        topic, data, _ = reader.read_next()
+        if topic == topic_name:
+            msg = deserialize_message(data, PointCloud2)
+            return msg.header.frame_id
+    return None
+
 def setup(context, *args, **kwargs):
     p_seg = {
         'use_sim_time': True
@@ -96,19 +112,31 @@ def setup(context, *args, **kwargs):
         'config_file': "/tmp/kiss_icp.yaml"
     }
 
+    p_rko_lio = {
+        'use_sim_time': True,
+        'lidar_topic': "/forest_segmentation/raw/lidar",
+        'imu_topic': "/forest_segmentation/raw/imu"
+    }
+
     p_recorder = {
         'use_sim_time': True,
     }
+
+    rko_lio_disable = True
     
     # shared parameters 
     assert (p := param_float(context, [p_seg, p_odom], "voxel_size")) is None or p > 0.0
     assert (p := param_float(context, [p_seg, p_odom], "max_distance")) is None or p > 0.0
+    if param_str(context, p_seg, "imu_topic") is not None:
+        rko_lio_disable = False
+
     # segmentation parameters
     assert param_str(context, p_seg, "path_to_bag") is not None
     param_str(context, p_seg, "path_to_model")
     param_str(context, p_seg, "incoming_points_topic")
     param_bool(context, p_seg, "ignore_canopy")
     param_bool(context, p_seg, "ignore_shrubs")
+
     # odometry parameters
     param_bool(context, p_odom, "confidence_based_insertion")
     param_bool(context, p_odom, "confidence_weighting")
@@ -120,12 +148,22 @@ def setup(context, *args, **kwargs):
     assert (p := param_float(context, p_odom, "min_motion")) is None or p > 0.0
     assert (p := param_float(context, p_odom, "convergence_criterion")) is None or p > 0.0
     assert (p := param_float(context, p_odom, "correspondence_multiplier")) is None or p > 0.0
+
     # kiss_icp configuration
     create_kiss_icp_config(p_odom, p_kiss['config_file'])
+
+    # rko_lio parameters
+    if not rko_lio_disable:
+        # base_frame = get_base_frame(p_seg["path_to_bag"], p_seg["incoming_points_topic"])
+        # assert base_frame is not None
+        p_rko_lio['base_frame'] = "hesai_lidar_T_BL" # TODO: get this value programmatically
+        p_rko_lio['imu_frame'] = "alphasense_imu_T_BI" # TODO: get this value programmatically
+        p_rko_lio['lidar_frame'] = "hesai_lidar_T_BL" # TODO: get this value programmatically
+
     # recorder parameters
     param_str(context, p_recorder, "path_to_record")
 
-    return [
+    nodes = [
         Node(
             package=PACKAGE_NAME,
             executable='segmentation_node_offline',
@@ -148,7 +186,7 @@ def setup(context, *args, **kwargs):
             emulate_tty=True,
             output="screen",
             remappings=[
-                ("pointcloud_topic", "/forest_segmentation/raw"),
+                ("pointcloud_topic", "/forest_segmentation/raw/lidar"),
             ]
         ),
         Node(
@@ -160,10 +198,24 @@ def setup(context, *args, **kwargs):
         )
     ]
 
+    if not rko_lio_disable:
+        nodes.extend([
+            Node(
+                package="rko_lio",
+                executable="online_node",
+                parameters=[p_rko_lio],
+                output="screen",
+                emulate_tty=True,
+            )
+        ])
+    
+    return nodes
+
 def generate_launch_description():
     visualize = LaunchConfiguration("visualize")
 
     return LaunchDescription([
+        SetEnvironmentVariable('RMW_IMPLEMENTATION', 'rmw_zenoh_cpp'),
         DeclareLaunchArgument('visualize', default_value="true"),
         # shared parameters
         DeclareLaunchArgument('voxel_size', default_value=""),
@@ -185,7 +237,15 @@ def generate_launch_description():
         DeclareLaunchArgument('min_motion', default_value=""),
         DeclareLaunchArgument('convergence_criterion', default_value=""),
         DeclareLaunchArgument('correspondence_multiplier', default_value=""),
+        # recorder parameters
         DeclareLaunchArgument('path_to_record', default_value=""),
+        # rko_lio parameters
+        DeclareLaunchArgument('imu_topic', default_value=""),
+        Node(
+            package='rmw_zenoh_cpp',
+            executable='rmw_zenohd',
+            name='router',
+        ),
         Node(
             package="rviz2",
             executable="rviz2",

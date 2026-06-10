@@ -61,10 +61,12 @@ configure_node(segmentation_node_offline
     ${SEGMENTATION_HEADERS}
     util/rosbag.h
     util/profiler.h
+    util/delayed_publisher.h
   LIBRARIES
     ${SEGMENTATION_LIBRARIES}
   PACKAGES 
     ${SEGMENTATION_PACKAGES}
+    ${nav_msgs_TARGETS}
     tf2::tf2 tf2_ros::tf2_ros 
     rosbag2_cpp::rosbag2_cpp rosbag2_storage::rosbag2_storage)
 
@@ -81,7 +83,6 @@ configure_node(odometry_node
     odom/system.h
     util/cloud.h
     util/voxel.h
-    util/pose_writer.h
     util/profiler.h
     util/rosargs.h
   LIBRARIES

@@ -37,7 +37,7 @@ ENV LC_ALL=C.UTF-8
 RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential git wget curl unzip ninja-build clangd \
   lsb-release gnupg2 dirmngr \
-  python3 python3-venv python3-pip python3-dev python3-setuptools python-is-python3 \
+  python3 python3-venv python3-pip python3-dev python3-setuptools python-is-python3 python3-tk \
   zsh tmux \
   libegl1 libgl1 libgomp1 libogre-1.12-dev \  
   && rm -rf /var/lib/apt/lists/*
@@ -71,7 +71,8 @@ RUN python3 -m pip install --break-system-packages --no-cache-dir torch-scatter 
 # this is horrible i'm sorry
 RUN python3 -m pip install --no-cache-dir catkin-pkg 
 # other python deps
-RUN python3 -m pip install --no-cache-dir spconv-cu126 addict lightning tensorboard typer open3d
+RUN python3 -m pip install --no-cache-dir \
+    spconv-cu126 addict lightning tensorboard typer open3d evo
 
 # once it gets merged in, use the master
 RUN sh -c "$(curl -L https://raw.githubusercontent.com/balancedscorpion/zsh-in-docker/new_user/zsh-in-docker.sh)" -- \
