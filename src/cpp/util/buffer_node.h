@@ -36,6 +36,8 @@ protected:
 protected:
     // total capacity of the buffer
     static constexpr size_t CAPACITY{15};
+    // whether or not the capacity should be respected
+    bool debug_;
     // nodes deriving from this class should set this when actively processing a buffer entry
     std::atomic<bool> active_{false};
 private:
@@ -49,8 +51,10 @@ private:
 template<typename Entry, typename Message>
 BufferNode<Entry, Message>::BufferNode(const std::string& incoming_topic_name, const std::string& incoming_topic_default) : rclcpp::Node(NODE_NAME) {
     // declare parameters
+    this->declare_parameter<bool>("debug", false);
     this->declare_parameter<std::string>(incoming_topic_name, incoming_topic_default);
     // store parameters
+    this->get_parameter("debug", debug_);
     this->get_parameter(incoming_topic_name, incoming_topic_);
     // create subscriber
     incoming_subscriber_ = this->create_subscription<Message>(incoming_topic_, 10,
@@ -71,9 +75,9 @@ void BufferNode<Entry, Message>::push(const std::shared_ptr<Message>& msg) noexc
     if(msg->width * msg->height == 0) return;
     { // ensure capacity isn't reached
         std::unique_lock lock(mutex_);
-        if(buffer_.size() >= CAPACITY) {
+        if(buffer_.size() >= BufferNode::CAPACITY) {
             RCLCPP_WARN_ONCE(this->get_logger(), NODE_NAME " can't keep up!");
-            return;
+            if(!debug_) return;
         }
         // construct and push the entry
         buffer_.emplace(std::move(this->read(msg)));

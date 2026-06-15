@@ -1,26 +1,3 @@
-set(SEGMENTATION_SOURCES
-  segmentation/node.cpp
-  util/cloud.cpp
-  util/voxel.cpp)
-
-set(SEGMENTATION_HEADERS
-  segmentation/node.h
-  util/buffer_node.h
-  util/cloud.h
-  util/voxel.h
-  util/stl_vector_eigen.h
-  util/rosargs.h)
-
-set(SEGMENTATION_LIBRARIES
-  Eigen3::Eigen
-  pybind11::embed
-  tsl::robin_map)
-
-set(SEGMENTATION_PACKAGES
-  rclcpp::rclcpp
-  ${std_msgs_TARGETS}
-  ${sensor_msgs_TARGETS})
-
 function(configure_node name)
   set(options)
   set(oneValueArgs)
@@ -42,44 +19,35 @@ endfunction()
 add_executable(segmentation_node)
 configure_node(segmentation_node
   SOURCES 
-    ${SEGMENTATION_SOURCES}
-    segmentation/node_online.cpp
+    segmentation_node.cpp
+    util/cloud.cpp
+    util/voxel.cpp
   HEADERS
-    ${SEGMENTATION_HEADERS}
+    util/buffer_node.h
+    util/cloud.h
+    util/voxel.h
+    util/stl_vector_eigen.h
+    util/rosargs.h
   LIBRARIES
-    ${SEGMENTATION_LIBRARIES}
+    Eigen3::Eigen
+    pybind11::embed
+    tsl::robin_map
   PACKAGES
-    ${SEGMENTATION_PACKAGES})
-
-add_executable(segmentation_node_offline)
-configure_node(segmentation_node_offline 
-  SOURCES 
-    ${SEGMENTATION_SOURCES}
-    segmentation/node_offline.cpp
-    util/rosbag.cpp 
-  HEADERS
-    ${SEGMENTATION_HEADERS}
-    util/rosbag.h
-    util/profiler.h
-  LIBRARIES
-    ${SEGMENTATION_LIBRARIES}
-  PACKAGES 
-    ${SEGMENTATION_PACKAGES}
-    ${nav_msgs_TARGETS}
-    tf2::tf2 tf2_ros::tf2_ros 
-    rosbag2_cpp::rosbag2_cpp rosbag2_storage::rosbag2_storage)
+    rclcpp::rclcpp
+    ${std_msgs_TARGETS}
+    ${sensor_msgs_TARGETS})
 
 add_executable(odometry_node)
 configure_node(odometry_node
   SOURCES
-    odom/node.cpp
-    odom/voxel_map.cpp
-    odom/system.cpp
+    odometry_node.cpp
+    odometry/voxel_map.cpp
+    odometry/system.cpp
     util/cloud.cpp
     util/voxel.cpp
   HEADERS
-    odom/voxel_map.h
-    odom/system.h
+    odometry/voxel_map.h
+    odometry/system.h
     util/cloud.h
     util/voxel.h
     util/profiler.h
@@ -98,18 +66,22 @@ configure_node(odometry_node
     ${sensor_msgs_TARGETS}
     ${nav_msgs_TARGETS})
 
-add_executable(recorder_node)
-configure_node(recorder_node
+add_executable(offline_node)
+configure_node(offline_node
   SOURCES
-    recorder/node.cpp
+    offline_node.cpp
+    util/rosbag.cpp 
+  HEADERS
+    util/rosbag.h
   LIBRARIES
     Sophus::Sophus
   PACKAGES
     rclcpp::rclcpp
+    tf2_ros::tf2_ros
+    rosbag2_cpp::rosbag2_cpp rosbag2_storage::rosbag2_storage
     ${std_msgs_TARGETS}
-    ${geometry_msgs_TARGETS}
     ${sensor_msgs_TARGETS}
     ${nav_msgs_TARGETS})
 
-install(TARGETS segmentation_node segmentation_node_offline odometry_node recorder_node
+install(TARGETS segmentation_node odometry_node offline_node
   DESTINATION lib/${PROJECT_NAME})

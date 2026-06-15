@@ -7,12 +7,34 @@
 #include <nav_msgs/msg/odometry.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 // package
-#include "system.h"
+#include "odometry/system.h"
 // util
 #include "util/buffer_node.h"
 #include "util/cloud.h"
 #include "util/profiler.h"
 #include "util/rosargs.h"
+
+// PARAMETERS
+// debug
+// incoming_points_topic
+// confidence_based_insertion
+// max_distance
+// voxel_size
+// voxel_capacity
+// threshold_initial
+// min_motion
+// confidence_weighting
+// correspondence_restriction
+// max_iterations
+// max_threads
+// convergence_criterion
+// correspondence_distance_multiplier
+
+// TOPICS
+// sub: incoming_points_topic (default: $/inference) [PointCloud2]
+// pub: $/odometry [Odometry]
+// pub: $/local_map [PointCloud2] (if debug is truthy)
+// pub: /tf [TF]
 
 class OdometryNode : 
     util::Profiler, 
@@ -21,16 +43,8 @@ public:
     explicit OdometryNode() : util::Profiler(NODE_NAME),
         BufferNode("incoming_points_topic", "/" PROJECT_NAME "/inference"), 
         system_(OdometryNode::configure(this)) {
-        // declare parameters
-        this->declare_parameter<bool>("debug", false);
-        this->declare_parameter<std::string>("local_map_topic", "/" PROJECT_NAME "/local_map");
-        this->declare_parameter<std::string>("local_map_frame", "odom_frame");
-        // store parameters
-        this->get_parameter("debug", debug_);
-        this->get_parameter("local_map_topic", local_map_topic_);
-        this->get_parameter("local_map_frame", local_map_frame_);
         if(debug_) { // initialize map publisher
-            local_map_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(local_map_topic_, 10);
+            local_map_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/local_map", 10);
         }
         // initialize odometry publisher
         odom_publisher_ = this->create_publisher<nav_msgs::msg::Odometry>("/" PROJECT_NAME "/odometry", 10);
@@ -48,11 +62,7 @@ public:
         if(odometry_thread_.joinable()) odometry_thread_.join();
     }
 protected:
-    // parameters (excluding those related to the system config itself)
-    bool debug_;
-    std::string local_map_topic_;
-    std::string local_map_frame_;
-protected:
+    static constexpr std::string LOCAL_MAP_FRAME = "odom_frame"; // output frame_id
     static constexpr double LOCAL_MAP_RATE = 5.0; // number of seconds between map publications
     // core
     OdometrySystem system_;
@@ -85,7 +95,7 @@ protected:
             { // send the transformation from the lidar frame to the local map frame
                 geometry_msgs::msg::TransformStamped msg;
                 msg.header.stamp = header.stamp;
-                msg.header.frame_id = local_map_frame_;
+                msg.header.frame_id = OdometryNode::LOCAL_MAP_FRAME;
                 msg.child_frame_id = header.frame_id;
                 msg.transform.translation.x = pose.translation().x();
                 msg.transform.translation.y = pose.translation().y();
@@ -101,7 +111,7 @@ protected:
             { // odometry
                 nav_msgs::msg::Odometry msg;
                 msg.header.stamp = header.stamp;
-                msg.header.frame_id = local_map_frame_;
+                msg.header.frame_id = OdometryNode::LOCAL_MAP_FRAME;
                 msg.child_frame_id = header.frame_id;
                 msg.pose.pose.position.x = pose.translation().x();
                 msg.pose.pose.position.y = pose.translation().y();
@@ -122,14 +132,13 @@ protected:
             }
             if(debug_) {
                 auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(steady_clock::now() - local_map_last_publication);
-                if(elapsed.count() >= LOCAL_MAP_RATE * 1000) {
+                if(elapsed.count() >= OdometryNode::LOCAL_MAP_RATE * 1000) {
                     std_msgs::msg::Header local_map_header;
                     local_map_header.stamp = header.stamp;
-                    local_map_header.frame_id = local_map_frame_;
+                    local_map_header.frame_id = OdometryNode::LOCAL_MAP_FRAME;
                     const util::CloudView& cloud = system_.cloud();
                     local_map_publisher_->publish(std::move(cloud.message(local_map_header)));
                 }
-                
             }
             active_ = false;
         }
