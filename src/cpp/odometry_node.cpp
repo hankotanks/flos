@@ -62,8 +62,10 @@ public:
         if(odometry_thread_.joinable()) odometry_thread_.join();
     }
 protected:
-    static constexpr std::string LOCAL_MAP_FRAME = "odom_frame"; // output frame_id
-    static constexpr double LOCAL_MAP_RATE = 5.0; // number of seconds between map publications
+    // output frame_id
+    static constexpr std::string LOCAL_MAP_FRAME = "odom_frame"; 
+    // number of seconds between map publications
+    static constexpr double LOCAL_MAP_RATE = 2.0; 
     // core
     OdometrySystem system_;
     // publisher for local map
@@ -138,6 +140,7 @@ protected:
                     local_map_header.frame_id = OdometryNode::LOCAL_MAP_FRAME;
                     const util::CloudView& cloud = system_.cloud();
                     local_map_publisher_->publish(std::move(cloud.message(local_map_header)));
+                    local_map_last_publication = steady_clock::now();
                 }
             }
             active_ = false;
