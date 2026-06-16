@@ -35,7 +35,7 @@ int64_t ns_from_header(const std_msgs::msg::Header& header) {
 
 // TOPICS
 // sub: $/odometry [Odometry]
-// pub: $/raw/lidar [PointCloud2]
+// pub: $/raw/points [PointCloud2]
 // pub: $/raw/imu [Imu] (if incoming_imu_topic is provided)
 // pub: $/bag_progress [Float32MultiArray]
 
@@ -80,18 +80,14 @@ public:
             [this](const std::shared_ptr<nav_msgs::msg::Odometry> msg) {
                 this->last_.store(ns_from_header(msg->header), std::memory_order_relaxed);
         });
-        publisher_points_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/raw/lidar", 10);
+        publisher_points_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/raw/points", 10);
         if(!incoming_imu_topic_.empty()) {
             publisher_imu_ = this->create_publisher<sensor_msgs::msg::Imu>("/" PROJECT_NAME "/raw/imu", 10);
         }
         // callback for recording new topics
-        timer_scan_ = this->create_wall_timer(
+        topic_scan_ = this->create_wall_timer(
             std::chrono::seconds(1),
             std::bind(&OfflineNode::scan, this));
-        // callback for exiting when all tracked topics are closed
-        timer_exit_ = this->create_wall_timer(
-            std::chrono::seconds(5),
-            std::bind(&OfflineNode::exit, this));
     }
     // delete extraneous constructors
     OfflineNode(const OfflineNode&) = delete;
@@ -99,13 +95,19 @@ public:
     OfflineNode& operator=(const OfflineNode&) = delete;
     OfflineNode& operator=(OfflineNode&&) = delete;
     ~OfflineNode() {
+        OfflineNode::save();
     }
 public:
-    void wait(const std_msgs::msg::Header& header){
+    void wait(rclcpp::Rate& rate, const std_msgs::msg::Header& header){
         const int64_t stamp = ns_from_header(header);
         while(rclcpp::ok()) {
             const int64_t last = last_.load();  // or from subscriber callback
-            if(last == 0 || stamp <= last + static_cast<int64_t>(5e9) || stamp < last) return;
+            if(last == 0) {
+                rate.sleep();
+                return;
+            } else if(stamp <= last + static_cast<int64_t>(5e9) || stamp < last) {
+                return;
+            }
             rclcpp::spin_some(this->shared_from_this());
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
@@ -117,7 +119,6 @@ public:
         if(!incoming_imu_topic_.empty()) {
             topics.emplace_back(incoming_imu_topic_);
         }
-
         // construct bag reader
         bag_ = std::make_unique<util::BufferableBag>(path_to_bag_, 
             // NOTE: this REQUIRES OfflineSegmentationNode to be constructed with std::make_shared
@@ -134,11 +135,11 @@ public:
             // this condition should always be truthy... but whatever...
             if(topic == incoming_points_topic_) {
                 std::shared_ptr<sensor_msgs::msg::PointCloud2> msg = deserialize_next_msg<sensor_msgs::msg::PointCloud2>(msg_ser);
-                OfflineNode::wait(msg->header);
+                OfflineNode::wait(rate, msg->header);
                 publisher_points_->publish(*msg);
             } else if(publisher_imu_ && topic == incoming_imu_topic_) {
                 std::shared_ptr<sensor_msgs::msg::Imu> msg = deserialize_next_msg<sensor_msgs::msg::Imu>(msg_ser);
-                OfflineNode::wait(msg->header);
+                OfflineNode::wait(rate, msg->header);
                 publisher_imu_->publish(*msg);
             }
             // increment processed message count
@@ -149,10 +150,15 @@ public:
             rclcpp::spin_some(this->shared_from_this());
         }
 
-        std::unique_lock<std::mutex> lock(shutdown_mtx_);
-        shutdown_cv_.wait(lock, [&] {
-            return shutdown_.load();
-        });
+        // callback for exiting when all tracked topics are closed
+        topic_poll_ = this->create_wall_timer(
+            std::chrono::seconds(5),
+            std::bind(&OfflineNode::poll, this));
+        
+        while(rclcpp::ok() && !shutdown_) {
+            rclcpp::spin_some(this->shared_from_this());
+            rate.sleep();
+        }
     }
 private:
     void publish_bag_progress() {
@@ -181,14 +187,14 @@ private:
     };
 private:
     void save() {
-        for(auto& [topic, poses] : data_) {
+        for(auto& [topic, poses] : poses_) {
             if(poses.empty()) continue;
             // get output filename
             std::string fname = topic;
             if(!fname.empty() && fname[0] == '/') fname.erase(0, 1);
             std::replace(fname.begin(), fname.end(), '/', '_');
             // record TUM poses
-            std::ofstream f{path_to_result_ / (fname + ".tum")};
+            std::ofstream f{path_to_result_ / (fname + "_tum.txt")};
             for(auto& pose : poses) {
                 f << std::fixed << std::setprecision(9)
                   << (pose.header.stamp.sec + pose.header.stamp.nanosec * 1e-9) << " "
@@ -212,29 +218,29 @@ private:
                 RCLCPP_INFO(this->get_logger(), "recording %s", topic.first.c_str());
                 topics_[topic.first] = this->create_subscription<nav_msgs::msg::Odometry>(topic.first, 10,
                     [this, topic](nav_msgs::msg::Odometry::SharedPtr msg) {
-                        if(data_.find(topic.first) == data_.end()) {
-                            data_.emplace(std::make_pair(topic.first, std::vector<Pose>{}));
+                        std::lock_guard<std::mutex> lock(this->pose_mutex_);
+                        if(poses_.find(topic.first) == poses_.end()) {
+                            poses_.emplace(std::make_pair(topic.first, std::vector<Pose>{}));
                         }
-                        data_[topic.first].emplace_back(msg->header, msg->pose.pose.position, msg->pose.pose.orientation);
+                        poses_[topic.first].emplace_back(msg->header, msg->pose.pose.position, msg->pose.pose.orientation);
                     });
             }
         }
     }
 
-    void exit() {
+    void poll() {
         if(shutdown_) return;
-        if(this->topics_.empty()) return;
-        if(this->listener_->get_publisher_count() > 0) return;
         // get the current final timestamp
         int64_t last = this->last_.load(std::memory_order_acquire);
         // determine if any odometry systems are still working
         bool working = false;
         {
-            std::lock_guard<std::mutex> lock(this->data_mutex_);
-            for(const auto& [topic_name, data] : data_) {
+            std::lock_guard<std::mutex> lock(this->pose_mutex_);
+            for(const auto& [topic_name, data] : poses_) {
+                std::cout << topic_name << ": " << data.size() << std::endl;
                 if(data.empty()) continue;
                 int64_t ns = ns_from_header(data.back().header);
-                if(ns >= last) continue;
+                if(ns > last) continue;
                 int64_t delta = last - ns;
                 if(delta >= 1e+9) {
                     working = true;
@@ -246,14 +252,11 @@ private:
         }
         // if everything is dead we can save and exit
         if(!working) {
-            OfflineNode::save();
             RCLCPP_INFO_ONCE(this->get_logger(), "finished recording odometry. saving and shutting down");
             shutdown_.store(true, std::memory_order_relaxed);
-            timer_scan_->cancel();
-            timer_exit_->cancel();
-            shutdown_cv_.notify_all();
+            topic_scan_->cancel();
+            topic_poll_->cancel();
         }
-        
     }
 private:
     // parameters
@@ -262,6 +265,7 @@ private:
     std::filesystem::path path_to_bag_;
     std::filesystem::path path_to_result_;
 private:
+    std::atomic<bool> shutdown_{false};
     // bag
     std::unique_ptr<util::BufferableBag> bag_;
     size_t msg_count_{0};
@@ -276,17 +280,13 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr publisher_points_;
     rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr publisher_imu_{nullptr};
     // repeated invocations of topic poller and exit condition checker
-    rclcpp::TimerBase::SharedPtr timer_scan_;
-    rclcpp::TimerBase::SharedPtr timer_exit_;
+    rclcpp::TimerBase::SharedPtr topic_scan_;
+    rclcpp::TimerBase::SharedPtr topic_poll_;
     // list of odometry topics which have been subscribed to
     std::map<std::string, rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr> topics_;
-    // data
-    std::map<std::string, std::vector<Pose>> data_;
-    std::mutex data_mutex_;
-    // shutdown
-    std::atomic<bool> shutdown_{false};
-    std::mutex shutdown_mtx_;
-    std::condition_variable shutdown_cv_;
+    // pose data
+    std::map<std::string, std::vector<Pose>> poses_;
+    std::mutex pose_mutex_;
 };
 
 int main(int argc, char* argv[]) {

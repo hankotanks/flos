@@ -21,7 +21,7 @@
 // ignore_shrubs
 
 // TOPICS
-// sub: incoming_points_topic (default: $/raw/lidar) [PointCloud2]
+// sub: incoming_points_topic (default: $/raw/points) [PointCloud2]
 // pub: $/inference [PointCloud2]
 
 class SegmentationNode : public BufferNode<std::pair<util::Cloud, std_msgs::msg::Header>, sensor_msgs::msg::PointCloud2> {
@@ -34,7 +34,7 @@ public:
     };
 public:
     explicit SegmentationNode() : 
-        BufferNode("incoming_points_topic", "/" PROJECT_NAME "/raw/lidar"),
+        BufferNode("incoming_points_topic", "/" PROJECT_NAME "/raw/points"),
         config_(SegmentationNode::configure(this)) {
         // get path to default model
         std::filesystem::path path_to_model_default{PROJECT_ROOT};

@@ -24,14 +24,14 @@ def setup(context, *args, **kwargs):
     
     node_offline = launch_ros.actions.Node(
         package = PACKAGE_NAME,
-        executable = 'bag_reader_node',
+        executable = 'offline_node',
         emulate_tty = True,
         output = 'screen',
         parameters = [
             {
                 'use_sim_time': True,
             },
-            config[Config.Component.BAG_READER]
+            config[Config.Component.OFFLINE]
         ]
     )
 
