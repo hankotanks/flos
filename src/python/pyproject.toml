@@ -3,7 +3,7 @@ requires = ["scikit-build-core", "wheel"]
 build-backend = "scikit_build_core.build"
 
 [project]
-name = "forest_segmentor"
+name = "segmentation_model"
 version = "0.0.1"
 description = "utility package for the segmentation node"
 authors = [
@@ -14,7 +14,7 @@ requires-python = ">=3.9"
 dependencies = []
 
 [tool.scikit-build]
-wheel.packages = ["forest_segmentor"]
+wheel.packages = ["segmentation_model"]
 build-dir = "build/{wheel_tag}"
 wheel.cmake = false
 editable.mode = "redirect"

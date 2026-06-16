@@ -41,12 +41,10 @@ class Config:
         self.param = {component: {} for component in Config.Component}
 
         def parse(component, key, val, cwd = pathlib.Path.cwd()):
-            ty, req = component.value[key]
             if val is None:
-                if req:
-                    raise RuntimeError(f'missing required parameter: {key} [{ty.__name__}]')
                 return None
-
+            
+            ty, _ = component.value[key]
             if ty is str:
                 return val
             elif isinstance(ty, tuple):
@@ -63,15 +61,27 @@ class Config:
                     except:
                         raise RuntimeError(f'{key} could not be resolved: {val}')
             elif ty is bool:
+                if isinstance(val, bool):
+                    return val
+                elif not isinstance(val, str):
+                    raise AssertionError('unreachable')
                 if val not in ['true', 'false']:
-                    raise RuntimeError(f'{key} must be a boolean [true, false]')
-                self.param[component][key] = True if val == 'true' else False
+                    raise RuntimeError(f'{key} must be a boolean [true, false]: {val}')
+                return True if val == 'true' else False
             elif ty is int:
+                if isinstance(val, int):
+                    return val
+                elif not isinstance(val, str):
+                    raise AssertionError('unreachable')
                 try:
                     return int(val)
                 except:
                     raise RuntimeError(f'{key} must be an integer: {val}')
             elif ty is float:
+                if isinstance(val, float):
+                    return val
+                elif not isinstance(val, str):
+                    raise AssertionError('unreachable')
                 try:
                     return float(val)
                 except:
@@ -83,7 +93,7 @@ class Config:
             param_from_config = {}
             try:
                 path_to_config = pathlib.Path(path_to_config).resolve(strict = True)
-                with open(path_to_config, 'w') as f:
+                with open(path_to_config, 'r') as f:
                     param_from_config = yaml.safe_load(f)
             except:
                 raise RuntimeError(f'path_to_config does not exist: {path_to_config}')
@@ -99,6 +109,11 @@ class Config:
                 val = val if len(val) > 0 else None
                 if (p := parse(component, key, val)) is not None:
                     self.param[component][key] = p
+                else:
+                    ty, req = component.value[key]
+                    if req and self.param[component].get(key) is None:
+                        raise RuntimeError(f'missing required parameter: {key} [{ty.__name__}]')
+
                 
     def declare_launch_arguments():
         processed = set()
@@ -106,13 +121,10 @@ class Config:
             launch.actions.DeclareLaunchArgument('path_to_config', default_value = '')
         ]
         for component in Config.Component:
-            for key, (_, req) in component.value.items():
+            for key in component.value.keys():
                 if key in processed:
                     continue
-                if req:
-                    arguments.append(launch.actions.DeclareLaunchArgument(key))
-                else:
-                    arguments.append(launch.actions.DeclareLaunchArgument(key, default_value = ''))
+                arguments.append(launch.actions.DeclareLaunchArgument(key, default_value = ''))
                 processed.add(key)
         
         return arguments

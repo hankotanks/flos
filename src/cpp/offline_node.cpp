@@ -71,7 +71,7 @@ public:
         path_to_result_ = path_to_result;
         // create output directory (if it doesn't exist)
         if(!std::filesystem::exists(path_to_result_)) {
-            std::filesystem::create_directory(path_to_result_);
+            std::filesystem::create_directories(path_to_result_);
         }
         // publish statistics
         bag_progress_publisher_ = this->create_publisher<std_msgs::msg::Float32MultiArray>("/" PROJECT_NAME "/bag_progress", 10);

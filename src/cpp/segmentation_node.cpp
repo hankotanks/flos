@@ -83,7 +83,7 @@ protected:
         // hold the GIL
         py::scoped_interpreter guard{};
         // get the inference method from the python module
-        py::object infer_module = py::module_::import("forest_segmentor.inference_helper");
+        py::object infer_module = py::module_::import("segmentation_model.inference_helper");
         py::object infer_helper = infer_module.attr("InferenceHelper")(path_to_model_);
         RCLCPP_INFO_ONCE(this->get_logger(), NODE_NAME " successfully loaded inference model");
         py::object infer = infer_helper.attr("infer");
