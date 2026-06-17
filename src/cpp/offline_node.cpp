@@ -9,6 +9,7 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 // util
+#include "util/rosargs.h"
 #include "util/rosbag.h"
 #include "util/profiler.h"
 
@@ -32,6 +33,7 @@ int64_t ns_from_header(const std_msgs::msg::Header& header) {
 // incoming_imu_topic
 // path_to_bag [REQUIRED]
 // path_to_result [REQUIRED]
+// frames
 
 // TOPICS
 // sub: $/odometry [Odometry]
@@ -48,6 +50,7 @@ public:
         this->declare_parameter<std::string>("path_to_bag");
         this->declare_parameter<std::string>("path_to_result");
         // store parameters
+        util::opt_param<size_t>(this, frames_, "frames");
         this->get_parameter("incoming_points_topic", incoming_points_topic_);
         this->get_parameter("incoming_imu_topic", incoming_imu_topic_);
         // path of bag to read
@@ -137,6 +140,7 @@ public:
                 std::shared_ptr<sensor_msgs::msg::PointCloud2> msg = deserialize_next_msg<sensor_msgs::msg::PointCloud2>(msg_ser);
                 OfflineNode::wait(rate, msg->header);
                 publisher_points_->publish(*msg);
+                frames_processed_++;
             } else if(publisher_imu_ && topic == incoming_imu_topic_) {
                 std::shared_ptr<sensor_msgs::msg::Imu> msg = deserialize_next_msg<sensor_msgs::msg::Imu>(msg_ser);
                 OfflineNode::wait(rate, msg->header);
@@ -148,6 +152,8 @@ public:
             OfflineNode::publish_bag_progress();
             // spin to allow subscriptions to receive incoming messages
             rclcpp::spin_some(this->shared_from_this());
+            // exit early if specified
+            if(frames_ > 0 && frames_processed_ >= frames_) break;
         }
 
         // callback for exiting when all tracked topics are closed
@@ -266,6 +272,9 @@ private:
     std::filesystem::path path_to_result_;
 private:
     std::atomic<bool> shutdown_{false};
+    // frame count to process
+    size_t frames_{0};
+    size_t frames_processed_{0};
     // bag
     std::unique_ptr<util::BufferableBag> bag_;
     size_t msg_count_{0};

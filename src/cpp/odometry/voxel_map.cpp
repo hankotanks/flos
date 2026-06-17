@@ -131,7 +131,13 @@ void VoxelMap::extend(util::CloudView&& points, const std::string& name, const R
             map_.insert({voxel, std::move(inner)});
         } else {
             auto& inner = search.value();
-            if(inner.size() >= voxel_capacity_) continue;
+            if(inner.size() >= voxel_capacity_) {
+                std::span<const T> inner_scalars = inner.field<T>(name);
+                size_t j = std::distance(std::begin(inner_scalars), \
+                    std::min_element(std::begin(inner_scalars), std::end(inner_scalars)));
+                if((repl)(inner_scalars[j], scalars[i])) inner[j].replace(points[i]);
+                continue;
+            }
             bool flag = false;
             for(size_t j = 0; j < inner.size(); ++j) {
                 if((inner[j].point() - points[i].point()).norm() >= resolution) continue;

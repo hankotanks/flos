@@ -20,9 +20,11 @@ add_executable(segmentation_node)
 configure_node(segmentation_node
   SOURCES 
     segmentation_node.cpp
+    segmentation/system.cpp
     util/cloud.cpp
     util/voxel.cpp
   HEADERS
+    segmentation/system.h
     util/buffer_node.h
     util/cloud.h
     util/voxel.h

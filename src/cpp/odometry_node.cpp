@@ -41,8 +41,8 @@ class OdometryNode :
     public BufferNode<std::pair<util::CloudView, std_msgs::msg::Header>, sensor_msgs::msg::PointCloud2> {
 public:
     explicit OdometryNode() : util::Profiler(NODE_NAME),
-        BufferNode("incoming_points_topic", "/" PROJECT_NAME "/inference"), 
-        system_(OdometryNode::configure(this)) {
+        BufferNode("incoming_points_topic", "/" PROJECT_NAME "/inference"),
+        system_(OdometryNode::Config(this).config) {
         if(debug_) { // initialize map publisher
             local_map_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/local_map", 10);
         }
@@ -62,10 +62,17 @@ public:
         if(odometry_thread_.joinable()) odometry_thread_.join();
     }
 protected:
+    struct Config {
+        OdometrySystem::Config config;
+        Config(rclcpp::Node* node);
+    };
+protected:
     // output frame_id
     static constexpr std::string LOCAL_MAP_FRAME = "odom_frame"; 
     // number of seconds between map publications
     static constexpr double LOCAL_MAP_RATE = 2.0; 
+    // config
+    // Config config_;
     // core
     OdometrySystem system_;
     // publisher for local map
@@ -85,7 +92,6 @@ protected:
             // get the next batch of points
             auto maybe = BufferNode::pop();
             if(!maybe) break;
-            active_ = true;
             auto [cloud, header] = std::move(*maybe);
             // perform registration
             Sophus::SE3f pose;
@@ -143,46 +149,12 @@ protected:
                     local_map_last_publication = steady_clock::now();
                 }
             }
-            active_ = false;
         }
     }
 
     virtual std::pair<util::CloudView, std_msgs::msg::Header> read(const std::shared_ptr<sensor_msgs::msg::PointCloud2>& msg) noexcept final override {
         util::CloudView cloud{msg};
         return std::make_pair(std::move(cloud), msg->header);
-    }
-private:
-    // TODO: Consider the upper bounds of these parameters
-    static OdometrySystem::Config configure(rclcpp::Node* node) {
-        OdometrySystem::Config config;
-        // map
-        auto confidence_based_insertion = util::numeric_param<bool>(node, "confidence_based_insertion");
-        if(confidence_based_insertion) config.map.confidence_based_insertion = *confidence_based_insertion;
-        auto max_distance = util::numeric_param<double>(node, "max_distance");
-        if(max_distance) config.map.max_distance = *max_distance;
-        auto voxel_size = util::numeric_param<double>(node, "voxel_size");
-        if(voxel_size) config.map.voxel_size = *voxel_size;
-        auto voxel_capacity = util::numeric_param<size_t>(node, "voxel_capacity");
-        if(voxel_capacity) config.map.voxel_capacity = *voxel_capacity;
-        // threshold
-        auto threshold_initial = util::numeric_param<double>(node, "threshold_initial");
-        if(threshold_initial) config.threshold.threshold_initial = *threshold_initial;
-        auto min_motion = util::numeric_param<double>(node, "min_motion");
-        if(min_motion) config.threshold.min_motion = *min_motion;
-        // registration
-        auto confidence_weighting = util::numeric_param<bool>(node, "confidence_weighting");
-        if(confidence_weighting) config.registration.confidence_weighting = *confidence_weighting;
-        auto correspondence_restriction = util::numeric_param<bool>(node, "correspondence_restriction");
-        if(correspondence_restriction) config.registration.correspondence_restriction = *correspondence_restriction;
-        auto max_iterations = util::numeric_param<size_t>(node, "max_iterations");
-        if(max_iterations) config.registration.max_iterations = *max_iterations;
-        auto max_threads = util::numeric_param<size_t>(node, "max_threads");
-        if(max_threads) config.registration.max_threads = *max_threads;
-        auto convergence_criterion = util::numeric_param<double>(node, "convergence_criterion");
-        if(convergence_criterion) config.registration.convergence_criterion = *convergence_criterion;
-        auto correspondence_multiplier = util::numeric_param<double>(node, "correspondence_distance_multiplier");
-        if(correspondence_multiplier) config.registration.correspondence_multiplier = *correspondence_multiplier;
-        return config;
     }
 };
 
@@ -192,4 +164,35 @@ int main(int argc, char* argv[]) {
     rclcpp::spin(std::static_pointer_cast<rclcpp::Node>(node));
     rclcpp::shutdown();
     return 0;
+}
+
+OdometryNode::Config::Config(rclcpp::Node* node) {
+    util::opt_param<bool>(node, config.map.confidence_based_insertion, "confidence_based_insertion");
+    util::opt_param<double>(node, config.map.max_distance, "max_distance");
+    util::opt_param<double>(node, config.map.voxel_size, "voxel_size");
+    util::opt_param<size_t>(node, config.map.voxel_capacity, "voxel_capacity");
+    // threshold
+    util::opt_param<double>(node, config.threshold.threshold_initial, "threshold_initial");
+    util::opt_param<double>(node, config.threshold.min_motion, "min_motion");
+    // registration
+    util::opt_param<bool>(node, config.registration.confidence_weighting, "confidence_weighting");
+    util::opt_param<bool>(node, config.registration.correspondence_restriction, "correspondence_restriction");
+    util::opt_param<size_t>(node, config.registration.max_iterations, "max_iterations");
+    util::opt_param<size_t>(node, config.registration.max_threads, "max_threads");
+    util::opt_param<double>(node, config.registration.convergence_criterion, "convergence_criterion");
+    util::opt_param<double>(node, config.registration.correspondence_multiplier, "correspondence_distance_multiplier");
+    // log parameters
+    RCLCPP_INFO_STREAM(node->get_logger(), std::boolalpha << "OdometrySystem::Config" << std::endl <<
+        "\tconfidence_based_insertion: " << config.map.confidence_based_insertion << "," << std::endl <<
+        "\tmax_distance: " << config.map.max_distance << "," << std::endl <<
+        "\tvoxel_size: " << config.map.voxel_size << "," << std::endl <<
+        "\tvoxel_capacity: " << config.map.voxel_capacity << "," << std::endl <<
+        "\tthreshold_initial: " << config.threshold.threshold_initial << "," << std::endl <<
+        "\tmin_motion: " << config.threshold.min_motion << "," << std::endl <<
+        "\tconfidence_weighting: " << config.registration.confidence_weighting << "," << std::endl <<
+        "\tcorrespondence_restriction: " << config.registration.correspondence_restriction << "," << std::endl <<
+        "\tmax_iterations: " << config.registration.max_iterations << "," << std::endl <<
+        "\tmax_threads: " << config.registration.max_threads << "," << std::endl <<
+        "\tconvergence_criterion: " << config.registration.convergence_criterion << "," << std::endl <<
+        "\tcorrespondence_multiplier: " << config.registration.correspondence_multiplier);
 }

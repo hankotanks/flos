@@ -12,6 +12,7 @@ class Config:
             'incoming_imu_topic': (str, False),
             'path_to_bag': ((pathlib.Path, True), True),
             'path_to_result': ((pathlib.Path, False), True),
+            'frames': (int, False),
         }
         SEGMENTATION = {
             'path_to_model': ((pathlib.Path, True), False), 

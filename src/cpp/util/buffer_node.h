@@ -26,11 +26,11 @@ protected:
 protected:
     // return size of the buffer
     size_t size() const noexcept { return buffer_.size(); };
+    // manual stop
+    void stop() noexcept;
     // queue operations
     void push(const std::shared_ptr<Message>& msg) noexcept;
     std::optional<Entry> pop() noexcept;
-    // block until the buffer is empty and there is no ongoing segmentation
-    void wait_until_drained() noexcept;
     // pure virtual function for converting `Message` to `Entry`
     virtual Entry read(const std::shared_ptr<Message>& msg) noexcept = 0;
 protected:
@@ -38,8 +38,6 @@ protected:
     static constexpr size_t CAPACITY{15};
     // whether or not the capacity should be respected
     bool debug_;
-    // nodes deriving from this class should set this when actively processing a buffer entry
-    std::atomic<bool> active_{false};
 private:
     rclcpp::Subscription<Message>::SharedPtr incoming_subscriber_;
     std::mutex mutex_;
@@ -50,6 +48,9 @@ private:
 
 template<typename Entry, typename Message>
 BufferNode<Entry, Message>::BufferNode(const std::string& incoming_topic_name, const std::string& incoming_topic_default) : rclcpp::Node(NODE_NAME) {
+    rclcpp::on_shutdown([this]() {
+        this->stop();
+    });
     // declare parameters
     this->declare_parameter<bool>("debug", false);
     if(incoming_topic_default.empty()) {
@@ -66,12 +67,17 @@ BufferNode<Entry, Message>::BufferNode(const std::string& incoming_topic_name, c
 }
 
 template<typename Entry, typename Message>
-BufferNode<Entry, Message>::~BufferNode() {
-    { // stop
+void BufferNode<Entry, Message>::stop() noexcept {
+    {
         std::lock_guard lock(mutex_);
-        running_ = false; 
+        running_ = false;
     }
-    cv_.notify_all(); 
+    cv_.notify_all();
+}
+
+template<typename Entry, typename Message>
+BufferNode<Entry, Message>::~BufferNode() {
+    BufferNode::stop();
 }
 
 template<typename Entry, typename Message>
@@ -92,24 +98,15 @@ void BufferNode<Entry, Message>::push(const std::shared_ptr<Message>& msg) noexc
 template<typename Entry, typename Message>
 std::optional<Entry> BufferNode<Entry, Message>::pop() noexcept {
     std::unique_lock lock(mutex_);
-    while(buffer_.empty() && running_ && rclcpp::ok()) { // NOTE: I've add rclcpp::ok here for cleaner shutdown sequences
-        cv_.wait_for(lock, std::chrono::milliseconds(50));
-    }
-    if(!running_ && buffer_.empty()) return std::nullopt;
-    if(buffer_.empty()) return std::nullopt;
+
+    cv_.wait(lock, [&] {
+        return !buffer_.empty() || !running_ || !rclcpp::ok();
+    });
+
+    if (buffer_.empty())
+        return std::nullopt;
+
     auto entry = std::move(buffer_.front());
     buffer_.pop();
     return entry;
-}
-
-template<typename Entry, typename Message>
-void BufferNode<Entry, Message>::wait_until_drained() noexcept {
-    rclcpp::Rate rate(100);
-    while(rclcpp::ok()) {
-        { // wait for buffer to drain
-            std::lock_guard<std::mutex> lock(mutex_);
-            if(buffer_.empty() && !active_.load()) break;
-        }
-        rate.sleep();
-    }
 }

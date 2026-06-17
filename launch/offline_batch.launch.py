@@ -53,44 +53,51 @@ def setup(context, *args, **kwargs):
         LOGGER.error(e.args[0])
         exit(1)
 
-    name = launch.substitutions.LaunchConfiguration('name').perform(context)
-    if name is None or len(name) == 0:
-        name = path_to_config.stem
-
-    path_to_result = path_to_result / name
-    path_to_result.mkdir(parents = True, exist_ok = True)
-    path_to_result = path_to_result.resolve(strict = True)
-        
-    # copy the odometry and sma config files
-    if path_to_result != path_to_config.parent and name != path_to_config.stem:
-            (path_to_result / (name + '.yaml')).write_text(path_to_config.read_text())
-    (path_to_result / 'config.yaml').write_text('category: odometry')
-
     path_to_bags = [resolve_bag(p) for p in path_to_bags.iterdir() if p.is_dir() and p not in path_to_result.parents]
     path_to_bags = list(filter(lambda p: p is not None, path_to_bags))
 
     path_to_launch = ament_index_python.packages.get_package_share_directory(PACKAGE_NAME)
     path_to_launch = pathlib.Path(path_to_launch).resolve(strict = True)
     path_to_launch = path_to_launch / 'launch' / 'offline.launch.py'
-    
-    def create_action(bag, bag_name):
-        cmd = [
-            'ros2', 'launch', str(path_to_launch),
-            'visualize:=false',
-            f'path_to_bag:={str(bag)}',
-            f'path_to_result:={str(path_to_result / "digiforests" / bag_name)}',
-            f'path_to_config:={str(path_to_config)}'
+
+    name = launch.substitutions.LaunchConfiguration('name').perform(context)
+    if name is None or len(name) == 0:
+        name = path_to_config.stem
+
+    configs = []
+    if path_to_config.is_dir():
+        for config in list(path_to_config.glob('*.yaml')):
+            configs.append((config, f'{name}_{config.stem}'))
+    else:
+        configs.append((path_to_config, name))
+
+    def create_actions(config, config_name):
+        path_to_result_inner = path_to_result / config_name
+        path_to_result_inner.mkdir(parents = True, exist_ok = True)
+        path_to_result_inner = path_to_result_inner.resolve(strict = True)
+
+        # copy the odometry and sma config files
+        if path_to_result_inner != config.parent and config_name != config.stem:
+                (path_to_result_inner / (config_name + '.yaml')).write_text(config.read_text())
+        (path_to_result_inner / 'config.yaml').write_text('category: odometry')
+
+        return [
+            launch.actions.ExecuteProcess(
+                cmd = [
+                    'ros2', 'launch', str(path_to_launch),
+                    'visualize:=false',
+                    f'path_to_bag:={str(bag)}',
+                    f'path_to_result:={str(path_to_result_inner / "digiforests" / bag_name)}',
+                    f'path_to_config:={str(config)}'
+                ],
+                output = 'screen',
+                emulate_tty = True,
+            ) for bag, bag_name in path_to_bags
         ]
-
-        return launch.actions.ExecuteProcess(
-            cmd = cmd,
-            output = 'screen',
-            emulate_tty = True,
-        )
-
-    actions = [
-        create_action(bag, bag_name) for bag, bag_name in path_to_bags
-    ]
+    
+    actions = []
+    for config, config_name in configs:
+        actions.extend(create_actions(config, config_name))
 
     description = [
         *chain(actions)
