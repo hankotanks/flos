@@ -44,6 +44,9 @@ int64_t ns_from_header(const std_msgs::msg::Header& header) {
 class OfflineNode : util::Profiler, public rclcpp::Node {
 public:
     explicit OfflineNode() : util::Profiler(NODE_NAME), rclcpp::Node(NODE_NAME) {
+        rclcpp::on_shutdown([this]() {
+            shutdown_.store(true, std::memory_order_relaxed);
+        });
         // declare parameters
         this->declare_parameter<std::string>("incoming_points_topic");
         this->declare_parameter<std::string>("incoming_imu_topic", "");
@@ -98,12 +101,16 @@ public:
     OfflineNode& operator=(const OfflineNode&) = delete;
     OfflineNode& operator=(OfflineNode&&) = delete;
     ~OfflineNode() {
+        if(bag_) bag_->close();
+        if(topic_scan_) topic_scan_->cancel();
+        if(topic_poll_) topic_poll_->cancel();
+        shutdown_.store(true, std::memory_order_relaxed);
         OfflineNode::save();
     }
 public:
     void wait(rclcpp::Rate& rate, const std_msgs::msg::Header& header){
         const int64_t stamp = ns_from_header(header);
-        while(rclcpp::ok()) {
+        while(rclcpp::ok() && !shutdown_.load(std::memory_order_acquire)) {
             const int64_t last = last_.load();  // or from subscriber callback
             if(last == 0) {
                 rate.sleep();
@@ -111,8 +118,10 @@ public:
             } else if(stamp <= last + static_cast<int64_t>(5e9) || stamp < last) {
                 return;
             }
-            rclcpp::spin_some(this->shared_from_this());
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            if(rclcpp::ok() && !shutdown_.load(std::memory_order_acquire)) {
+                rclcpp::spin_some(this->shared_from_this());
+            }
+            rate.sleep();
         }
     }
 
@@ -130,7 +139,7 @@ public:
         msg_count_ = bag_->message_count();
         // infer lidar messages from the given bag
         rclcpp::Rate rate(10);
-        while(rclcpp::ok() && !bag_->finished()) {
+        while(rclcpp::ok() && !bag_->finished() && !shutdown_.load(std::memory_order_acquire)) {
             // get next message from bag
             const rosbag2_storage::SerializedBagMessage serialized_bag_msg = bag_->PopNextMessage();
             const auto& topic = serialized_bag_msg.topic_name;
@@ -151,17 +160,27 @@ public:
             // publish updated progress
             OfflineNode::publish_bag_progress();
             // spin to allow subscriptions to receive incoming messages
-            rclcpp::spin_some(this->shared_from_this());
+            if(rclcpp::ok() && !shutdown_.load(std::memory_order_acquire)) {
+                rclcpp::spin_some(this->shared_from_this());
+            }
             // exit early if specified
             if(frames_ > 0 && frames_processed_ >= frames_) break;
         }
+
+        // close bag
+        bag_->close();
+        bag_ = nullptr;
+
+        // stop scanning for new odometry topics
+        topic_scan_->cancel();
+        topic_scan_ = nullptr;
 
         // callback for exiting when all tracked topics are closed
         topic_poll_ = this->create_wall_timer(
             std::chrono::seconds(5),
             std::bind(&OfflineNode::poll, this));
         
-        while(rclcpp::ok() && !shutdown_) {
+        while(rclcpp::ok() && !shutdown_.load(std::memory_order_acquire)) {
             rclcpp::spin_some(this->shared_from_this());
             rate.sleep();
         }
@@ -214,6 +233,7 @@ private:
     }
 
     void scan() {
+        if(!rclcpp::ok() || shutdown_.load(std::memory_order_acquire)) return;
         for(const auto& topic : this->get_topic_names_and_types()) {
             bool is_odom = false;
             for(const auto& tp : topic.second) {
@@ -235,7 +255,7 @@ private:
     }
 
     void poll() {
-        if(shutdown_) return;
+        if(!rclcpp::ok() || shutdown_.load(std::memory_order_acquire)) return;
         // get the current final timestamp
         int64_t last = this->last_.load(std::memory_order_acquire);
         // determine if any odometry systems are still working
@@ -259,9 +279,13 @@ private:
         // if everything is dead we can save and exit
         if(!working) {
             RCLCPP_INFO_ONCE(this->get_logger(), "finished recording odometry. saving and shutting down");
-            shutdown_.store(true, std::memory_order_relaxed);
-            topic_scan_->cancel();
+            if(topic_scan_) {
+                topic_scan_->cancel();
+                topic_scan_ = nullptr;
+            }
             topic_poll_->cancel();
+            topic_poll_ = nullptr;
+            shutdown_.store(true, std::memory_order_relaxed);
         }
     }
 private:
@@ -289,8 +313,8 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr publisher_points_;
     rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr publisher_imu_{nullptr};
     // repeated invocations of topic poller and exit condition checker
-    rclcpp::TimerBase::SharedPtr topic_scan_;
-    rclcpp::TimerBase::SharedPtr topic_poll_;
+    rclcpp::TimerBase::SharedPtr topic_scan_{nullptr};
+    rclcpp::TimerBase::SharedPtr topic_poll_{nullptr};
     // list of odometry topics which have been subscribed to
     std::map<std::string, rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr> topics_;
     // pose data

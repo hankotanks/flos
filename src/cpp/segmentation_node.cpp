@@ -7,7 +7,6 @@
 #include "util/rosargs.h"
 #include "util/buffer_node.h"
 #include "util/cloud.h"
-#include "util/voxel.h"
 
 // PARAMETERS
 // debug
@@ -26,7 +25,8 @@ class SegmentationNode : public BufferNode<std::pair<util::Cloud, std_msgs::msg:
 public:
     explicit SegmentationNode() : 
         BufferNode("incoming_points_topic", "/" PROJECT_NAME "/raw/points"),
-        config_(this) {
+        config_(this),
+        system_(config_.config) {
         // get path to default model
         std::filesystem::path path_to_model_default{PROJECT_ROOT};
         while(path_to_model_default.filename() != PROJECT_NAME) 
@@ -60,12 +60,12 @@ protected:
         Config(rclcpp::Node* node);
     };
 protected:
-    // configuration
+    // config
     Config config_;
+    // system
+    SegmentationSystem system_;
     // parameters
     std::string path_to_model_;
-    // system
-    // SegmentationSystem system_;
     // topic stuff  
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr outgoing_points_publisher_;
     // separate thread for processing buffered clouds
@@ -73,8 +73,8 @@ protected:
 protected:
     void loop() {
         py::scoped_interpreter guard{};
-        SegmentationSystem system{config_.config};
-        system.initialize(path_to_model_);
+        // initialize the system
+        SegmentationSystem::Model model = system_.load(path_to_model_);
         RCLCPP_INFO_ONCE(this->get_logger(), NODE_NAME " successfully loaded inference model");
         // loop until node is stopped
         while(rclcpp::ok()) {
@@ -85,7 +85,7 @@ protected:
             static_assert(std::is_same_v<decltype(cloud), util::Cloud>);
             static_assert(std::is_same_v<decltype(header), std_msgs::msg::Header>);
             // perform the inference
-            system.infer(cloud, true);
+            model.infer(cloud, true);
             // publish the result
             outgoing_points_publisher_->publish(std::move(cloud.message(header)));
         }
@@ -94,8 +94,7 @@ protected:
     // overload of the BufferNode::read method
     virtual std::pair<util::Cloud, std_msgs::msg::Header> read(const std::shared_ptr<sensor_msgs::msg::PointCloud2>& msg) noexcept final override {
         util::Cloud cloud{msg};
-        util::voxel_downsample(cloud, config_.config.voxel_size * 0.5);
-        cloud.filter_by_distance(Eigen::Vector3f::Zero(), config_.config.max_distance * 0.75);
+        system_.preprocess(cloud);
         return std::make_pair(std::move(cloud), msg->header);
     }
 };

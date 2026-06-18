@@ -42,7 +42,8 @@ class OdometryNode :
 public:
     explicit OdometryNode() : util::Profiler(NODE_NAME),
         BufferNode("incoming_points_topic", "/" PROJECT_NAME "/inference"),
-        system_(OdometryNode::Config(this).config) {
+        config_(this),
+        system_(config_.config) {
         if(debug_) { // initialize map publisher
             local_map_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/local_map", 10);
         }
@@ -72,7 +73,7 @@ protected:
     // number of seconds between map publications
     static constexpr double LOCAL_MAP_RATE = 2.0; 
     // config
-    // Config config_;
+    Config config_;
     // core
     OdometrySystem system_;
     // publisher for local map
