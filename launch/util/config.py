@@ -23,8 +23,7 @@ class Config:
         }
         ODOMETRY = {
             'voxel_size': (float, False), 
-            'max_distance': (float, False),
-            'confidence_based_insertion': (bool, False), 
+            'max_distance': (float, False), 
             'confidence_weighting': (bool, False), 
             'correspondence_restriction': (bool, False), 
             'voxel_capacity': (int, False), 

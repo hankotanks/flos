@@ -66,6 +66,7 @@ public:
 public:
     // basic operations
     size_t size() const noexcept;
+    size_t capacity() const noexcept;
     bool empty() const noexcept;
     void clear() noexcept;
     void reserve(size_t new_cap);

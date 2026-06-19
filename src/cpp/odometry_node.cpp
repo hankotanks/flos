@@ -51,17 +51,13 @@ public:
         odom_publisher_ = this->create_publisher<nav_msgs::msg::Odometry>("/" PROJECT_NAME "/odometry", 10);
         // broadcaster for poses
         tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
-        // spin up thread for odometry
-        odometry_thread_ = std::thread(&OdometryNode::loop, this);
     }
 public:
     OdometryNode(const OdometryNode&) = delete;
     OdometryNode(OdometryNode&&) = delete;
     OdometryNode& operator=(const OdometryNode&) = delete;
     OdometryNode& operator=(OdometryNode&&) = delete;
-    ~OdometryNode() {
-        if(odometry_thread_.joinable()) odometry_thread_.join();
-    }
+    ~OdometryNode() = default;
 protected:
     struct Config {
         OdometrySystem::Config config;
@@ -82,10 +78,8 @@ protected:
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher_;
     // pose broadcaster
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
-    // separate thread for processing
-    std::thread odometry_thread_;
 protected:
-    void loop() {
+    virtual void loop() noexcept override final {
         using steady_clock = std::chrono::steady_clock;
         using time_point = steady_clock::time_point;
         steady_clock::time_point local_map_last_publication = steady_clock::now();
@@ -168,7 +162,6 @@ int main(int argc, char* argv[]) {
 }
 
 OdometryNode::Config::Config(rclcpp::Node* node) {
-    util::opt_param<bool>(node, config.map.confidence_based_insertion, "confidence_based_insertion");
     util::opt_param<double>(node, config.map.max_distance, "max_distance");
     util::opt_param<double>(node, config.map.voxel_size, "voxel_size");
     util::opt_param<size_t>(node, config.map.voxel_capacity, "voxel_capacity");
@@ -183,17 +176,17 @@ OdometryNode::Config::Config(rclcpp::Node* node) {
     util::opt_param<double>(node, config.registration.convergence_criterion, "convergence_criterion");
     util::opt_param<double>(node, config.registration.correspondence_multiplier, "correspondence_distance_multiplier");
     // log parameters
-    RCLCPP_INFO_STREAM(node->get_logger(), std::boolalpha << "OdometrySystem::Config" << std::endl <<
-        "\tconfidence_based_insertion: " << config.map.confidence_based_insertion << "," << std::endl <<
-        "\tmax_distance: " << config.map.max_distance << "," << std::endl <<
-        "\tvoxel_size: " << config.map.voxel_size << "," << std::endl <<
-        "\tvoxel_capacity: " << config.map.voxel_capacity << "," << std::endl <<
-        "\tthreshold_initial: " << config.threshold.threshold_initial << "," << std::endl <<
-        "\tmin_motion: " << config.threshold.min_motion << "," << std::endl <<
-        "\tconfidence_weighting: " << config.registration.confidence_weighting << "," << std::endl <<
-        "\tcorrespondence_restriction: " << config.registration.correspondence_restriction << "," << std::endl <<
-        "\tmax_iterations: " << config.registration.max_iterations << "," << std::endl <<
-        "\tmax_threads: " << config.registration.max_threads << "," << std::endl <<
-        "\tconvergence_criterion: " << config.registration.convergence_criterion << "," << std::endl <<
-        "\tcorrespondence_multiplier: " << config.registration.correspondence_multiplier);
+    RCLCPP_INFO_STREAM(node->get_logger(), 
+        std::boolalpha << "OdometrySystem::Config" << std::endl <<
+            "\tmax_distance: " << config.map.max_distance << "," << std::endl <<
+            "\tvoxel_size: " << config.map.voxel_size << "," << std::endl <<
+            "\tvoxel_capacity: " << config.map.voxel_capacity << "," << std::endl <<
+            "\tthreshold_initial: " << config.threshold.threshold_initial << "," << std::endl <<
+            "\tmin_motion: " << config.threshold.min_motion << "," << std::endl <<
+            "\tconfidence_weighting: " << config.registration.confidence_weighting << "," << std::endl <<
+            "\tcorrespondence_restriction: " << config.registration.correspondence_restriction << "," << std::endl <<
+            "\tmax_iterations: " << config.registration.max_iterations << "," << std::endl <<
+            "\tmax_threads: " << config.registration.max_threads << "," << std::endl <<
+            "\tconvergence_criterion: " << config.registration.convergence_criterion << "," << std::endl <<
+            "\tcorrespondence_multiplier: " << config.registration.correspondence_multiplier);
 }

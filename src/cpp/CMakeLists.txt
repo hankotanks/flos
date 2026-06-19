@@ -43,7 +43,6 @@ add_executable(odometry_node)
 configure_node(odometry_node
   SOURCES
     odometry_node.cpp
-    odometry/voxel_map.cpp
     odometry/system.cpp
     util/cloud.cpp
     util/voxel.cpp

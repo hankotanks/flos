@@ -65,24 +65,24 @@ void transform(util::CloudView& cloud, const Sophus::SE3f& t) {
 }
 } // private scope
 
+void OdometrySystem::Belief::update(const Wrapper& points, size_t i) noexcept {
+    size_t field_class = points.semantics_.field_class[i];
+    double field_confidence = points.semantics_.field_confidence[i];
+    // TODO: update belief
+}
+
 const Sophus::SE3f& OdometrySystem::register_to_map(util::CloudView&& points) noexcept {
     // deskewing
     deskew_frame(points, last_delta_);
-    // sort the points by confidence (highest first)
-    if(config_.map.confidence_based_insertion) {
-        points.sort<float>("confidence", [](const float& fst, const float& snd) { return fst > snd; });
-    }
     // downsample incoming points to obtain keypoints and the preprocessed frame
     util::CloudView points_kp{points};
     util::voxel_downsample(points_kp, config_.map.voxel_size * OdometrySystem::VOXEL_SIZE_SCALAR);
     // compute pose w/ ICP
     const auto [pose, deviation] = OdometrySystem::align(points_kp);
     threshold_.update(deviation);
-    // append points to map (preserving the highest confidence points)
-    if(config_.map.confidence_based_insertion) {
-        map_.update<float>(std::move(points), pose, "confidence", 
-            [](const float& current, const float& replacement) { return replacement > current; });
-    } else map_.update(std::move(points), pose);
+    // append points to map
+    Wrapper points_wrapper{points}; // TODO: Semantics is constructed twice, once in OdometrySystem::align and once in this
+    map_.update(points_wrapper, pose);
     // store new pose
     last_delta_ = last_pose_.inverse() * pose;
     last_pose_ = pose;
@@ -111,7 +111,7 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const util::CloudView& points, 
     using Correspondences = tbb::concurrent_vector<std::pair<util::CloudView::ConstPoint, util::CloudView::ConstPoint>>;
 
     // this predicate only allows matching between points with the same semantic information
-    VoxelMap::Predicate pred;
+    VoxelMap<OdometrySystem::Wrapper>::Predicate pred;
     if(config_.registration.correspondence_restriction) {
         pred = [&semantics](const util::CloudView::ConstPoint& point, const util::CloudView::ConstPoint& query) -> bool {
             return semantics.field_class[point.index] == semantics.field_class[query.index];
@@ -175,29 +175,28 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const util::CloudView& points, 
     return JTJ.ldlt().solve(-JTr);
 }
 
-std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(const util::CloudView& points) const {
+std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(util::CloudView& points) const {
     // determine starting point
     const auto initial_guess = last_pose_ * last_delta_;
     if(map_.empty()) return std::make_pair(initial_guess, Sophus::SE3f{});
     // compute adaptive threshold
     double sigma = threshold_.compute();
-    // copy the frame for use in ICP
-    util::CloudView source{points};
-    transform(source, initial_guess);
+    // transform by initial_guess (future-proofing... this is currently always identity)
+    transform(points, initial_guess);
     // retrieve fields ahead of time to avoid repeated queries
-    Semantics source_semantics{source};
+    Semantics semantics{points};
     // perform ICP
     Sophus::SE3f T_icp{};
     for(size_t j = 0; j < config_.registration.max_iterations; ++j) {
         // Equation (11)
-        const Eigen::Matrix<float, 6, 1> dx = OdometrySystem::solve(source, sigma, source_semantics);
+        const Eigen::Matrix<float, 6, 1> dx = OdometrySystem::solve(points, sigma, semantics);
         const Sophus::SE3f est = Sophus::SE3f::exp(dx);
         // Equation (12)
-        transform(source, est);;
+        transform(points, est);
         // Update iterations
         T_icp = est * T_icp;
         // Termination criteria
-        if (dx.norm() < config_.registration.convergence_criterion) break;
+        if(dx.norm() < config_.registration.convergence_criterion) break;
     }
     Sophus::SE3f pose = T_icp * initial_guess;
     // return transformation and deviation

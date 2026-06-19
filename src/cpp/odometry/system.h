@@ -15,7 +15,6 @@ class OdometrySystem {
 public:
     struct Config {
         struct {
-            bool confidence_based_insertion{true};
             double max_distance{25.0};
             double voxel_size{1.0}; // NOTE: downsampling approach has changed from kiss-icp
             size_t voxel_capacity{20};
@@ -81,17 +80,41 @@ private:
         std::span<const float> field_confidence;
         Semantics(const util::CloudView& points);
     };
+    // forward declaration
+    struct Wrapper;
+    // voxel belief
+    struct Belief: public VoxelData<Wrapper> {
+        // IGNORE = 0
+        // GROUND = 1
+        // SHRUB = 2
+        // STEM = 3
+        // CANOPY = 4
+        std::array<double, 5> belief; 
+        virtual void update(const Wrapper& points, size_t i) noexcept override final;
+    };
+
+    struct Wrapper : public Points<Wrapper, Belief> {
+        friend Belief;
+        friend OdometrySystem;
+        Wrapper(util::CloudView& points) : points_(points), semantics_(points) { /* STUB */ }
+        virtual size_t size() const noexcept override final { return points_.size(); }
+        virtual util::CloudView::Point operator[](size_t i) noexcept override final { return points_[i]; }
+        virtual util::CloudView::ConstPoint operator[](size_t i) const noexcept override final { return points_[i]; }
+    private:
+        util::CloudView& points_;
+        Semantics semantics_;
+    };
 private:
     // constructs and solves the linear system, returning dx
-    Eigen::Matrix<float, 6, 1> solve(const util::CloudView& points, double sigma, const Semantics& semantics) const noexcept;
+    Eigen::Matrix<float, 6, 1> solve(const util::CloudView& points, double sigma, const OdometrySystem::Semantics& semantics) const noexcept;
     // returns pose and deviation respectively
-    std::pair<Sophus::SE3f, Sophus::SE3f> align(const util::CloudView& points) const;
+    std::pair<Sophus::SE3f, Sophus::SE3f> align(util::CloudView& points) const;
 private:
     Config config_;
     // NOTE: see note in segmentation/node.h
     static constexpr double VOXEL_SIZE_SCALAR{1.5};
     Sophus::SE3f last_pose_;
     Sophus::SE3f last_delta_;
-    VoxelMap map_;
+    VoxelMap<Wrapper> map_;
     AdaptiveThreshold threshold_;
 };

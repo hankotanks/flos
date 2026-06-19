@@ -165,6 +165,10 @@ size_t CloudView::size() const noexcept {
     return points_.size(); 
 }
 
+size_t CloudView::capacity() const noexcept {
+    return points_.capacity(); 
+}
+
 bool CloudView::empty() const noexcept { 
     return CloudView::size() == 0;
 }

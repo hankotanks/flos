@@ -43,17 +43,13 @@ public:
             throw std::runtime_error("model does not exist: " + path_to_model_);
         // point publisher (subscriber is now handled by BufferNode)
         outgoing_points_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/inference", 10);
-        // segmentation thread
-        segmentation_thread_ = std::thread(&SegmentationNode::loop, this);
     }
 public:
     SegmentationNode(const SegmentationNode&) = delete;
     SegmentationNode(SegmentationNode&&) = delete;
     SegmentationNode& operator=(const SegmentationNode&) = delete;
     SegmentationNode& operator=(SegmentationNode&&) = delete;
-    ~SegmentationNode() {
-        if(segmentation_thread_.joinable()) segmentation_thread_.join();
-    }
+    ~SegmentationNode() = default;
 protected:
     struct Config {
         SegmentationSystem::Config config;
@@ -68,10 +64,8 @@ protected:
     std::string path_to_model_;
     // topic stuff  
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr outgoing_points_publisher_;
-    // separate thread for processing buffered clouds
-    std::thread segmentation_thread_;
 protected:
-    void loop() {
+    virtual void loop() noexcept override final {
         py::scoped_interpreter guard{};
         // initialize the system
         SegmentationSystem::Model model = system_.load(path_to_model_);
@@ -113,9 +107,10 @@ SegmentationNode::Config::Config(rclcpp::Node* node) {
     util::opt_param<bool>(node, config.ignore_canopy, "ignore_canopy");
     util::opt_param<bool>(node, config.ignore_shrubs, "ignore_shrubs");
     // log parameters
-    RCLCPP_INFO_STREAM(node->get_logger(), std::boolalpha << "SegmentationSystem::Config" << std::endl <<
-        "\tvoxel_size: " << config.voxel_size << "," << std::endl << 
-        "\tmax_distance: " << config.max_distance << "," << std::endl << 
-        "\tignore_canopy: " << config.ignore_canopy << "," << std::endl << 
-        "\tignore_shrubs: " << config.ignore_shrubs);
+    RCLCPP_INFO_STREAM(node->get_logger(), 
+        std::boolalpha << "SegmentationSystem::Config" << std::endl <<
+            "\tvoxel_size: " << config.voxel_size << "," << std::endl << 
+            "\tmax_distance: " << config.max_distance << "," << std::endl << 
+            "\tignore_canopy: " << config.ignore_canopy << "," << std::endl << 
+            "\tignore_shrubs: " << config.ignore_shrubs);
 }

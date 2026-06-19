@@ -33,6 +33,8 @@ protected:
     std::optional<Entry> pop() noexcept;
     // pure virtual function for converting `Message` to `Entry`
     virtual Entry read(const std::shared_ptr<Message>& msg) noexcept = 0;
+    // `worker` to be dispatched to a separate thread
+    virtual void loop() noexcept = 0;
 protected:
     // total capacity of the buffer
     static constexpr size_t CAPACITY{15};
@@ -44,6 +46,7 @@ private:
     std::condition_variable cv_;
     std::queue<Entry> buffer_;
     std::atomic<bool> running_{true};
+    std::thread thread_;
 };
 
 template<typename Entry, typename Message>
@@ -64,6 +67,8 @@ BufferNode<Entry, Message>::BufferNode(const std::string& incoming_topic_name, c
     // create subscriber
     incoming_subscriber_ = this->create_subscription<Message>(incoming_topic_, 10,
         [this](const std::shared_ptr<Message> msg) { this->push(msg); });
+    // initialize thread
+    thread_ = std::thread(&BufferNode::loop, this);
 }
 
 template<typename Entry, typename Message>
@@ -78,6 +83,7 @@ void BufferNode<Entry, Message>::stop() noexcept {
 template<typename Entry, typename Message>
 BufferNode<Entry, Message>::~BufferNode() {
     BufferNode::stop();
+    if(thread_.joinable()) thread_.join();
 }
 
 template<typename Entry, typename Message>
