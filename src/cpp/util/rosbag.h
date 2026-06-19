@@ -49,7 +49,7 @@ public:
         std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster;
         std::unique_ptr<tf2_ros::StaticTransformBroadcaster> tf_static_broadcaster;
         rclcpp::Serialization<tf2_msgs::msg::TFMessage> serializer;
-    };
+    }; // TODO: we can potentially remove all transform broadcasts, because we operate purely on LiDAR messages
 
     BufferableBag(const std::string& bag_path,
         const std::shared_ptr<TFBridge> tf_bridge,

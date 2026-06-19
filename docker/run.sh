@@ -5,7 +5,7 @@ podman run -it \
   -v "${SCRIPT_DIR}/../:/root/ros_ws/src/forest_segmentation" \
   -v "${SCRIPT_DIR}/../../forest_segmentation_data:/data" \
   -v "${SCRIPT_DIR}/../../forest_segmentation_logs:/logs" \
-  -v "${SCRIPT_DIR}/../../digiforest_rosbags:/bags" \
+  -v "${SCRIPT_DIR}/../../digi_ros2:/bags" \
   -v "${SCRIPT_DIR}/.zsh_history:/root/.zsh_history" \
   --env DISPLAY=$DISPLAY \
   --env QT_X11_NO_MITSHM=1 \

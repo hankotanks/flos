@@ -16,9 +16,10 @@ include(dependencies)
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(rclcpp_components REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
@@ -36,6 +37,6 @@ add_custom_target(python_package ALL
 
 add_subdirectory(src/cpp)
 
-install(DIRECTORY config models DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY models launch rviz DESTINATION share/${PROJECT_NAME})
 
 ament_package()

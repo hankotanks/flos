@@ -3,16 +3,16 @@ import os
 from pathlib import Path
 from typing import Optional, Dict, List
 
-import forest_segmentor_training.utils.transforms as fAIT
+import segmentation_model_training.utils.transforms as fAIT
 import torch
 import typer
-from forest_segmentor_training.data_modules.digiforest import DigiForestDataModule
-from src.python.forest_segmentor.segmentation_model import PointTransformerV3Lightning
-from forest_segmentor_training.utils.config import sync_config_keys
+from segmentation_model_training.data_modules.digiforest import DigiForestDataModule
+from src.python.segmentation_model.segmentation_model import PointTransformerV3Lightning
+from segmentation_model_training.utils.config import sync_config_keys
 from lightning.pytorch import Trainer, seed_everything
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger, Logger
-from forest_segmentor_training.utils.io import load_yaml_or_json
+from segmentation_model_training.utils.io import load_yaml_or_json
 from torchvision.transforms import Compose
 
 cli = typer.Typer()

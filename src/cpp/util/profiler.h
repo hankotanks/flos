@@ -29,7 +29,7 @@ public:
             using T = std::decay_t<decltype(inner)>;
             if constexpr (std::is_same_v<T, Profiler*>) {
                 // report elapsed time up the stack
-                inner->report(name_, elapsed);
+                if(inner != nullptr) inner->report(name_, elapsed);
             } else if constexpr (std::is_same_v<T, std::map<std::string, Statistics>>) {
                 // if its a root Profiler, print stats on completion
                 std::cout << name_ << ": " << Statistics{} + elapsed << std::endl;
@@ -70,7 +70,7 @@ private:
         std::visit([&](auto&& inner) {
             using T = std::decay_t<decltype(inner)>;
             if constexpr (std::is_same_v<T, Profiler*>) {
-                inner->report(name_ + "/" + name, elapsed);
+                if(inner != nullptr) inner->report(name_ + "/" + name, elapsed);
             } else if constexpr (std::is_same_v<T, std::map<std::string, Statistics>>) {
                 if(inner.count(name) == 0)
                     inner.emplace(std::piecewise_construct, std::forward_as_tuple(name), std::forward_as_tuple());
