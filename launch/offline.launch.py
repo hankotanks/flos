@@ -39,7 +39,7 @@ def setup(context, *args, **kwargs):
         executable = 'segmentation_node',
         emulate_tty = True,
         output = 'screen',
-        prefix = ['gdb -ex run --args'],
+        # prefix = ['gdb -ex run --args'],
         parameters = [
             {
                 'use_sim_time': True,
