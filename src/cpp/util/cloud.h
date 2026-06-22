@@ -32,9 +32,9 @@ public:
         friend class Cloud;
     public:
         Descriptor() = default;
-        Descriptor(const Descriptor&) = default;
+        Descriptor(const Descriptor&);
         Descriptor(Descriptor&&) = delete;
-        Descriptor& operator=(const Descriptor&) = default;
+        Descriptor& operator=(const Descriptor&);
         Descriptor& operator=(Descriptor&&) = delete;
     private:
         void add_field(uint8_t datatype, const std::string& name);

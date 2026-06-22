@@ -35,6 +35,22 @@ void reorder(order_iterator order_begin, order_iterator order_end, value_iterato
 } // private scope
 
 namespace util {
+CloudView::Descriptor::Descriptor(const Descriptor& other) : attrs_(other.attrs_) {
+    for(size_t i = 0; i < attrs_.size(); ++i) {
+        names_.emplace(std::string_view(attrs_[i].second), i);
+    }
+}
+
+CloudView::Descriptor& CloudView::Descriptor::operator=(const Descriptor& other) {
+    if(this == &other) return *this;
+    attrs_ = other.attrs_;
+    names_.clear();
+    for(size_t i = 0; i < attrs_.size(); ++i) {
+        names_.emplace(std::string_view(attrs_[i].second), i);
+    }
+    return *this;
+}
+
 void CloudView::Descriptor::add_field(uint8_t datatype, const std::string& name) {
     size_t field_count = attrs_.size();
     attrs_.emplace_back(datatype, name);

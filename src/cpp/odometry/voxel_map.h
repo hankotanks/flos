@@ -30,14 +30,19 @@ public:
     void update(F& points, const Eigen::Vector3f& origin);
     void update(F& points, const Sophus::SE3f& pose);
     void extend(F& points);
+public:
+    struct Cloud {
+        std::vector<Eigen::Vector3f> points;
+        std::vector<typename F::point_data_type> data;
+    };
     // get all points in the voxel map (currently for debugging)
-    const std::pair<std::span<const Eigen::Vector3f>, std::span<const typename F::point_data_type>> cloud() const noexcept;
+    const Cloud& cloud() const noexcept;
 public:
     // a predicate can be supplied taking 2 points' data and returning a boolean, if truthy, the match is preserved
     using Predicate = std::function<bool(typename F::point_data_type point, typename F::point_data_type query)>;
     // contains the point, its data, and its distance to the query point
     struct Neighbor {
-        const Eigen::Vector3f& point;
+        const Eigen::Vector3f point;
         typename F::point_data_type data;
         float weight;
         float distance;
@@ -78,7 +83,7 @@ void VoxelMap<F>::extend(F& points) {
     const double resolution = std::sqrt(voxel_size_ * voxel_size_ / static_cast<double>(voxel_capacity_));
     for(size_t i = 0; i < points.size(); ++i) {
         const auto& [point, data] = points[i];
-        const Eigen::Vector3i& voxel = util::point_to_voxel(point, voxel_size_);
+        const Eigen::Vector3i voxel = util::point_to_voxel(point, voxel_size_);
         auto search = map_.find(voxel);
         if(search == map_.end()) {
             auto [it, _] = map_.emplace(std::piecewise_construct,
@@ -91,19 +96,18 @@ void VoxelMap<F>::extend(F& points) {
 }
 
 template<typename F>
-const std::pair<std::span<const Eigen::Vector3f>, std::span<const typename F::point_data_type>> VoxelMap<F>::cloud() const noexcept {
-    static std::vector<Eigen::Vector3f> points;
-    static std::vector<typename F::point_data_type> point_data;
-    points.clear();
-    point_data.clear();
-    points.reserve(map_.size() * voxel_capacity_);
-    point_data.reserve(map_.size() * voxel_capacity_);
+const VoxelMap<F>::Cloud& VoxelMap<F>::cloud() const noexcept {
+    static VoxelMap<F>::Cloud cloud;
+    cloud.points.clear();
+    cloud.data.clear();
+    cloud.points.reserve(map_.size() * voxel_capacity_);
+    cloud.data.reserve(map_.size() * voxel_capacity_);
     for(auto it = map_.begin(); it != map_.end(); ++it) {
         const auto& [_, voxel] = *it;
-        points.insert(points.end(), voxel.points.cbegin(), voxel.points.cend());
-        point_data.insert(point_data.end(), voxel.point_data.cbegin(), voxel.point_data.cend());
+        cloud.points.insert(cloud.points.end(), voxel.points.cbegin(), voxel.points.cend());
+        cloud.data.insert(cloud.data.end(), voxel.point_data.cbegin(), voxel.point_data.cend());
     }
-    return std::make_pair(points, point_data);
+    return cloud;
 }
 
 template<typename F>
@@ -141,14 +145,14 @@ std::optional<typename VoxelMap<F>::Neighbor> VoxelMap<F>::closest(const Eigen::
     };
     // find the closest match that respects the provided predicate
     if(map_.empty()) return std::nullopt;
-    const Eigen::Vector3i& voxel = util::point_to_voxel(query, voxel_size_);
+    Eigen::Vector3i voxel = util::point_to_voxel(query, voxel_size_);
     std::optional<typename VoxelMap<F>::Neighbor> closest = std::nullopt;
     std::for_each(voxel_shifts.cbegin(), voxel_shifts.cend(), [&](const auto& voxel_shift) {
         const Eigen::Vector3i& query_voxel = voxel + voxel_shift;
         auto search = map_.find(query_voxel);
         if(search == map_.end()) return;
         const VoxelData<F>& voxel = search.value();
-        std::optional<std::pair<const Eigen::Vector3f&, typename F::point_data_type>> neighbor;
+        std::optional<std::pair<const Eigen::Vector3f, typename F::point_data_type>> neighbor;
         for(size_t i = 0; i < voxel.points.size(); ++i) {
             if(!(pred)(voxel.point_data[i], data)) continue;
             if(!neighbor || ((neighbor->first - query).norm() >= (voxel.points[i] - query).norm())) {

@@ -34,15 +34,7 @@ public:
         } registration;
     };
 public:
-    explicit OdometrySystem(const Config& config) : config_(config),
-        map_(config.map.max_distance, config.map.voxel_size, config.map.voxel_capacity),
-        threshold_(config.map.max_distance, config.threshold.threshold_initial, config.threshold.min_motion) {
-        size_t max_threads = config.registration.max_threads > 0 ? \
-            config.registration.max_threads : \
-            tbb::this_task_arena::max_concurrency();
-        volatile static const tbb::global_control _ = tbb::global_control( // NOTE: static storage type is required here
-            tbb::global_control::max_allowed_parallelism, static_cast<size_t>(max_threads));
-    }
+    explicit OdometrySystem(const Config& config);
 public:
     OdometrySystem() = delete;
     OdometrySystem(const OdometrySystem&) = delete;
@@ -55,7 +47,7 @@ public:
     // main registration function
     const Sophus::SE3f& register_to_map(util::CloudView&& points) noexcept;
     // returns the current local map
-    inline std::pair<std::span<const Eigen::Vector3f>, std::span<const Semantics>> cloud() const noexcept { return map_.cloud(); }
+    const VoxelMap<Wrapper>::Cloud& cloud() const noexcept { return map_.cloud(); }
 private:
     class AdaptiveThreshold {
     public:

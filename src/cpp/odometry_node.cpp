@@ -138,14 +138,19 @@ protected:
                     std_msgs::msg::Header local_map_header;
                     local_map_header.stamp = header.stamp;
                     local_map_header.frame_id = OdometryNode::LOCAL_MAP_FRAME;
-                    const auto& [points, data] = system_.cloud();
-                    util::Cloud out{points};
-                    static std::vector<uint8_t> semantics;
-                    semantics.clear();
-                    semantics.reserve(data.size());
-                    std::transform(data.begin(), data.end(), std::back_inserter(semantics), 
-                        [](const OdometrySystem::Semantics& p) { return p.first; });
-                    out.add_field("class", semantics);
+                    const auto& local_map = system_.cloud();
+                    util::Cloud out{local_map.points};
+                    { // TODO: lots of copying going on here, should be improved
+                        static std::vector<uint8_t> semantics;
+                        semantics.clear();
+                        semantics.reserve(local_map.data.size());
+                        std::transform(local_map.data.begin(), local_map.data.end(), std::back_inserter(semantics), 
+                            [](const OdometrySystem::Semantics& p) { return p.first; });
+                        out.add_field<uint8_t>("class", semantics);
+                        // std::vector<size_t> counts(5, 0);
+                        // for(size_t x : semantics) { ++counts[x]; }
+                        // for(size_t i = 0; i < counts.size(); ++i) { std::cout << i << ": " << counts[i] << std::endl; }
+                    }
                     local_map_publisher_->publish(std::move(out.message(local_map_header)));
                     local_map_last_publication = steady_clock::now();
                 }
