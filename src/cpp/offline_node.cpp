@@ -175,14 +175,16 @@ public:
         topic_scan_->cancel();
         topic_scan_ = nullptr;
 
-        // callback for exiting when all tracked topics are closed
-        topic_poll_ = this->create_wall_timer(
-            std::chrono::seconds(5),
-            std::bind(&OfflineNode::poll, this));
-        
-        while(rclcpp::ok() && !shutdown_.load(std::memory_order_acquire)) {
-            rclcpp::spin_some(this->shared_from_this());
-            rate.sleep();
+        if(rclcpp::ok()) {
+            // callback for exiting when all tracked topics are closed
+            topic_poll_ = this->create_wall_timer(
+                std::chrono::seconds(5),
+                std::bind(&OfflineNode::poll, this));
+            
+            while(rclcpp::ok() && !shutdown_.load(std::memory_order_acquire)) {
+                rclcpp::spin_some(this->shared_from_this());
+                rate.sleep();
+            }
         }
     }
 private:

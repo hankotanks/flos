@@ -98,6 +98,7 @@ protected:
     }
 };
 
+// TODO: this node specifically causes segfaults on SIGINT
 int main(int argc, char* argv[]) {
     rclcpp::init(argc, argv);
     auto node = std::make_shared<SegmentationNode>();
