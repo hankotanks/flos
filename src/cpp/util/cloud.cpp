@@ -57,6 +57,11 @@ CloudView::CloudView(const std::shared_ptr<const Descriptor>& desc) noexcept : d
     }
 }
 
+CloudView::CloudView(std::span<const Eigen::Vector3f> points) noexcept : CloudView::CloudView() {
+    points_.reserve(points.size());
+    points_.insert(points_.end(), points.begin(), points.end());
+}
+
 struct FieldReader {
     template<typename... T>
     using It_ = std::variant<sensor_msgs::PointCloud2ConstIterator<T>...>;

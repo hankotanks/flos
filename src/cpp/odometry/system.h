@@ -8,6 +8,7 @@
 #include <tbb/task_arena.h>
 // package
 #include "voxel_map.h"
+#include "wrapper.h"
 // util
 #include "util/cloud.h"
 
@@ -50,10 +51,11 @@ public:
     OdometrySystem& operator=(OdometrySystem&&) = delete;
     ~OdometrySystem() = default;
 public:
+    using Semantics = std::pair<uint8_t, float>;
     // main registration function
     const Sophus::SE3f& register_to_map(util::CloudView&& points) noexcept;
     // returns the current local map
-    inline const util::CloudView& cloud() const noexcept { return map_.cloud(); }
+    inline std::pair<std::span<const Eigen::Vector3f>, std::span<const Semantics>> cloud() const noexcept { return map_.cloud(); }
 private:
     class AdaptiveThreshold {
     public:
@@ -75,40 +77,10 @@ private:
         size_t num_sample_{1};
     };
 private:
-    struct Semantics {
-        std::span<const uint8_t> field_class;
-        std::span<const float> field_confidence;
-        Semantics(const util::CloudView& points);
-    };
-    // forward declaration
-    struct Wrapper;
-    // voxel belief
-    struct Belief: public VoxelData<Wrapper> {
-        // IGNORE = 0
-        // GROUND = 1
-        // SHRUB = 2
-        // STEM = 3
-        // CANOPY = 4
-        std::array<double, 5> belief; 
-        virtual void update(const Wrapper& points, size_t i) noexcept override final;
-    };
-
-    struct Wrapper : public Points<Wrapper, Belief> {
-        friend Belief;
-        friend OdometrySystem;
-        Wrapper(util::CloudView& points) : points_(points), semantics_(points) { /* STUB */ }
-        virtual size_t size() const noexcept override final { return points_.size(); }
-        virtual util::CloudView::Point operator[](size_t i) noexcept override final { return points_[i]; }
-        virtual util::CloudView::ConstPoint operator[](size_t i) const noexcept override final { return points_[i]; }
-    private:
-        util::CloudView& points_;
-        Semantics semantics_;
-    };
-private:
     // constructs and solves the linear system, returning dx
-    Eigen::Matrix<float, 6, 1> solve(const util::CloudView& points, double sigma, const OdometrySystem::Semantics& semantics) const noexcept;
+    Eigen::Matrix<float, 6, 1> solve(const Wrapper& points, double sigma) const noexcept;
     // returns pose and deviation respectively
-    std::pair<Sophus::SE3f, Sophus::SE3f> align(util::CloudView& points) const;
+    std::pair<Sophus::SE3f, Sophus::SE3f> align(Wrapper& points) const;
 private:
     Config config_;
     // NOTE: see note in segmentation/node.h

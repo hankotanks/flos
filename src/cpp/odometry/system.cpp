@@ -56,20 +56,7 @@ void deskew_frame(util::CloudView& points, const Sophus::SE3f& motion) noexcept 
         deskew_frame_inner<double>(points, *field_name, motion);
     }
 }
-
-// TODO: Move this into /util
-void transform(util::CloudView& cloud, const Sophus::SE3f& t) {
-    for(size_t i = 0; i < cloud.size(); ++i) {
-        cloud[i].point() = t * cloud[i].point();
-    }
-}
 } // private scope
-
-void OdometrySystem::Belief::update(const Wrapper& points, size_t i) noexcept {
-    size_t field_class = points.semantics_.field_class[i];
-    double field_confidence = points.semantics_.field_confidence[i];
-    // TODO: update belief
-}
 
 const Sophus::SE3f& OdometrySystem::register_to_map(util::CloudView&& points) noexcept {
     // deskewing
@@ -77,8 +64,9 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::CloudView&& points) no
     // downsample incoming points to obtain keypoints and the preprocessed frame
     util::CloudView points_kp{points};
     util::voxel_downsample(points_kp, config_.map.voxel_size * OdometrySystem::VOXEL_SIZE_SCALAR);
+    Wrapper points_kp_wrapper{points_kp};
     // compute pose w/ ICP
-    const auto [pose, deviation] = OdometrySystem::align(points_kp);
+    const auto [pose, deviation] = OdometrySystem::align(points_kp_wrapper);
     threshold_.update(deviation);
     // append points to map
     Wrapper points_wrapper{points}; // TODO: Semantics is constructed twice, once in OdometrySystem::align and once in this
@@ -103,44 +91,38 @@ void OdometrySystem::AdaptiveThreshold::update(const Sophus::SE3f& deviation) no
     }
 }
 
-OdometrySystem::Semantics::Semantics(const util::CloudView& points) : 
-    field_class(points.field<uint8_t>("class")),
-    field_confidence(points.field<float>("confidence")) { /* STUB */ }
-
-Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const util::CloudView& points, double sigma, const OdometrySystem::Semantics& semantics) const noexcept {
-    using Correspondences = tbb::concurrent_vector<std::pair<util::CloudView::ConstPoint, util::CloudView::ConstPoint>>;
+Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const Wrapper& points, double sigma) const noexcept {
+    using Correspondence = std::tuple<Eigen::Vector3f, Semantics, VoxelMap<Wrapper>::Neighbor>;
 
     // this predicate only allows matching between points with the same semantic information
-    VoxelMap<OdometrySystem::Wrapper>::Predicate pred;
+    VoxelMap<Wrapper>::Predicate pred;
     if(config_.registration.correspondence_restriction) {
-        pred = [&semantics](const util::CloudView::ConstPoint& point, const util::CloudView::ConstPoint& query) -> bool {
-            return semantics.field_class[point.index] == semantics.field_class[query.index];
-        };
+        pred = [](OdometrySystem::Semantics point, OdometrySystem::Semantics query) -> bool { return point.first == query.first; };
     } else {
         // TODO: it would be better to not supply a predicate to VoxelMap::closest altogether, in case the compiler can't optimize
-        pred = [](const util::CloudView::ConstPoint&, const util::CloudView::ConstPoint&) { return true; };
+        pred = [](OdometrySystem::Semantics, OdometrySystem::Semantics) { return true; };
     }
 
-    Correspondences correspondences;
+    tbb::concurrent_vector<Correspondence> correspondences;
     correspondences.reserve(points.size());
     double correspondence_distance_max = sigma * config_.registration.correspondence_multiplier;
     tbb::parallel_for(tbb::blocked_range<size_t>{0, points.size()}, [&](const tbb::blocked_range<size_t>& range) {
         for(size_t i = range.begin(); i < range.end(); ++i) {
-            const auto& maybe = map_.closest(points[i], pred);
+            const auto& [point, point_data] = points[i];
+            const auto& maybe = map_.closest(point, point_data, pred);
             if(maybe) {
-                const auto& [neighbor, distance] = *maybe;
-                if(distance >= correspondence_distance_max) continue;
-                correspondences.emplace_back(points[i], neighbor);
+                const auto& neighbor = *maybe;
+                if(neighbor.distance >= correspondence_distance_max) continue;
+                correspondences.emplace_back(point, point_data, neighbor);
             }
         }
     });
 
-    auto compute_jacobian_and_residual = [](const auto &correspondence) {
-        const auto& [source, target] = correspondence;
-        const Eigen::Vector3f residual = source.point() - target.point();
+    auto compute_jacobian_and_residual = [](const Eigen::Vector3f& source, const Eigen::Vector3f& target) {
+        const Eigen::Vector3f residual = source - target;
         Eigen::Matrix<float, 3, 6> J_r;
         J_r.block<3, 3>(0, 0) = Eigen::Matrix3f::Identity();
-        J_r.block<3, 3>(0, 3) = -1.0 * Sophus::SO3f::hat(source.point());
+        J_r.block<3, 3>(0, 3) = -1.0 * Sophus::SO3f::hat(source);
         return std::make_tuple(J_r, residual);
     };
 
@@ -156,18 +138,17 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const util::CloudView& points, 
         return (sigma * sigma) / ((sigma + residual2) * (sigma + residual2));
     };
 
-    using correspondence_iterator = Correspondences::const_iterator;
+    using correspondence_iterator = tbb::concurrent_vector<Correspondence>::const_iterator;
     const auto &[JTJ, JTr] = tbb::parallel_reduce(
         tbb::blocked_range<correspondence_iterator>{correspondences.cbegin(), correspondences.cend()},
         System(Eigen::Matrix<float, 6, 6>::Zero(), Eigen::Matrix<float, 6, 1>::Zero()),
         [&](const tbb::blocked_range<correspondence_iterator>& range, System J) -> System {
             return std::transform_reduce(
-                range.begin(), range.end(), J, sum_linear_systems, [&](const auto& correspondence) {
-                    const auto& [J_r, residual] = compute_jacobian_and_residual(correspondence);
-                    const util::CloudView::ConstPoint& point = correspondence.first;
+                range.begin(), range.end(), J, sum_linear_systems, [&](const Correspondence& correspondence) {
+                    const auto& [source, data, target] = correspondence;
+                    const auto& [J_r, residual] = compute_jacobian_and_residual(source, target.point);
                     // weight the kernel based on confidence from the segmentation model
-                    float w = config_.registration.confidence_weighting ? semantics.field_confidence[point.index] : 1.0;
-                    w *= weight(residual.squaredNorm());
+                    float w = (config_.registration.confidence_weighting ? target.weight : 1.0) * weight(residual.squaredNorm());
                     return System(J_r.transpose() * w * J_r, J_r.transpose() * w * residual);
                 });
         }, sum_linear_systems);
@@ -175,24 +156,23 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const util::CloudView& points, 
     return JTJ.ldlt().solve(-JTr);
 }
 
-std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(util::CloudView& points) const {
+std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points) const {
     // determine starting point
     const auto initial_guess = last_pose_ * last_delta_;
     if(map_.empty()) return std::make_pair(initial_guess, Sophus::SE3f{});
     // compute adaptive threshold
     double sigma = threshold_.compute();
     // transform by initial_guess (future-proofing... this is currently always identity)
-    transform(points, initial_guess);
+    points.transform(initial_guess);
     // retrieve fields ahead of time to avoid repeated queries
-    Semantics semantics{points};
     // perform ICP
     Sophus::SE3f T_icp{};
     for(size_t j = 0; j < config_.registration.max_iterations; ++j) {
         // Equation (11)
-        const Eigen::Matrix<float, 6, 1> dx = OdometrySystem::solve(points, sigma, semantics);
+        const Eigen::Matrix<float, 6, 1> dx = OdometrySystem::solve(points, sigma);
         const Sophus::SE3f est = Sophus::SE3f::exp(dx);
         // Equation (12)
-        transform(points, est);
+        points.transform(est);
         // Update iterations
         T_icp = est * T_icp;
         // Termination criteria

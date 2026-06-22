@@ -7,6 +7,7 @@
 #include "util/rosargs.h"
 #include "util/buffer_node.h"
 #include "util/cloud.h"
+#include "util/profiler.h"
 
 // PARAMETERS
 // debug
@@ -21,9 +22,11 @@
 // sub: incoming_points_topic (default: $/raw/points) [PointCloud2]
 // pub: $/inference [PointCloud2]
 
-class SegmentationNode : public BufferNode<std::pair<util::Cloud, std_msgs::msg::Header>, sensor_msgs::msg::PointCloud2> {
+class SegmentationNode : 
+    util::Profiler, 
+    public BufferNode<std::pair<util::Cloud, std_msgs::msg::Header>, sensor_msgs::msg::PointCloud2> {
 public:
-    explicit SegmentationNode() : 
+    explicit SegmentationNode() : util::Profiler(NODE_NAME),
         BufferNode("incoming_points_topic", "/" PROJECT_NAME "/raw/points"),
         config_(this),
         system_(config_.config) {
@@ -78,8 +81,10 @@ protected:
             auto [cloud, header] = std::move(*maybe);
             static_assert(std::is_same_v<decltype(cloud), util::Cloud>);
             static_assert(std::is_same_v<decltype(header), std_msgs::msg::Header>);
-            // perform the inference
-            model.infer(cloud, true);
+            { // perform the inference
+                util::Profiler profiler("inference", this);
+                model.infer(cloud, true);
+            }
             // publish the result
             outgoing_points_publisher_->publish(std::move(cloud.message(header)));
         }

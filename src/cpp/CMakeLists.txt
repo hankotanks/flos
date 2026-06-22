@@ -30,6 +30,7 @@ configure_node(segmentation_node
     util/voxel.h
     util/stl_vector_eigen.h
     util/rosargs.h
+    util/profiler.h
   LIBRARIES
     Eigen3::Eigen
     pybind11::embed
@@ -44,11 +45,14 @@ configure_node(odometry_node
   SOURCES
     odometry_node.cpp
     odometry/system.cpp
+    odometry/wrapper.cpp
     util/cloud.cpp
     util/voxel.cpp
   HEADERS
     odometry/voxel_map.h
     odometry/system.h
+    odometry/frame.h
+    odometry/wrapper.h
     util/cloud.h
     util/voxel.h
     util/profiler.h

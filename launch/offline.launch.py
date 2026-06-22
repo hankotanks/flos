@@ -53,6 +53,7 @@ def setup(context, *args, **kwargs):
         executable = "odometry_node",
         emulate_tty = True,
         output = 'screen',
+        # prefix = ['gdb -ex run --args'],
         parameters = [
             {
                 'use_sim_time': True,

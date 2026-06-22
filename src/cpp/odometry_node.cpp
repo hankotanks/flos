@@ -90,9 +90,8 @@ protected:
             auto [cloud, header] = std::move(*maybe);
             // perform registration
             Sophus::SE3f pose;
-            {   
-                util::Profiler* this_profiler = this;
-                util::Profiler profiler("registration", this_profiler);
+            {
+                util::Profiler profiler("registration", this);
                 pose = system_.register_to_map(std::move(cloud));
             }
             { // send the transformation from the lidar frame to the local map frame
@@ -139,8 +138,15 @@ protected:
                     std_msgs::msg::Header local_map_header;
                     local_map_header.stamp = header.stamp;
                     local_map_header.frame_id = OdometryNode::LOCAL_MAP_FRAME;
-                    const util::CloudView& cloud = system_.cloud();
-                    local_map_publisher_->publish(std::move(cloud.message(local_map_header)));
+                    const auto& [points, data] = system_.cloud();
+                    util::Cloud out{points};
+                    static std::vector<uint8_t> semantics;
+                    semantics.clear();
+                    semantics.reserve(data.size());
+                    std::transform(data.begin(), data.end(), std::back_inserter(semantics), 
+                        [](const OdometrySystem::Semantics& p) { return p.first; });
+                    out.add_field("class", semantics);
+                    local_map_publisher_->publish(std::move(out.message(local_map_header)));
                     local_map_last_publication = steady_clock::now();
                 }
             }

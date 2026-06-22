@@ -47,8 +47,9 @@ public:
     // forward declaration of Cloud::Point_, which is wrapped by Point and ConstPoint
     template<typename C> class Point_;
 public:
-    CloudView() = default;
+    CloudView() : desc_(std::make_shared<Descriptor>()) { /* STUB */ }
     CloudView(const std::shared_ptr<const Descriptor>& desc) noexcept;
+    CloudView(std::span<const Eigen::Vector3f> points) noexcept;
     CloudView(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg) noexcept;
     CloudView(const sensor_msgs::msg::PointCloud2::SharedPtr& msg) noexcept;
     CloudView(const CloudView& other) noexcept = default;
@@ -165,7 +166,8 @@ protected:
 
 class Cloud : public CloudView {
 public:
-    Cloud() = default;
+    Cloud() : CloudView() { /* STUB */ };
+    Cloud(std::span<const Eigen::Vector3f> points) noexcept : CloudView(points) { /* STUB */ }
     Cloud(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg) noexcept : CloudView(msg) { /* STUB */ }
     Cloud(const sensor_msgs::msg::PointCloud2::SharedPtr& msg) noexcept : CloudView(msg) { /* STUB */ }
     Cloud(const Cloud& other) = delete;
