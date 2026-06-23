@@ -26,6 +26,7 @@ class Config:
             'max_distance': (float, False), 
             'confidence_weighting': (bool, False), 
             'correspondence_restriction': (bool, False), 
+            'correspondence_with_voxel_belief': (bool, False),
             'voxel_capacity': (int, False), 
             'max_iterations': (int, False), 
             'max_threads': (int, False), 

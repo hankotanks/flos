@@ -27,6 +27,7 @@ public:
         struct {
             bool confidence_weighting{true};
             bool correspondence_restriction{true};
+            bool correspondence_with_voxel_belief{false};
             size_t max_iterations{500};
             size_t max_threads{0};
             double convergence_criterion{0.0001};

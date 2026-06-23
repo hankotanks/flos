@@ -106,10 +106,19 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const Wrapper& points, double s
     // this predicate only allows matching between points with the same semantic information
     VoxelMap<Wrapper>::Predicate pred;
     if(config_.registration.correspondence_restriction) {
-        pred = [](OdometrySystem::Semantics point, OdometrySystem::Semantics query) -> bool { return point.first == query.first; };
+        if(config_.registration.correspondence_with_voxel_belief) {
+            pred = [](const Belief& data, OdometrySystem::Semantics, OdometrySystem::Semantics query) -> bool { 
+                size_t voxel_class = std::distance(data.distribution.begin(),
+                    std::max_element(data.distribution.begin(), data.distribution.end()));
+                return voxel_class == query.first;
+            };
+        } else {
+            pred = [](const Belief&, OdometrySystem::Semantics point, OdometrySystem::Semantics query) -> bool { 
+                return point.first == query.first;
+            };
+        }
     } else {
-        // TODO: it would be better to not supply a predicate to VoxelMap::closest altogether, in case the compiler can't optimize
-        pred = [](OdometrySystem::Semantics, OdometrySystem::Semantics) { return true; };
+        pred = [](const Belief&, OdometrySystem::Semantics, OdometrySystem::Semantics) { return true; };
     }
 
     tbb::concurrent_vector<Correspondence> correspondences;
@@ -136,15 +145,10 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const Wrapper& points, double s
     };
 
     using System = std::pair<Eigen::Matrix<float, 6, 6>, Eigen::Matrix<float, 6, 1>>;
-
-    auto sum_linear_systems = [](System a, const System &b) {
+    auto system_sum = [](System a, const System &b) {
         a.first += b.first;
         a.second += b.second;
         return a;
-    };
-
-    auto weight = [&](const float &residual2) {
-        return (sigma * sigma) / ((sigma + residual2) * (sigma + residual2));
     };
 
     using correspondence_iterator = tbb::concurrent_vector<Correspondence>::const_iterator;
@@ -153,14 +157,14 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const Wrapper& points, double s
         System(Eigen::Matrix<float, 6, 6>::Zero(), Eigen::Matrix<float, 6, 1>::Zero()),
         [&](const tbb::blocked_range<correspondence_iterator>& range, System J) -> System {
             return std::transform_reduce(
-                range.begin(), range.end(), J, sum_linear_systems, [&](const Correspondence& correspondence) {
+                range.begin(), range.end(), J, system_sum, [&](const Correspondence& correspondence) {
                     const auto& [source, data, target] = correspondence;
                     const auto& [J_r, residual] = compute_jacobian_and_residual(source, target.point);
                     // weight the kernel based on confidence from the segmentation model
-                    float w = (config_.registration.confidence_weighting ? target.weight : 1.0) * weight(residual.squaredNorm());
+                    float w = config_.registration.confidence_weighting ? target.weight : 1.0;
                     return System(J_r.transpose() * w * J_r, J_r.transpose() * w * residual);
                 });
-        }, sum_linear_systems);
+        }, system_sum);
 
     return JTJ.ldlt().solve(-JTr);
 }

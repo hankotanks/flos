@@ -39,7 +39,7 @@ public:
     const Cloud& cloud() const noexcept;
 public:
     // a predicate can be supplied taking 2 points' data and returning a boolean, if truthy, the match is preserved
-    using Predicate = std::function<bool(typename F::point_data_type point, typename F::point_data_type query)>;
+    using Predicate = std::function<bool(const typename F::voxel_data_type& data, typename F::point_data_type point, typename F::point_data_type query)>;
     // contains the point, its data, and its distance to the query point
     struct Neighbor {
         const Eigen::Vector3f point;
@@ -92,6 +92,10 @@ void VoxelMap<F>::extend(F& points) {
             search = it;
         }
         search.value().add(resolution, point, data);
+    }
+    // update the VoxelData
+    for(auto it = map_.begin(); it != map_.end(); ++it) {
+        it.value().data.finish();
     }
 }
 
@@ -154,7 +158,7 @@ std::optional<typename VoxelMap<F>::Neighbor> VoxelMap<F>::closest(const Eigen::
         const VoxelData<F>& voxel = search.value();
         std::optional<std::pair<const Eigen::Vector3f, typename F::point_data_type>> neighbor;
         for(size_t i = 0; i < voxel.points.size(); ++i) {
-            if(!(pred)(voxel.point_data[i], data)) continue;
+            if(!(pred)(voxel.data, voxel.point_data[i], data)) continue;
             if(!neighbor || ((neighbor->first - query).norm() >= (voxel.points[i] - query).norm())) {
                 neighbor.emplace(voxel.points[i], voxel.point_data[i]);
             }

@@ -182,6 +182,7 @@ OdometryNode::Config::Config(rclcpp::Node* node) {
     // registration
     util::opt_param<bool>(node, config.registration.confidence_weighting, "confidence_weighting");
     util::opt_param<bool>(node, config.registration.correspondence_restriction, "correspondence_restriction");
+    util::opt_param<bool>(node, config.registration.correspondence_with_voxel_belief, "correspondence_with_voxel_belief");
     util::opt_param<size_t>(node, config.registration.max_iterations, "max_iterations");
     util::opt_param<size_t>(node, config.registration.max_threads, "max_threads");
     util::opt_param<double>(node, config.registration.convergence_criterion, "convergence_criterion");
@@ -196,6 +197,7 @@ OdometryNode::Config::Config(rclcpp::Node* node) {
             "\tmin_motion: " << config.threshold.min_motion << "," << std::endl <<
             "\tconfidence_weighting: " << config.registration.confidence_weighting << "," << std::endl <<
             "\tcorrespondence_restriction: " << config.registration.correspondence_restriction << "," << std::endl <<
+            "\tcorrespondence_with_voxel_belief: " << config.registration.correspondence_with_voxel_belief << "," << std::endl <<
             "\tmax_iterations: " << config.registration.max_iterations << "," << std::endl <<
             "\tmax_threads: " << config.registration.max_threads << "," << std::endl <<
             "\tconvergence_criterion: " << config.registration.convergence_criterion << "," << std::endl <<

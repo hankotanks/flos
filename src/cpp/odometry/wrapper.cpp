@@ -2,9 +2,11 @@
 
 Belief::Belief() { 
     // populate will an flat distribution
-    belief.fill(std::log(1.f / static_cast<float>(CLASS_COUNT))); 
+    belief.fill(std::log(1.f / static_cast<float>(CLASS_COUNT)));
+    // NOTE: distribution will be populated by the VoxelMap::update, so we don't need to worry about it
 }
 
+// TODO: This is NOT final
 void Belief::update(const Semantics& data) noexcept {
     const auto& [point_class, point_confidence] = data;
     // TODO: implement
@@ -15,9 +17,33 @@ void Belief::update(const Semantics& data) noexcept {
     }
 }
 
+// TODO: This is NOT final
 double Belief::weight(const Semantics& data) const noexcept {
-    // TODO: implement
-    return 1.0;
+    // compute the distribution of the query
+    std::array<float, CLASS_COUNT> query = [&data]() {
+        std::array<float, CLASS_COUNT> b;
+        const auto& [point_class, point_confidence] = data;
+        float other_confidence = (1.f - point_confidence) / (static_cast<float>(CLASS_COUNT) - 1.0);
+        for(size_t i = 0; i < CLASS_COUNT; ++i) {
+            b[i] = (i == point_class) ? point_confidence : other_confidence;
+            b[i] = std::max(b[i], 1e-6f);
+        }
+        return std::move(b);
+    }();
+    double w = 0.0;
+    // NOTE: currently, dot product
+    // consider KL or Jensen-Shannon
+    for(size_t i = 0; i < CLASS_COUNT; ++i) w += query[i] * distribution[i];
+    return w;
+}
+
+void Belief::finish() noexcept {
+    float maxima = this->belief[0];
+    for(size_t i = 1; i < CLASS_COUNT; ++i) maxima = std::max(maxima, belief[i]);
+    for(size_t i = 0; i < CLASS_COUNT; ++i) distribution[i] = std::exp(belief[i] - maxima);
+    float sum = distribution[0];
+    for(size_t i = 1; i < CLASS_COUNT; ++i) sum += distribution[i];
+    for(size_t i = 0; i < CLASS_COUNT; ++i) distribution[i] /= sum;
 }
 
 Wrapper::Wrapper(util::CloudView& points) : 

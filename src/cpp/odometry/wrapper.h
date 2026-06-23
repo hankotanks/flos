@@ -18,10 +18,12 @@ struct Belief: public Voxel<Wrapper, Semantics> {
     Belief();
     virtual void update(const Semantics& data) noexcept override final;
     virtual double weight(const Semantics& data) const noexcept override final;
-private:
+    virtual void finish() noexcept override final;
+public:
     static constexpr size_t CLASS_COUNT{5};
     // IGNORE = 0, GROUND = 1, SHRUB = 2, STEM = 3, CANOPY = 4
     std::array<float, CLASS_COUNT> belief; 
+    std::array<float, CLASS_COUNT> distribution;
 };
 
 struct Wrapper : public Frame<Wrapper, Semantics, Belief> {
