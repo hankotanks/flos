@@ -107,18 +107,18 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const Wrapper& points, double s
     VoxelMap<Wrapper>::Predicate pred;
     if(config_.registration.correspondence_restriction) {
         if(config_.registration.correspondence_with_voxel_belief) {
-            pred = [](const Belief& data, OdometrySystem::Semantics, OdometrySystem::Semantics query) -> bool { 
-                size_t voxel_class = std::distance(data.distribution.begin(),
-                    std::max_element(data.distribution.begin(), data.distribution.end()));
-                return voxel_class == query.first;
+            pred = [](const Belief& data, Semantics, Semantics query) -> bool { 
+                size_t voxel_class = std::distance(data.confidence.begin(),
+                    std::max_element(data.confidence.begin(), data.confidence.end()));
+                return voxel_class == query.prediction;
             };
         } else {
-            pred = [](const Belief&, OdometrySystem::Semantics point, OdometrySystem::Semantics query) -> bool { 
-                return point.first == query.first;
+            pred = [](const Belief&, Semantics point, Semantics query) -> bool { 
+                return point.prediction == query.prediction;
             };
         }
     } else {
-        pred = [](const Belief&, OdometrySystem::Semantics, OdometrySystem::Semantics) { return true; };
+        pred = [](const Belief&, Semantics, Semantics) { return true; };
     }
 
     tbb::concurrent_vector<Correspondence> correspondences;

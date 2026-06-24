@@ -83,6 +83,10 @@ public:
     std::span<const T> field(const std::string& name) const;
     template<typename T>
     std::span<T> field(const std::string& name);
+    template<typename T>
+    std::optional<std::span<const T>> field_opt(const std::string& name) const noexcept;
+    template<typename T>
+    std::optional<std::span<T>> field_opt(const std::string& name) noexcept;
     // add a new point from another cloud with the same set of scalar fields
     Point add_point(const ConstPoint& point) noexcept;
     // python bindings

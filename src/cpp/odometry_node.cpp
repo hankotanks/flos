@@ -145,7 +145,7 @@ protected:
                         semantics.clear();
                         semantics.reserve(local_map.data.size());
                         std::transform(local_map.data.begin(), local_map.data.end(), std::back_inserter(semantics), 
-                            [](const OdometrySystem::Semantics& p) { return p.first; });
+                            [](const Semantics& p) { return p.prediction; });
                         out.add_field<uint8_t>("class", semantics);
                         // std::vector<size_t> counts(5, 0);
                         // for(size_t x : semantics) { ++counts[x]; }

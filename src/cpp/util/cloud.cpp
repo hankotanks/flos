@@ -257,6 +257,38 @@ template std::span<uint32_t> CloudView::field(const std::string&);
 template std::span<float> CloudView::field(const std::string&);
 template std::span<double> CloudView::field(const std::string&);
 
+
+template<typename T>
+std::optional<std::span<const T>> CloudView::field_opt(const std::string& name) const noexcept {
+    if(desc_->names_.count(name) == 0) return std::nullopt;
+    return std::get<std::vector<T>>(fields_[desc_->names_.at(name)].data_);
+}
+
+template std::optional<std::span<const int8_t>>  CloudView::field_opt(const std::string&) const noexcept;
+template std::optional<std::span<const uint8_t>> CloudView::field_opt(const std::string&) const noexcept;
+template std::optional<std::span<const int16_t>> CloudView::field_opt(const std::string&) const noexcept;
+template std::optional<std::span<const uint16_t>> CloudView::field_opt(const std::string&) const noexcept;
+template std::optional<std::span<const int32_t>> CloudView::field_opt(const std::string&) const noexcept;
+template std::optional<std::span<const uint32_t>> CloudView::field_opt(const std::string&) const noexcept;
+template std::optional<std::span<const float>> CloudView::field_opt(const std::string&) const noexcept;
+template std::optional<std::span<const double>> CloudView::field_opt(const std::string&) const noexcept;
+
+
+template<typename T>
+std::optional<std::span<T>> CloudView::field_opt(const std::string& name) noexcept {
+    if(desc_->names_.count(name) == 0) return std::nullopt;
+    return std::get<std::vector<T>>(fields_[desc_->names_.at(name)].data_);
+}
+
+template std::optional<std::span<int8_t>>  CloudView::field_opt(const std::string&) noexcept;
+template std::optional<std::span<uint8_t>> CloudView::field_opt(const std::string&) noexcept;
+template std::optional<std::span<int16_t>> CloudView::field_opt(const std::string&) noexcept;
+template std::optional<std::span<uint16_t>> CloudView::field_opt(const std::string&) noexcept;
+template std::optional<std::span<int32_t>> CloudView::field_opt(const std::string&) noexcept;
+template std::optional<std::span<uint32_t>> CloudView::field_opt(const std::string&) noexcept;
+template std::optional<std::span<float>> CloudView::field_opt(const std::string&) noexcept;
+template std::optional<std::span<double>> CloudView::field_opt(const std::string&) noexcept;
+
 CloudView::Point CloudView::add_point(const CloudView::ConstPoint& point) noexcept {
     assert(desc_ == point.owner_->desc_);
     assert(fields_.size() == point.owner_->fields_.size());

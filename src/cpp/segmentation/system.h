@@ -10,8 +10,7 @@ public:
     struct Config {
         double voxel_size{1.0};
         double max_distance{25.0};
-        bool ignore_canopy{true};
-        bool ignore_shrubs{true};
+        std::set<size_t> ignore{0, 2, 4}; // NOTE: by default, ignore shrubs and canopy
     };
 public:
     class Model {

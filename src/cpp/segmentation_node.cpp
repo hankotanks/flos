@@ -110,13 +110,20 @@ int main(int argc, char* argv[]) {
 SegmentationNode::Config::Config(rclcpp::Node* node) {
     util::opt_param<double>(node, config.voxel_size, "voxel_size");
     util::opt_param<double>(node, config.max_distance, "max_distance");
-    util::opt_param<bool>(node, config.ignore_canopy, "ignore_canopy");
-    util::opt_param<bool>(node, config.ignore_shrubs, "ignore_shrubs");
+    // TODO: I would like my system to be class-name agnostic, so I've moved these parameters here
+    // however, the actual class numbers should not be hard-coded...
+    // this is a problem for a different day
+    bool ignore_canopy = config.ignore.count(4) > 0;
+    bool ignore_shrubs = config.ignore.count(2) > 0;
+    util::opt_param<bool>(node, ignore_canopy, "ignore_canopy");
+    util::opt_param<bool>(node, ignore_shrubs, "ignore_shrubs");
+    ignore_canopy ? (config.ignore.insert(4), 0) : config.ignore.erase(4);
+    ignore_shrubs ? (config.ignore.insert(2), 0) : config.ignore.erase(2);
     // log parameters
     RCLCPP_INFO_STREAM(node->get_logger(), 
         std::boolalpha << "SegmentationSystem::Config" << std::endl <<
             "\tvoxel_size: " << config.voxel_size << "," << std::endl << 
             "\tmax_distance: " << config.max_distance << "," << std::endl << 
-            "\tignore_canopy: " << config.ignore_canopy << "," << std::endl << 
-            "\tignore_shrubs: " << config.ignore_shrubs);
+            "\tignore_canopy: " << ignore_canopy << "," << std::endl << 
+            "\tignore_shrubs: " << ignore_shrubs);
 }

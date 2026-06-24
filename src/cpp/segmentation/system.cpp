@@ -2,6 +2,7 @@
 
 // util
 #include "util/voxel.h"
+#include <stdexcept>
 
 SegmentationSystem::Model::Model(const SegmentationSystem::Config& config, const std::string& path_to_model) :
     config_(config),
@@ -29,14 +30,21 @@ void SegmentationSystem::Model::infer(util::Cloud& cloud, bool preprocessed) {
     if(!preprocessed) preprocess_inner(config_, cloud);
     py::object points = cloud.points_as_py_object();
     py::object intensity = cloud.field_as_py_object<float>("intensity");
-    // perform inference
-    py::object result = infer_(points, intensity).cast<py::tuple>();
-    if(!py::isinstance<py::tuple>(result)) throw std::runtime_error("inference failed");
-    py::tuple result_fields = result.cast<py::tuple>();
-    // output
-    cloud.add_field_from_py_object<uint8_t>("class", result_fields[0]);
-    cloud.add_field_from_py_object<float>("confidence", result_fields[1]);
+    try {
+        // perform inference
+        py::tuple result = infer_(points, intensity).cast<py::tuple>();
+        // output
+        cloud.add_field_from_py_object<uint8_t>("class", result[0]);
+        py::list result_confidence = result[1].cast<py::list>();
+        for(size_t i = 0; i < result_confidence.size(); ++i) {
+            if(this->config_.ignore.count(i) > 0) continue;
+            cloud.add_field_from_py_object<float>(std::to_string(i), result_confidence[i]);
+        }
+    } catch(const py::cast_error&) {
+        throw std::runtime_error("inference failed");
+    }
+    // TODO: do we still perform the belief update with points of ignored classes?
     cloud.filter<uint8_t>("class", [this](const uint8_t& scalar) {
-        return (scalar != 0) && !(this->config_.ignore_shrubs && scalar == 2) && !(this->config_.ignore_canopy && scalar == 4);
+        return this->config_.ignore.count(scalar) == 0;
     });
 }

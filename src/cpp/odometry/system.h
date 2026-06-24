@@ -44,7 +44,6 @@ public:
     OdometrySystem& operator=(OdometrySystem&&) = delete;
     ~OdometrySystem() = default;
 public:
-    using Semantics = std::pair<uint8_t, float>;
     // main registration function
     const Sophus::SE3f& register_to_map(util::CloudView&& points) noexcept;
     // returns the current local map

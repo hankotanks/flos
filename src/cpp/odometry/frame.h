@@ -10,7 +10,7 @@ template<typename Derived, typename PointDataType>
 struct Voxel {
     // called for every incoming point during registration
     virtual void update(const PointDataType& data) noexcept { /* STUB */ }
-    virtual double weight(const PointDataType& data) const noexcept { return 1.0; }
+    virtual float weight(const PointDataType& data) const noexcept { return 1.0; }
     virtual void finish() noexcept { /* STUB */ }
 };
 
