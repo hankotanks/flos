@@ -1,9 +1,10 @@
 #include "wrapper.h"
 
 Belief::Belief() { 
-    // populate will an flat distribution
-    belief.fill(std::log(1.f / static_cast<float>(Semantics::CLASS_COUNT)));
+    // populate will a flat distribution
     // NOTE: distribution will be populated by the VoxelMap::update, so we don't need to worry about it
+    static const float EVEN_BELIEF = std::log(1.f / static_cast<float>(Semantics::CLASS_COUNT));
+    belief.fill(EVEN_BELIEF);
 }
 
 void Belief::update(const Semantics& data) noexcept {
@@ -23,12 +24,16 @@ float Belief::weight(const Semantics& data) const noexcept {
 }
 
 void Belief::finish() noexcept {
-    float maxima = this->belief[0];
-    for(size_t i = 1; i < Semantics::CLASS_COUNT; ++i) maxima = std::max(maxima, belief[i]);
+    float maxima = *std::max_element(belief.begin(), belief.end());
+    // renormalize belief so it doesn't keep growing
+    for(auto& b : belief) b -= maxima;
+    // compute confidence probabilities for future VoxelMap::closest queries
     for(size_t i = 0; i < Semantics::CLASS_COUNT; ++i) confidence[i] = std::exp(belief[i] - maxima);
     float sum = confidence[0];
     for(size_t i = 1; i < Semantics::CLASS_COUNT; ++i) sum += confidence[i];
     for(size_t i = 0; i < Semantics::CLASS_COUNT; ++i) confidence[i] /= sum;
+    // update predicted class of this voxel
+    prediction = std::distance(confidence.begin(), std::max_element(confidence.begin(), confidence.end()));
 }
 
 Wrapper::Wrapper(util::CloudView& points) : points_(points.points()), class_(points.field<uint8_t>("class")) {

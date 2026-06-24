@@ -9,8 +9,7 @@
 
 // represents the semantics of a single point
 struct Semantics {
-    // IGNORE = 0, GROUND = 1, SHRUB = 2, STEM = 3, CANOPY = 4
-    static constexpr size_t CLASS_COUNT{5};
+    static constexpr size_t CLASS_COUNT{5}; // IGNORE = 0, GROUND = 1, SHRUB = 2, STEM = 3, CANOPY = 4
     size_t prediction;
     std::array<float, CLASS_COUNT> confidence;
 };
@@ -25,6 +24,7 @@ struct Belief: public Voxel<Wrapper, Semantics> {
     virtual float weight(const Semantics& data) const noexcept override final;
     virtual void finish() noexcept override final;
 public:
+    size_t prediction;
     std::array<float, Semantics::CLASS_COUNT> belief; 
     std::array<float, Semantics::CLASS_COUNT> confidence;
 };

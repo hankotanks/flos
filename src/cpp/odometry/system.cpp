@@ -104,23 +104,22 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const Wrapper& points, double s
     using Correspondence = std::tuple<Eigen::Vector3f, Semantics, VoxelMap<Wrapper>::Neighbor>;
 
     // this predicate only allows matching between points with the same semantic information
-    VoxelMap<Wrapper>::Predicate pred;
-    if(config_.registration.correspondence_restriction) {
-        if(config_.registration.correspondence_with_voxel_belief) {
-            pred = [](const Belief& data, Semantics, Semantics query) -> bool { 
-                size_t voxel_class = std::distance(data.confidence.begin(),
-                    std::max_element(data.confidence.begin(), data.confidence.end()));
-                return voxel_class == query.prediction;
-            };
+    static const VoxelMap<Wrapper>::Predicate pred = [this]() -> VoxelMap<Wrapper>::Predicate {
+        if(this->config_.registration.correspondence_restriction) {
+            if(this->config_.registration.correspondence_with_voxel_belief) {
+                return [](const Belief& data, Semantics, Semantics query) -> bool {
+                    return query.prediction == data.prediction;
+                };
+            } else {
+                return [](const Belief&, Semantics point, Semantics query) -> bool { 
+                    return query.prediction == point.prediction;
+                };
+            }
         } else {
-            pred = [](const Belief&, Semantics point, Semantics query) -> bool { 
-                return point.prediction == query.prediction;
-            };
+            return [](const Belief&, Semantics, Semantics) -> bool { return true; };
         }
-    } else {
-        pred = [](const Belief&, Semantics, Semantics) { return true; };
-    }
-
+    }();
+    
     tbb::concurrent_vector<Correspondence> correspondences;
     correspondences.reserve(points.size());
     double correspondence_distance_max = sigma * config_.registration.correspondence_multiplier;
