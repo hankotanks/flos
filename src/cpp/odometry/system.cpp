@@ -155,8 +155,7 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const Wrapper& points, double s
         tbb::blocked_range<correspondence_iterator>{correspondences.cbegin(), correspondences.cend()},
         System(Eigen::Matrix<float, 6, 6>::Zero(), Eigen::Matrix<float, 6, 1>::Zero()),
         [&](const tbb::blocked_range<correspondence_iterator>& range, System J) -> System {
-            return std::transform_reduce(
-                range.begin(), range.end(), J, system_sum, [&](const Correspondence& correspondence) {
+            return std::transform_reduce(range.begin(), range.end(), J, system_sum, [&](const Correspondence& correspondence) {
                     const auto& [source, data, target] = correspondence;
                     const auto& [J_r, residual] = compute_jacobian_and_residual(source, target.point);
                     // weight the kernel based on confidence from the segmentation model
@@ -172,10 +171,9 @@ std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points) con
     // determine starting point
     const auto initial_guess = last_pose_ * last_delta_;
     if(map_.empty()) return std::make_pair(initial_guess, Sophus::SE3f{});
+    points.transform(initial_guess);
     // compute adaptive threshold
     double sigma = threshold_.compute();
-    // transform by initial_guess (future-proofing... this is currently always identity)
-    points.transform(initial_guess);
     // retrieve fields ahead of time to avoid repeated queries
     // perform ICP
     Sophus::SE3f T_icp{};

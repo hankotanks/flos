@@ -25,16 +25,17 @@ float Belief::weight(const Semantics& data) const noexcept {
 }
 
 void Belief::finish() noexcept {
-    float maxima = *std::max_element(belief.begin(), belief.end());
+    auto it = std::max_element(belief.begin(), belief.end());
+    // update predicted class of this voxel
+    prediction = std::distance(belief.begin(), it);
     // renormalize belief so it doesn't keep growing
+    float maxima = *it;
     for(auto& b : belief) b -= maxima;
     // compute confidence probabilities for future VoxelMap::closest queries
-    for(size_t i = 0; i < Semantics::CLASS_COUNT; ++i) confidence[i] = std::exp(belief[i] - maxima);
+    for(size_t i = 0; i < Semantics::CLASS_COUNT; ++i) confidence[i] = std::exp(belief[i]);
     float sum = confidence[0];
     for(size_t i = 1; i < Semantics::CLASS_COUNT; ++i) sum += confidence[i];
     for(size_t i = 0; i < Semantics::CLASS_COUNT; ++i) confidence[i] /= sum;
-    // update predicted class of this voxel
-    prediction = std::distance(confidence.begin(), std::max_element(confidence.begin(), confidence.end()));
 }
 
 Wrapper::Wrapper(util::CloudView& points) : points_(points.points()), class_(points.field<uint8_t>("class")) {

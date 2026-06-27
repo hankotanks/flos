@@ -49,7 +49,7 @@ public:
     static constexpr double VOXEL_SIZE_SCALAR{0.5};
     // scalar for map distance
     // NOTE: the idea is that we want the map to be larger than any incoming scan's max distance
-    static constexpr double MAX_DISTANCE_SCALAR{0.75};
+    static constexpr double MAX_DISTANCE_SCALAR{1.0};
 protected:
     // system configuration
     Config config_;    

@@ -16,6 +16,7 @@ include(dependencies)
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclpy REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
@@ -36,6 +37,7 @@ add_custom_target(python_package ALL
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
 add_subdirectory(src/cpp)
+add_subdirectory(src/scripts)
 
 install(DIRECTORY models launch rviz DESTINATION share/${PROJECT_NAME})
 
