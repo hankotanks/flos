@@ -27,9 +27,8 @@ public:
     inline void clear() { map_.clear(); }
     inline bool empty() const { return map_.empty(); }
     // update functions
-    void update(F& points, const Eigen::Vector3f& origin);
     void update(F& points, const Sophus::SE3f& pose);
-    void extend(F& points);
+    void extend(const F& points, const Sophus::SE3f& pose);
 public:
     struct Cloud {
         std::vector<Eigen::Vector3f> points;
@@ -59,8 +58,15 @@ private:
 };
 
 template<typename F>
-void VoxelMap<F>::update(F& points, const Eigen::Vector3f& origin) {
-    VoxelMap::extend(points);
+void VoxelMap<F>::update(F& points, const Sophus::SE3f& pose) {
+    // transform points by pose
+    for(size_t i = 0; i < points.size(); ++i) {
+        points[i].first = pose * points[i].first;
+    }
+    // add points to map
+    VoxelMap::extend(points, pose);
+    // remove points outside of a distance threshold to the current pose
+    const Eigen::Vector3f& origin = pose.translation();
     const auto max_distance_sq = max_distance_ * max_distance_;
     for(auto it = map_.begin(); it != map_.end();) {
         const auto& [voxel, inner] = *it;
@@ -71,15 +77,7 @@ void VoxelMap<F>::update(F& points, const Eigen::Vector3f& origin) {
 }
 
 template<typename F>
-void VoxelMap<F>::update(F& points, const Sophus::SE3f& pose) {
-    for(size_t i = 0; i < points.size(); ++i) {
-        points[i].first = pose * points[i].first;
-    }
-    VoxelMap::update(points, pose.translation());
-}
-
-template<typename F>
-void VoxelMap<F>::extend(F& points) {
+void VoxelMap<F>::extend(const F& points, const Sophus::SE3f& pose) {
     const double resolution = std::sqrt(voxel_size_ * voxel_size_ / static_cast<double>(voxel_capacity_));
     for(size_t i = 0; i < points.size(); ++i) {
         const auto& [point, data] = points[i];

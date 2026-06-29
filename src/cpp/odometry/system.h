@@ -45,7 +45,8 @@ public:
     ~OdometrySystem() = default;
 public:
     // main registration function
-    const Sophus::SE3f& register_to_map(util::CloudView&& points) noexcept;
+    // NOTE: deskews and transforms points by the solution pose
+    const Sophus::SE3f& register_to_map(util::CloudView& points) noexcept;
     // returns the current local map
     const VoxelMap<Wrapper>::Cloud& cloud() const noexcept { return map_.cloud(); }
 private:

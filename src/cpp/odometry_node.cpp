@@ -33,7 +33,8 @@
 // TOPICS
 // sub: incoming_points_topic (default: $/inference) [PointCloud2]
 // pub: $/odometry [Odometry]
-// pub: $/local_map [PointCloud2] (if debug is truthy)
+// pub: $/map [PointCloud2] (if debug is truthy)
+// pub: $/map/points [PointCloud2] (if debug is truthy)
 // pub: /tf [TF]
 
 class OdometryNode : 
@@ -45,7 +46,8 @@ public:
         config_(this),
         system_(config_.config) {
         if(debug_) { // initialize map publisher
-            local_map_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/local_map", 10);
+            local_map_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/map", 10);
+            outgoing_points_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/map/points", 10);
         }
         // initialize odometry publisher
         odom_publisher_ = this->create_publisher<nav_msgs::msg::Odometry>("/" PROJECT_NAME "/odometry", 10);
@@ -67,13 +69,14 @@ protected:
     // output frame_id
     static constexpr std::string LOCAL_MAP_FRAME = "odom_frame"; 
     // number of seconds between map publications
-    static constexpr double LOCAL_MAP_RATE = 2.0; 
+    static constexpr double LOCAL_MAP_RATE = 5.0; 
     // config
     Config config_;
     // core
     OdometrySystem system_;
     // publisher for local map
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr local_map_publisher_{nullptr};
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr outgoing_points_publisher_{nullptr};
     // odometry publisher
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher_;
     // pose broadcaster
@@ -92,7 +95,7 @@ protected:
             Sophus::SE3f pose;
             {
                 util::Profiler profiler("registration", this);
-                pose = system_.register_to_map(std::move(cloud));
+                pose = system_.register_to_map(cloud);
             }
             { // send the transformation from the lidar frame to the local map frame
                 geometry_msgs::msg::TransformStamped msg;
@@ -133,6 +136,9 @@ protected:
                 odom_publisher_->publish(std::move(msg));
             }
             if(debug_) {
+                // localized points publication
+                outgoing_points_publisher_->publish(std::move(cloud.message(header)));
+                // local map publication
                 auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(steady_clock::now() - local_map_last_publication);
                 if(elapsed.count() >= OdometryNode::LOCAL_MAP_RATE * 1000) {
                     std_msgs::msg::Header local_map_header;
@@ -147,9 +153,6 @@ protected:
                         std::transform(local_map.data.begin(), local_map.data.end(), std::back_inserter(semantics), 
                             [](const Semantics& p) { return p.prediction; });
                         out.add_field<uint8_t>("class", semantics);
-                        // std::vector<size_t> counts(5, 0);
-                        // for(size_t x : semantics) { ++counts[x]; }
-                        // for(size_t i = 0; i < counts.size(); ++i) { std::cout << i << ": " << counts[i] << std::endl; }
                     }
                     local_map_publisher_->publish(std::move(out.message(local_map_header)));
                     local_map_last_publication = steady_clock::now();

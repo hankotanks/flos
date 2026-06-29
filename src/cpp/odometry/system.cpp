@@ -67,7 +67,7 @@ OdometrySystem::OdometrySystem(const Config& config) : config_(config),
         tbb::global_control::max_allowed_parallelism, static_cast<size_t>(max_threads));
 }
 
-const Sophus::SE3f& OdometrySystem::register_to_map(util::CloudView&& points) noexcept {
+const Sophus::SE3f& OdometrySystem::register_to_map(util::CloudView& points) noexcept {
     // deskewing
     deskew_frame(points, last_delta_);
     // downsample incoming points to obtain keypoints and the preprocessed frame
