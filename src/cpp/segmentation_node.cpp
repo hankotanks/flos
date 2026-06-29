@@ -112,8 +112,8 @@ int main(int argc, char* argv[]) {
 }
 
 SegmentationNode::Config::Config(rclcpp::Node* node) {
-    util::opt_param<double>(node, config.voxel_size, "voxel_size");
-    util::opt_param<double>(node, config.max_distance, "max_distance");
+    util::opt_param<float>(node, config.voxel_size, "voxel_size");
+    util::opt_param<float>(node, config.max_distance, "max_distance");
     // TODO: I would like my system to be class-name agnostic, so I've moved these parameters here
     // however, the actual class numbers should not be hard-coded...
     // this is a problem for a different day

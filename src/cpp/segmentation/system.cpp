@@ -14,7 +14,7 @@ void preprocess_inner(const SegmentationSystem::Config& config, util::Cloud& clo
     double voxel_size = config.voxel_size * SegmentationSystem::VOXEL_SIZE_SCALAR;
     util::voxel_downsample(cloud, voxel_size);
     double max_distance = config.max_distance * SegmentationSystem::MAX_DISTANCE_SCALAR;
-    cloud.filter_by_distance(Eigen::Vector3f::Zero(), max_distance);
+    cloud.filter_by_distance(Eigen::Vector3f::Zero(), 0.f, max_distance);
 }
 
 void SegmentationSystem::preprocess(util::Cloud& cloud) {

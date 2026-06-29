@@ -180,20 +180,20 @@ int main(int argc, char* argv[]) {
 }
 
 OdometryNode::Config::Config(rclcpp::Node* node) {
-    util::opt_param<double>(node, config.map.max_distance, "max_distance");
-    util::opt_param<double>(node, config.map.voxel_size, "voxel_size");
+    util::opt_param<float>(node, config.map.max_distance, "max_distance");
+    util::opt_param<float>(node, config.map.voxel_size, "voxel_size");
     util::opt_param<size_t>(node, config.map.voxel_capacity, "voxel_capacity");
     // threshold
-    util::opt_param<double>(node, config.threshold.threshold_initial, "threshold_initial");
-    util::opt_param<double>(node, config.threshold.min_motion, "min_motion");
+    util::opt_param<float>(node, config.threshold.threshold_initial, "threshold_initial");
+    util::opt_param<float>(node, config.threshold.min_motion, "min_motion");
     // registration
     util::opt_param<bool>(node, config.registration.confidence_weighting, "confidence_weighting");
     util::opt_param<bool>(node, config.registration.correspondence_restriction, "correspondence_restriction");
     util::opt_param<bool>(node, config.registration.correspondence_with_voxel_belief, "correspondence_with_voxel_belief");
     util::opt_param<size_t>(node, config.registration.max_iterations, "max_iterations");
     util::opt_param<size_t>(node, config.registration.max_threads, "max_threads");
-    util::opt_param<double>(node, config.registration.convergence_criterion, "convergence_criterion");
-    util::opt_param<double>(node, config.registration.correspondence_multiplier, "correspondence_distance_multiplier");
+    util::opt_param<float>(node, config.registration.convergence_criterion, "convergence_criterion");
+    util::opt_param<float>(node, config.registration.correspondence_multiplier, "correspondence_distance_multiplier");
     // log parameters
     RCLCPP_INFO_STREAM(node->get_logger(), 
         std::boolalpha << "OdometrySystem::Config" << std::endl <<

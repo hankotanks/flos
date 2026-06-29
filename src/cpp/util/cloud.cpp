@@ -351,9 +351,10 @@ template void CloudView::filter<uint32_t>(const std::string&, const std::functio
 template void CloudView::filter<float>(const std::string&, const std::function<bool(const float&)>&);
 template void CloudView::filter<double>(const std::string&, const std::function<bool(const double&)>&);
 
-void CloudView::filter_by_distance(const Eigen::Vector3f& origin, float distance) {
+void CloudView::filter_by_distance(const Eigen::Vector3f& origin, float minima, float maxima) {
     for(size_t i = CloudView::size(); i-- > 0;) {
-        if((points_[i] - origin).norm() <= distance) continue; 
+        float d = (points_[i] - origin).norm();
+        if(d >= minima && d <= maxima) continue; 
         points_.erase(points_.begin() + i);
         for(Field& field : fields_) {
             std::visit([i](auto& vec) { 

@@ -2,6 +2,7 @@
 
 // eigen
 #include <Eigen/Dense>
+#include <limits>
 
 template<typename Derived, typename PointDataType, typename VoxelDataType>
 struct Frame;
@@ -31,6 +32,7 @@ struct VoxelData {
     static_assert(std::is_base_of_v<Frame<F, typename F::point_data_type, typename F::voxel_data_type>, F>);
     std::vector<Eigen::Vector3f> points;
     std::vector<typename F::point_data_type> point_data;
+    // std::vector<size_t> point_n;
     typename F::voxel_data_type data;
 public:
     VoxelData(size_t voxel_capacity) {
@@ -40,16 +42,17 @@ public:
 public:
     void add(double resolution, const Eigen::Vector3f& point, typename F::point_data_type data) noexcept {
         if(points.size() < points.capacity()) {
-            bool flag = false;
+            size_t flag = std::numeric_limits<size_t>::max();
             for(size_t j = 0; j < points.size(); ++j) {
                 if((points[j] - point).norm() >= resolution) continue;
-                flag = true;
+                flag = j;
                 break;
             }
-            if(!flag) {
+            if(flag == std::numeric_limits<size_t>::max()) {
                 points.emplace_back(point);
                 point_data.emplace_back(data);
-            }
+                // point_n.emplace_back(0);
+            } // else points[flag] = (points[flag] * static_cast<float>(point_n[flag]) + point) / static_cast<float>(++point_n[flag]);
         }
         this->data.update(data);
     }
