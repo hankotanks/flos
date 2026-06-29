@@ -26,17 +26,8 @@ find_package(tf2_ros REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
 find_package(rosbag2_storage REQUIRED)
 
-add_custom_target(python_requirements ALL
-  COMMAND python3 -m pip install --root-user-action=ignore -r ${CMAKE_CURRENT_SOURCE_DIR}/src/python/requirements.txt
-  COMMENT "${PROJECT_NAME}: Installing Python dependencies..."
-  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-
-add_custom_target(python_package ALL 
-  COMMAND pip3 install --root-user-action=ignore ${CMAKE_CURRENT_SOURCE_DIR}/src/python
-  COMMENT "${PROJECT_NAME}: Installing Python package..." 
-  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-
 add_subdirectory(src/cpp)
+add_subdirectory(src/python)
 add_subdirectory(src/scripts)
 
 install(DIRECTORY models launch rviz DESTINATION share/${PROJECT_NAME})

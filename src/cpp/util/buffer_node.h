@@ -51,9 +51,6 @@ private:
 
 template<typename Entry, typename Message>
 BufferNode<Entry, Message>::BufferNode(const std::string& incoming_topic_name, const std::string& incoming_topic_default) : rclcpp::Node(NODE_NAME) {
-    rclcpp::on_shutdown([this]() {
-        this->stop();
-    });
     // declare parameters
     this->declare_parameter<bool>("debug", false);
     if(incoming_topic_default.empty()) {
@@ -71,6 +68,7 @@ BufferNode<Entry, Message>::BufferNode(const std::string& incoming_topic_name, c
     thread_ = std::thread(&BufferNode::loop, this);
 }
 
+// NOTE: this MUST be invoked in the destructor of all derived nodes
 template<typename Entry, typename Message>
 void BufferNode<Entry, Message>::stop() noexcept {
     {
@@ -78,12 +76,13 @@ void BufferNode<Entry, Message>::stop() noexcept {
         running_ = false;
     }
     cv_.notify_all();
+    // close the worker
+    if(thread_.joinable()) thread_.join();
 }
 
 template<typename Entry, typename Message>
 BufferNode<Entry, Message>::~BufferNode() {
     BufferNode::stop();
-    if(thread_.joinable()) thread_.join();
 }
 
 template<typename Entry, typename Message>

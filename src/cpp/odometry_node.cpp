@@ -57,7 +57,7 @@ public:
     OdometryNode(OdometryNode&&) = delete;
     OdometryNode& operator=(const OdometryNode&) = delete;
     OdometryNode& operator=(OdometryNode&&) = delete;
-    ~OdometryNode() = default;
+    ~OdometryNode() { BufferNode::stop(); }
 protected:
     struct Config {
         OdometrySystem::Config config;

@@ -52,7 +52,7 @@ public:
     SegmentationNode(SegmentationNode&&) = delete;
     SegmentationNode& operator=(const SegmentationNode&) = delete;
     SegmentationNode& operator=(SegmentationNode&&) = delete;
-    ~SegmentationNode() = default;
+    ~SegmentationNode() { BufferNode::stop(); }
 protected:
     struct Config {
         SegmentationSystem::Config config;
