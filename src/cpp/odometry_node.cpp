@@ -53,13 +53,17 @@ public:
         odom_publisher_ = this->create_publisher<nav_msgs::msg::Odometry>("/" PROJECT_NAME "/odometry", 10);
         // broadcaster for poses
         tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
+        // start worker thread
+        BufferNode::start();
     }
 public:
     OdometryNode(const OdometryNode&) = delete;
     OdometryNode(OdometryNode&&) = delete;
     OdometryNode& operator=(const OdometryNode&) = delete;
     OdometryNode& operator=(OdometryNode&&) = delete;
-    ~OdometryNode() { BufferNode::stop(); }
+    ~OdometryNode() { 
+        BufferNode::stop(); 
+    }
 protected:
     struct Config {
         OdometrySystem::Config config;

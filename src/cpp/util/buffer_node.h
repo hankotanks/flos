@@ -26,6 +26,8 @@ protected:
 protected:
     // return size of the buffer
     size_t size() const noexcept { return buffer_.size(); };
+    // start worker thread
+    void start() noexcept;
     // manual stop
     void stop() noexcept;
     // queue operations
@@ -64,6 +66,10 @@ BufferNode<Entry, Message>::BufferNode(const std::string& incoming_topic_name, c
     // create subscriber
     incoming_subscriber_ = this->create_subscription<Message>(incoming_topic_, 10,
         [this](const std::shared_ptr<Message> msg) { this->push(msg); });
+}
+
+template<typename Entry, typename Message>
+void BufferNode<Entry, Message>::start() noexcept {
     // initialize thread
     thread_ = std::thread(&BufferNode::loop, this);
 }

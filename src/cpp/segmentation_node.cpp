@@ -46,13 +46,17 @@ public:
             throw std::runtime_error("model does not exist: " + path_to_model_);
         // point publisher (subscriber is now handled by BufferNode)
         outgoing_points_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/inference", 10);
+        // start the worker
+        BufferNode::start();
     }
 public:
     SegmentationNode(const SegmentationNode&) = delete;
     SegmentationNode(SegmentationNode&&) = delete;
     SegmentationNode& operator=(const SegmentationNode&) = delete;
     SegmentationNode& operator=(SegmentationNode&&) = delete;
-    ~SegmentationNode() { BufferNode::stop(); }
+    ~SegmentationNode() { 
+        BufferNode::stop(); 
+    }
 protected:
     struct Config {
         SegmentationSystem::Config config;

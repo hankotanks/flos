@@ -78,7 +78,7 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::CloudView& points) noe
     const auto [pose, deviation] = OdometrySystem::align(points_kp_wrapper);
     threshold_.update(deviation);
     // append points to map
-    Wrapper points_wrapper{points}; // TODO: Semantics is constructed twice, once in OdometrySystem::align and once in this
+    Wrapper points_wrapper{points};
     map_.update(points_wrapper, pose);
     // store new pose
     last_delta_ = last_pose_.inverse() * pose;
