@@ -8,6 +8,7 @@
 #include <iomanip>
 
 namespace util {
+#ifndef PROFILER_DISABLE
 class Profiler {
     using clock = std::chrono::steady_clock;
     using duration = std::chrono::duration<double, std::milli>;
@@ -87,4 +88,18 @@ private:
     std::string name_;
     Profiler::instant start_;
 };
+#else
+class Profiler {
+public:
+    Profiler(const std::string&) { /* STUB */ }
+    Profiler(const std::string&, Profiler*) { /* STUB */ }
+    Profiler() = delete;
+    Profiler(const Profiler&) = delete;
+    Profiler(Profiler&&) = delete;
+    Profiler& operator=(const Profiler&) = delete;
+    Profiler& operator=(Profiler&&) = delete;
+    // finish the timer
+    ~Profiler() = default;
+};
+#endif // PROFILER_DISABLE
 }

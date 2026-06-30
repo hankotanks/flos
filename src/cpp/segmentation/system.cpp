@@ -1,10 +1,12 @@
 #include "system.h"
 
 // util
+#include "util/profiler.h"
 #include "util/voxel.h"
 #include <stdexcept>
 
-SegmentationSystem::Model::Model(const SegmentationSystem::Config& config, const std::string& path_to_model) :
+SegmentationSystem::Model::Model(const SegmentationSystem::Config& config, const std::string& path_to_model, util::Profiler* profiler) :
+    util::Profiler("Model", profiler),
     config_(config),
     module_(py::module_::import("segmentation_model.inference_helper")),
     helper_(module_.attr("InferenceHelper")(path_to_model)),
@@ -18,21 +20,30 @@ void preprocess_inner(const SegmentationSystem::Config& config, util::Cloud& clo
 }
 
 void SegmentationSystem::preprocess(util::Cloud& cloud) {
+    util::Profiler profiler{"preprocess", this};
     preprocess_inner(config_, cloud);
 }
 
 SegmentationSystem::Model SegmentationSystem::load(const std::string& path_to_model) {
-    return SegmentationSystem::Model{config_, path_to_model};
+    return SegmentationSystem::Model{config_, path_to_model, this};
 }
 
 void SegmentationSystem::Model::infer(util::Cloud& cloud, bool preprocessed) {
+    util::Profiler profiler{"infer", this};
     // conditionally preprocess
-    if(!preprocessed) preprocess_inner(config_, cloud);
+    if(!preprocessed) {
+        util::Profiler subprofiler{"preprocess", &profiler};
+        preprocess_inner(config_, cloud);
+    }
     py::object points = cloud.points_as_py_object();
     py::object intensity = cloud.field_as_py_object<float>("intensity");
     try {
         // perform inference
-        py::tuple result = infer_(points, intensity).cast<py::tuple>();
+        py::tuple result;
+        {  
+            util::Profiler subprofiler{"python", &profiler};
+            result = infer_(points, intensity).cast<py::tuple>();
+        }
         // output
         cloud.add_field_from_py_object<uint8_t>("class", result[0]);
         py::list result_confidence = result[1].cast<py::list>();

@@ -4,8 +4,9 @@
 #include <pybind11/embed.h>
 // util
 #include "util/cloud.h"
+#include "util/profiler.h"
 
-class SegmentationSystem final {
+class SegmentationSystem : util::Profiler {
 public:
     struct Config {
         float voxel_size{1.0};
@@ -13,10 +14,8 @@ public:
         std::set<size_t> ignore{0, 2, 4}; // NOTE: by default, ignore shrubs and canopy
     };
 public:
-    class Model {
+    class Model : util::Profiler {
         friend SegmentationSystem;
-    public:
-        explicit Model(const SegmentationSystem::Config& config, const std::string& path_to_model);
     public:
         void infer(util::Cloud& cloud, bool preprocessed = false);
     public:
@@ -27,13 +26,15 @@ public:
         Model& operator=(Model&&) = delete;
         ~Model() = default;
     private:
+        explicit Model(const SegmentationSystem::Config& config, const std::string& path_to_model, util::Profiler* profiler);
+    private:
         py::object module_;
         py::object helper_;
         py::object infer_;
         SegmentationSystem::Config config_;
     };
 public:
-    explicit SegmentationSystem(const Config& config) : config_(config) { /* STUB */ }
+    explicit SegmentationSystem(const Config& config) : util::Profiler("SegmentationSystem"), config_(config) { /* STUB */ }
 public:
     void preprocess(util::Cloud& cloud);
     SegmentationSystem::Model load(const std::string& path_to_model);
