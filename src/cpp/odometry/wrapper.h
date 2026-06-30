@@ -13,6 +13,7 @@ struct Semantics {
     static constexpr std::array<float, CLASS_COUNT> CLASS_WEIGHT{0.0, 1.0, 1.0, 1.0, 1.0}; // NOTE: here for testing purposes
     size_t prediction;
     std::array<float, CLASS_COUNT> confidence;
+    explicit Semantics() = default;
 };
 
 // forward declaration

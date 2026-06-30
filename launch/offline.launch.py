@@ -30,37 +30,7 @@ def setup(context, *args, **kwargs):
             {
                 'use_sim_time': True,
             },
-            config[Config.Component.OFFLINE]
-        ]
-    )
-
-    node_segmentation = launch_ros.actions.Node(
-        package = PACKAGE_NAME,
-        executable = 'segmentation_node',
-        emulate_tty = True,
-        output = 'screen',
-        # prefix = ['gdb -ex run --args'],
-        parameters = [
-            {
-                'use_sim_time': True,
-                'debug': True
-            },
-            config[Config.Component.SEGMENTATION]
-        ]
-    )
-
-    node_odometry = launch_ros.actions.Node(
-        package = PACKAGE_NAME,
-        executable = "odometry_node",
-        emulate_tty = True,
-        output = 'screen',
-        # prefix = ['gdb -ex run --args'],
-        parameters = [
-            {
-                'use_sim_time': True,
-                'debug': True
-            },
-            config[Config.Component.ODOMETRY]
+            config[Config.Component.OFFLINE] | config[Config.Component.SEGMENTATION] | config[Config.Component.ODOMETRY]
         ]
     )
 
@@ -71,8 +41,6 @@ def setup(context, *args, **kwargs):
             name = 'router',
         ),
         node_offline,
-        node_segmentation,
-        node_odometry,
         launch_ros.actions.Node(
             package = 'rviz2',
             executable = 'rviz2',

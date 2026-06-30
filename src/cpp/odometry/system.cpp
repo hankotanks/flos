@@ -10,6 +10,7 @@
 #include <tbb/parallel_reduce.h>
 // util
 #include "util/cloud.h"
+#include "util/profiler.h"
 
 namespace {
 // field names to search in get_timestamp_field_name
@@ -56,9 +57,23 @@ void deskew_frame(util::CloudView& points, const Sophus::SE3f& motion) noexcept 
         deskew_frame_inner<double>(points, *field_name, motion);
     }
 }
+
+bool pred_query_to_point(const Belief& data, Semantics point, Semantics query) {
+    return query.prediction == point.prediction;
+}
+
+bool pred_query_to_voxel(const Belief& data, Semantics point, Semantics query) {
+    return query.prediction == data.prediction;
+}
+
+bool pred_none(const Belief& data, Semantics point, Semantics query) {
+    return true;
+}
 } // private scope
 
-OdometrySystem::OdometrySystem(const Config& config) : config_(config),
+OdometrySystem::OdometrySystem(const Config& config) : util::Profiler("OdometrySystem"),
+    config_(config),
+    pred_(config.registration.correspondence_restriction ? (config.registration.correspondence_with_voxel_belief ? pred_query_to_voxel : pred_query_to_point) : pred_none),
     map_(config.map.max_distance, config.map.voxel_size, config.map.voxel_capacity),
     threshold_(config.map.max_distance, config.threshold.threshold_initial, config.threshold.min_motion) {
     size_t max_threads = config.registration.max_threads > 0 ? \
@@ -68,18 +83,28 @@ OdometrySystem::OdometrySystem(const Config& config) : config_(config),
 }
 
 const Sophus::SE3f& OdometrySystem::register_to_map(util::CloudView& points) noexcept {
+    util::Profiler profiler{"registration", this};
     // deskewing
-    deskew_frame(points, last_delta_);
+    {
+        util::Profiler subprofiler{"deskew", &profiler};
+        deskew_frame(points, last_delta_);
+    }
     // downsample incoming points to obtain keypoints and the preprocessed frame
     util::CloudView points_kp{points};
-    util::voxel_downsample(points_kp, config_.map.voxel_size * OdometrySystem::VOXEL_SIZE_SCALAR);
+    {
+        util::Profiler subprofiler{"voxel_downsample", &profiler};
+        util::voxel_downsample(points_kp, config_.map.voxel_size * OdometrySystem::VOXEL_SIZE_SCALAR);
+    }
     Wrapper points_kp_wrapper{points_kp};
     // compute pose w/ ICP
-    const auto [pose, deviation] = OdometrySystem::align(points_kp_wrapper);
+    const auto [pose, deviation] = OdometrySystem::align(points_kp_wrapper, profiler);
     threshold_.update(deviation);
     // append points to map
-    Wrapper points_wrapper{points};
-    map_.update(points_wrapper, pose);
+    {
+        util::Profiler subprofiler{"update", &profiler};
+        Wrapper points_wrapper{points};
+        map_.update(points_wrapper, pose);
+    }
     // store new pose
     last_delta_ = last_pose_.inverse() * pose;
     last_pose_ = pose;
@@ -100,40 +125,25 @@ void OdometrySystem::AdaptiveThreshold::update(const Sophus::SE3f& deviation) no
     }
 }
 
-Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const Wrapper& points, double sigma) const noexcept {
+Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const Wrapper& points, double sigma, util::Profiler& profiler) noexcept {
     using Correspondence = std::tuple<Eigen::Vector3f, Semantics, VoxelMap<Wrapper>::Neighbor>;
-
-    // this predicate only allows matching between points with the same semantic information
-    static const VoxelMap<Wrapper>::Predicate pred = [this]() -> VoxelMap<Wrapper>::Predicate {
-        if(this->config_.registration.correspondence_restriction) {
-            if(this->config_.registration.correspondence_with_voxel_belief) {
-                return [](const Belief& data, Semantics, Semantics query) -> bool {
-                    return query.prediction == data.prediction;
-                };
-            } else {
-                return [](const Belief&, Semantics point, Semantics query) -> bool { 
-                    return query.prediction == point.prediction;
-                };
-            }
-        } else {
-            return [](const Belief&, Semantics, Semantics) -> bool { return true; };
-        }
-    }();
     
     tbb::concurrent_vector<Correspondence> correspondences;
     correspondences.reserve(points.size());
-    double correspondence_distance_max = sigma * config_.registration.correspondence_multiplier;
-    tbb::parallel_for(tbb::blocked_range<size_t>{0, points.size()}, [&](const tbb::blocked_range<size_t>& range) {
-        for(size_t i = range.begin(); i < range.end(); ++i) {
-            const auto& [point, point_data] = points[i];
-            const auto& maybe = map_.closest(point, point_data, pred);
-            if(maybe) {
-                const auto& neighbor = *maybe;
-                if(neighbor.distance >= correspondence_distance_max) continue;
-                correspondences.emplace_back(point, point_data, neighbor);
+    double correspondence_distance_sq = sigma * sigma * config_.registration.correspondence_multiplier * config_.registration.correspondence_multiplier;
+    {
+        util::Profiler subprofiler{"correspondences", &profiler};
+        tbb::parallel_for(tbb::blocked_range<size_t>{0, points.size()}, [&](const tbb::blocked_range<size_t>& range) {
+            for(size_t i = range.begin(); i < range.end(); ++i) {
+                const auto& [point, point_data] = points[i];
+                const auto& maybe = map_.closest(point, point_data, pred_, correspondence_distance_sq);
+                if(maybe) {
+                    const auto& neighbor = *maybe;
+                    correspondences.emplace_back(point, point_data, neighbor);
+                }
             }
-        }
-    });
+        });
+    }
 
     auto compute_jacobian_and_residual = [](const Eigen::Vector3f& source, const Eigen::Vector3f& target) {
         const Eigen::Vector3f residual = source - target;
@@ -167,7 +177,7 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const Wrapper& points, double s
     return JTJ.ldlt().solve(-JTr);
 }
 
-std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points) const {
+std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, util::Profiler& profiler) {
     // determine starting point
     const auto initial_guess = last_pose_ * last_delta_;
     if(map_.empty()) return std::make_pair(initial_guess, Sophus::SE3f{});
@@ -177,9 +187,11 @@ std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points) con
     // retrieve fields ahead of time to avoid repeated queries
     // perform ICP
     Sophus::SE3f T_icp{};
+    util::Profiler subprofiler{"align", &profiler};
     for(size_t j = 0; j < config_.registration.max_iterations; ++j) {
+        util::Profiler subsubprofiler{"iteration", &subprofiler};
         // Equation (11)
-        const Eigen::Matrix<float, 6, 1> dx = OdometrySystem::solve(points, sigma);
+        const Eigen::Matrix<float, 6, 1> dx = OdometrySystem::solve(points, sigma, subsubprofiler);
         const Sophus::SE3f est = Sophus::SE3f::exp(dx);
         // Equation (12)
         points.transform(est);

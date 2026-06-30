@@ -11,8 +11,9 @@
 #include "wrapper.h"
 // util
 #include "util/cloud.h"
+#include "util/profiler.h"
 
-class OdometrySystem {
+class OdometrySystem: util::Profiler {
 public:
     struct Config {
         struct {
@@ -71,15 +72,17 @@ private:
     };
 private:
     // constructs and solves the linear system, returning dx
-    Eigen::Matrix<float, 6, 1> solve(const Wrapper& points, double sigma) const noexcept;
+    Eigen::Matrix<float, 6, 1> solve(const Wrapper& points, double sigma, util::Profiler& profiler) noexcept;
     // returns pose and deviation respectively
-    std::pair<Sophus::SE3f, Sophus::SE3f> align(Wrapper& points) const;
+    std::pair<Sophus::SE3f, Sophus::SE3f> align(Wrapper& points, util::Profiler& profiler);
 private:
     Config config_;
     // NOTE: see note in segmentation/node.h
     static constexpr double VOXEL_SIZE_SCALAR{1.5};
     Sophus::SE3f last_pose_;
     Sophus::SE3f last_delta_;
+    using Predicate = bool(*)(const Belief& data, Semantics point, Semantics query);
+    Predicate pred_;
     VoxelMap<Wrapper> map_;
     AdaptiveThreshold threshold_;
 };

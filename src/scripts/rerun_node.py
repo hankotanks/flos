@@ -8,6 +8,8 @@ import rclpy
 import rclpy.node, rclpy.callback_groups, rclpy.qos, rclpy.time
 import sensor_msgs
 import sensor_msgs.msg, sensor_msgs_py.point_cloud2
+import nav_msgs
+import nav_msgs.msg
 
 # rerun
 import rerun as rr
@@ -18,7 +20,9 @@ class RerunPointCloudNode(rclpy.node.Node):
         rr.init("visualizer", spawn = True)
 
         self.subscribers: list[rclpy.Subscription] = []
+        # TODO: equivalent of PROJECT_NAME in python nodes
         self.subscribe("/forest_segmentation/map/points", sensor_msgs.msg.PointCloud2, self.scan_callback)
+        self.subscribe("/forest_segmentation/odometry", nav_msgs.msg.Odometry, self.odom_callback)
 
     def subscribe(self, topic: str, msg_type: type, callback, latching: bool = False) -> None:
         """Adds a subscriber to a topic with the given message type and callback."""
@@ -42,10 +46,17 @@ class RerunPointCloudNode(rclpy.node.Node):
         rr.set_time_nanos("ros_time", rclpy.time.Time.from_msg(msg.header.stamp).nanoseconds)
         for cls in np.unique(semantics):
             mask = semantics == cls
-            rr.log(f"scan/class_{int(cls)}", rr.Points3D(
+            rr.log(f"scan/{int(cls)}", rr.Points3D(
                 positions = points[mask],
                 radii = 0.02,
             ))
+
+    def odom_callback(self, msg: nav_msgs.msg.Odometry) -> None:
+        rr.set_time_nanos("ros_time", rclpy.time.Time.from_msg(msg.header.stamp).nanoseconds)
+        rr.log(f"pos", rr.Points3D(
+            positions = [[msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z]],
+            radii = 0.2,
+        ))
 
 def main():
     rclpy.init()

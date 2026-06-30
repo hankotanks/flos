@@ -75,16 +75,37 @@ add_executable(offline_node)
 configure_node(offline_node
   SOURCES
     offline_node.cpp
+    segmentation/system.cpp
+    odometry/system.cpp
+    odometry/wrapper.cpp
+    util/cloud.cpp
+    util/voxel.cpp
     util/rosbag.cpp 
   HEADERS
+    segmentation/system.h
+    odometry/voxel_map.h
+    odometry/system.h
+    odometry/frame.h
+    odometry/wrapper.h
+    util/buffer_node.h
+    util/cloud.h
+    util/voxel.h
+    util/stl_vector_eigen.h
+    util/profiler.h
+    util/rosargs.h
     util/rosbag.h
   LIBRARIES
+    Eigen3::Eigen
+    pybind11::embed
+    tsl::robin_map
     Sophus::Sophus
+    TBB::tbb
   PACKAGES
     rclcpp::rclcpp
     tf2_ros::tf2_ros
     rosbag2_cpp::rosbag2_cpp rosbag2_storage::rosbag2_storage
     ${std_msgs_TARGETS}
+    ${geometry_msgs_TARGETS}
     ${sensor_msgs_TARGETS}
     ${nav_msgs_TARGETS})
 

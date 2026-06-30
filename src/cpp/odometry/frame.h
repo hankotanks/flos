@@ -1,8 +1,9 @@
 #pragma once
 
+// system
+#include <limits>
 // eigen
 #include <Eigen/Dense>
-#include <limits>
 
 template<typename Derived, typename PointDataType, typename VoxelDataType>
 struct Frame;
@@ -20,6 +21,7 @@ struct Frame {
     using point_data_type = PointDataType;
     using voxel_data_type = VoxelDataType;
     static_assert(std::is_base_of_v<Voxel<Derived, PointDataType>, VoxelDataType>);
+    static_assert(std::is_default_constructible_v<PointDataType>);
     static_assert(std::is_default_constructible_v<VoxelDataType> || std::is_abstract_v<VoxelDataType>);
 
     virtual size_t size() const noexcept = 0;
@@ -40,11 +42,11 @@ public:
         point_data.reserve(voxel_capacity);
     }
 public:
-    void add(double resolution, const Eigen::Vector3f& point, typename F::point_data_type data) noexcept {
+    void add(double resolution_sq, const Eigen::Vector3f& point, typename F::point_data_type data) noexcept {
         if(points.size() < points.capacity()) {
             size_t flag = std::numeric_limits<size_t>::max();
             for(size_t j = 0; j < points.size(); ++j) {
-                if((points[j] - point).norm() >= resolution) continue;
+                if((points[j] - point).squaredNorm() >= resolution_sq) continue;
                 flag = j;
                 break;
             }
