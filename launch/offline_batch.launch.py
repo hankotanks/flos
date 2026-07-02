@@ -60,6 +60,8 @@ def setup(context, *args, **kwargs):
     path_to_launch = pathlib.Path(path_to_launch).resolve(strict = True)
     path_to_launch = path_to_launch / 'launch' / 'offline.launch.py'
 
+    dataset = launch.substitutions.LaunchConfiguration('dataset').perform(context)
+
     name = launch.substitutions.LaunchConfiguration('name').perform(context)
     if name is None or len(name) == 0:
         name = path_to_config.stem
@@ -87,7 +89,7 @@ def setup(context, *args, **kwargs):
                     'ros2', 'launch', str(path_to_launch),
                     'visualize:=false',
                     f'path_to_bag:={str(bag)}',
-                    f'path_to_result:={str(path_to_result_inner / "digiforests" / bag_name)}',
+                    f'path_to_result:={str(path_to_result_inner / dataset / bag_name)}',
                     f'path_to_config:={str(config)}'
                 ],
                 output = 'screen',
@@ -110,6 +112,7 @@ def generate_launch_description():
         launch.actions.DeclareLaunchArgument('path_to_bags'),
         launch.actions.DeclareLaunchArgument('path_to_config'),
         launch.actions.DeclareLaunchArgument('path_to_result'),
+        launch.actions.DeclareLaunchArgument('dataset'),
         launch.actions.DeclareLaunchArgument('name', default_value = ''),
         launch.actions.OpaqueFunction(function = setup)
     ])

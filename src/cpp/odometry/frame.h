@@ -12,7 +12,7 @@ template<typename Derived, typename PointDataType>
 struct Voxel {
     // called for every incoming point during registration
     virtual void update(const PointDataType& data) noexcept { /* STUB */ }
-    virtual float weight(const PointDataType& data) const noexcept { return 1.0; }
+    virtual float weight(const PointDataType& data) const noexcept { return 1.f; }
     virtual void finish() noexcept { /* STUB */ }
 };
 
@@ -50,7 +50,7 @@ public:
                 flag = j;
                 break;
             }
-            if(flag == std::numeric_limits<size_t>::max()) {
+            if(flag == std::numeric_limits<size_t>::max() && this->data.weight(data) > 0.4f) {
                 points.emplace_back(point);
                 point_data.emplace_back(data);
                 // point_n.emplace_back(0);

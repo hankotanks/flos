@@ -16,6 +16,8 @@ struct std::hash<Eigen::Vector3i> {
 };
 
 namespace util {
+void voxel_downsample(util::CloudView& cloud, const double voxel_size);
+
 inline Eigen::Vector3i point_to_voxel(const Eigen::Vector3f& point, double voxel_size) {
     return {
         static_cast<int>(std::floor(point.x() / voxel_size)),
@@ -24,5 +26,11 @@ inline Eigen::Vector3i point_to_voxel(const Eigen::Vector3f& point, double voxel
     };
 }
 
-void voxel_downsample(util::CloudView& cloud, const double voxel_size);
+inline Eigen::Vector3f voxel_to_point(const Eigen::Vector3i& voxel, double voxel_size) {
+    return {
+        (static_cast<float>(voxel.x()) + 0.5f) * static_cast<float>(voxel_size),
+        (static_cast<float>(voxel.y()) + 0.5f) * static_cast<float>(voxel_size),
+        (static_cast<float>(voxel.z()) + 0.5f) * static_cast<float>(voxel_size)
+    };
+}
 }

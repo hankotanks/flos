@@ -99,7 +99,7 @@ protected:
             Sophus::SE3f pose;
             {
                 util::Profiler profiler("registration", this);
-                pose = system_.register_to_map(cloud);
+                pose = system_.register_to_map(cloud, header.stamp.sec, header.stamp.nanosec);
             }
             { // send the transformation from the lidar frame to the local map frame
                 geometry_msgs::msg::TransformStamped msg;

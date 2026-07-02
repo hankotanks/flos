@@ -1,6 +1,7 @@
 #pragma once
 
 // sophus
+#include <limits>
 #include <sophus/se3.hpp>
 // tbb
 #include <tbb/global_control.h>
@@ -47,9 +48,29 @@ public:
 public:
     // main registration function
     // NOTE: deskews and transforms points by the solution pose
-    const Sophus::SE3f& register_to_map(util::CloudView& points) noexcept;
+    const Sophus::SE3f& register_to_map(util::CloudView& points, unsigned int seconds, unsigned int nanoseconds) noexcept;
     // returns the current local map
     const VoxelMap<Wrapper>::Cloud& cloud() const noexcept { return map_.cloud(); }
+public:
+    struct Statistics {
+        size_t iterations{0};
+        struct {
+            size_t initial_count{0};
+            size_t final_count{0};
+            float mean{0.f};
+        } correspondence;
+        struct {
+            struct {
+                float initial{0.f};
+                float solved{0.f};
+            } linear;
+            struct {
+                float initial{0.f};
+                float solved{0.f};
+            } angular;
+        } velocity;
+    };
+    Statistics statistics;
 private:
     class AdaptiveThreshold {
     public:
@@ -74,13 +95,16 @@ private:
     // constructs and solves the linear system, returning dx
     Eigen::Matrix<float, 6, 1> solve(const Wrapper& points, double sigma, util::Profiler& profiler) noexcept;
     // returns pose and deviation respectively
-    std::pair<Sophus::SE3f, Sophus::SE3f> align(Wrapper& points, util::Profiler& profiler);
+    std::pair<Sophus::SE3f, Sophus::SE3f> align(Wrapper& points, const Sophus::SE3f& delta, util::Profiler& profiler);
 private:
     Config config_;
     // NOTE: see note in segmentation/node.h
     static constexpr double VOXEL_SIZE_SCALAR{1.5};
     Sophus::SE3f last_pose_;
     Sophus::SE3f last_delta_;
+    unsigned int init_seconds_{std::numeric_limits<unsigned int>::max()};
+    float last_stamp_{0.f};
+    float prev_stamp_{0.f};
     using Predicate = bool(*)(const Belief& data, Semantics point, Semantics query);
     Predicate pred_;
     VoxelMap<Wrapper> map_;

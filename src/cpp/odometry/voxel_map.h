@@ -72,7 +72,7 @@ void VoxelMap<F>::update(F& points, const Sophus::SE3f& pose) {
     const auto max_distance_sq = max_distance_ * max_distance_;
     for(auto it = map_.begin(); it != map_.end();) {
         const auto& [voxel, inner] = *it;
-        if((voxel.template cast<float>() - origin).squaredNorm() >= max_distance_sq) {
+        if((util::voxel_to_point(voxel, voxel_size_) - origin).squaredNorm() >= max_distance_sq) {
             it = map_.erase(it);
         } else ++it;
     }
@@ -114,17 +114,12 @@ const VoxelMap<F>::Cloud& VoxelMap<F>::cloud() const noexcept {
     return cloud;
 }
 
-inline float voxel_lower_bound_sq(const Eigen::Vector3f& local, const Eigen::Vector3i& shift, float voxel_size) {
-    const float lx = local.x();
-    const float ly = local.y();
-    const float lz = local.z();
-    const float sx = shift.x();
-    const float sy = shift.y();
-    const float sz = shift.z();
-    float dx = sx == 0 ? 0.f : sx == -1 ? lx : (voxel_size - lx);
-    float dy = sy == 0 ? 0.f : sy == -1 ? ly : (voxel_size - ly);
-    float dz = sz == 0 ? 0.f : sz == -1 ? lz : (voxel_size - lz);
-    return dx * dx + dy * dy + dz * dz;
+inline float voxel_lower_bound_distance_sq(const Eigen::Vector3f& query, const Eigen::Vector3i& voxel, float voxel_size) {
+    const float h = 0.5f * voxel_size;
+    const Eigen::Vector3f center = util::voxel_to_point(voxel, voxel_size);
+    Eigen::Vector3f d = (query - center).cwiseAbs() - Eigen::Vector3f::Constant(h);
+    d = d.cwiseMax(Eigen::Vector3f::Zero());
+    return d.squaredNorm();
 }
 
 template<typename F>
@@ -164,17 +159,14 @@ std::optional<typename VoxelMap<F>::Neighbor> VoxelMap<F>::closest(const Eigen::
     // find the closest match that respects the provided predicate
     if(map_.empty()) return std::nullopt;
     Eigen::Vector3i center_voxel = util::point_to_voxel(query, voxel_size_);
-    const Eigen::Vector3f base_origin = center_voxel.cast<float>() * voxel_size_;
-    const Eigen::Vector3f query_local = query - base_origin; // in [0, voxel_size)
+    const Eigen::Vector3f base_origin = util::voxel_to_point(center_voxel, voxel_size_);
     typename VoxelMap<F>::Neighbor closest;
     closest.distance_sq = std::numeric_limits<float>::max();
     bool closest_found = false;
     for(const auto& voxel_shift : voxel_shifts) {
         const Eigen::Vector3i query_voxel = center_voxel + voxel_shift;
-        if(closest_found) {
-            float lb = voxel_lower_bound_sq(query_local, voxel_shift, voxel_size_);
-            if(lb >= closest.distance_sq) continue;
-        }
+        float lb = voxel_lower_bound_distance_sq(query, query_voxel, voxel_size_);
+        if(lb >= closest.distance_sq) continue;
         auto search = map_.find(query_voxel);
         if(search == map_.end()) continue;
         const VoxelData<F>& voxel = search.value();

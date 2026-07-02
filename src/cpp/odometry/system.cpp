@@ -2,6 +2,7 @@
 
 // system
 #include <algorithm>
+#include <limits>
 #include <optional>
 #include <span>
 // tbb
@@ -82,7 +83,7 @@ OdometrySystem::OdometrySystem(const Config& config) : util::Profiler("OdometryS
         tbb::global_control::max_allowed_parallelism, static_cast<size_t>(max_threads));
 }
 
-const Sophus::SE3f& OdometrySystem::register_to_map(util::CloudView& points) noexcept {
+const Sophus::SE3f& OdometrySystem::register_to_map(util::CloudView& points, unsigned int seconds, unsigned int nanoseconds) noexcept {
     util::Profiler profiler{"registration", this};
     // deskewing
     {
@@ -96,8 +97,22 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::CloudView& points) noe
         util::voxel_downsample(points_kp, config_.map.voxel_size * OdometrySystem::VOXEL_SIZE_SCALAR);
     }
     Wrapper points_kp_wrapper{points_kp};
+    // compute delta
+    if(init_seconds_ == std::numeric_limits<unsigned int>::max()) init_seconds_ = seconds;
+    float stamp = static_cast<float>(seconds - init_seconds_) + 1e-9 * static_cast<float>(nanoseconds);
+    float dt_prev = last_stamp_ - prev_stamp_;
+    float dt_curr = stamp - last_stamp_;
+    float scale = 1.f;
+    if(dt_prev > 1e-6) scale = static_cast<float>(dt_curr / dt_prev);
+    Sophus::SE3f predicted_delta = Sophus::SE3f::exp(scale * last_delta_.log());
+    // reset stats
+    statistics = Statistics{};
+    Eigen::Matrix<float,6,1> xi;
+    xi = predicted_delta.log();
+    statistics.velocity.linear.initial = xi.tail<3>().norm() / dt_curr;
+    statistics.velocity.angular.initial = xi.head<3>().norm() / dt_curr;
     // compute pose w/ ICP
-    const auto [pose, deviation] = OdometrySystem::align(points_kp_wrapper, profiler);
+    const auto [pose, deviation] = OdometrySystem::align(points_kp_wrapper, predicted_delta, profiler);
     threshold_.update(deviation);
     // append points to map
     {
@@ -108,6 +123,13 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::CloudView& points) noe
     // store new pose
     last_delta_ = last_pose_.inverse() * pose;
     last_pose_ = pose;
+    // store timestamps
+    prev_stamp_ = last_stamp_;
+    last_stamp_ = stamp;
+    // update velocity
+    xi = last_delta_.log();
+    statistics.velocity.linear.solved = xi.tail<3>().norm() / dt_curr;
+    statistics.velocity.angular.solved = xi.head<3>().norm() / dt_curr;
     // return reference to the current pose
     return last_pose_;
 }
@@ -145,6 +167,10 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const Wrapper& points, double s
         });
     }
 
+    if(statistics.iterations == 0) statistics.correspondence.initial_count = correspondences.size();
+    statistics.correspondence.final_count = correspondences.size();
+    statistics.correspondence.mean += static_cast<float>(statistics.correspondence.final_count);
+
     auto compute_jacobian_and_residual = [](const Eigen::Vector3f& source, const Eigen::Vector3f& target) {
         const Eigen::Vector3f residual = source - target;
         Eigen::Matrix<float, 3, 6> J_r;
@@ -177,9 +203,9 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const Wrapper& points, double s
     return JTJ.ldlt().solve(-JTr);
 }
 
-std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, util::Profiler& profiler) {
+std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, const Sophus::SE3f& delta, util::Profiler& profiler) {
     // determine starting point
-    const auto initial_guess = last_pose_ * last_delta_;
+    Sophus::SE3f initial_guess = last_pose_ * delta;
     if(map_.empty()) return std::make_pair(initial_guess, Sophus::SE3f{});
     points.transform(initial_guess);
     // compute adaptive threshold
@@ -199,7 +225,10 @@ std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, uti
         T_icp = est * T_icp;
         // Termination criteria
         if(dx.norm() < config_.registration.convergence_criterion) break;
+        statistics.iterations++;
     }
+    statistics.correspondence.mean /= static_cast<float>(statistics.iterations);
+    // compute new pose
     Sophus::SE3f pose = T_icp * initial_guess;
     // return transformation and deviation
     return std::make_pair(pose, initial_guess.inverse() * pose);

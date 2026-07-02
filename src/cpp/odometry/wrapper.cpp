@@ -1,10 +1,14 @@
 #include "wrapper.h"
+#include <limits>
 
 Belief::Belief() { 
     // populate will a flat distribution
     // NOTE: distribution will be populated by the VoxelMap::update, so we don't need to worry about it
-    static const float EVEN_BELIEF = std::log(1.f / static_cast<float>(Semantics::CLASS_COUNT));
+    static constexpr float EVEN_CONFIDENCE = 1.f / static_cast<float>(Semantics::CLASS_COUNT);
+    confidence.fill(EVEN_CONFIDENCE);
+    static const float EVEN_BELIEF = std::log(EVEN_CONFIDENCE);
     belief.fill(EVEN_BELIEF);
+    prediction = std::numeric_limits<size_t>::max();
 }
 
 void Belief::update(const Semantics& data) noexcept {
@@ -21,7 +25,7 @@ float Belief::weight(const Semantics& data) const noexcept {
     // consider KL or Jensen-Shannon
     for(size_t i = 0; i < Semantics::CLASS_COUNT; ++i) w += confidence[i] * data.confidence[i];
     assert(w >= 0.f && w <= 1.0);
-    return w * Semantics::CLASS_WEIGHT[prediction];
+    return w * ((prediction == std::numeric_limits<size_t>::max()) ? 1.f : Semantics::CLASS_WEIGHT[prediction]);
 }
 
 void Belief::finish() noexcept {
