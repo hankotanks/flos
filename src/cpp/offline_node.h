@@ -124,10 +124,16 @@ private:
             // TODO: I would like my system to be class-name agnostic, so I've moved these parameters here
             // however, the actual class numbers should not be hard-coded...
             // this is a problem for a different day
+            bool ignore_ground = segmentation.ignore.count(1) > 0;
+            bool ignore_trunks = segmentation.ignore.count(3) > 0;
             bool ignore_canopy = segmentation.ignore.count(4) > 0;
             bool ignore_shrubs = segmentation.ignore.count(2) > 0;
+            util::opt_param<bool>(node, ignore_ground, "ignore_ground");
+            util::opt_param<bool>(node, ignore_trunks, "ignore_trunks");
             util::opt_param<bool>(node, ignore_canopy, "ignore_canopy");
             util::opt_param<bool>(node, ignore_shrubs, "ignore_shrubs");
+            ignore_ground ? (segmentation.ignore.insert(1), 0) : segmentation.ignore.erase(1);
+            ignore_trunks ? (segmentation.ignore.insert(3), 0) : segmentation.ignore.erase(3);
             ignore_canopy ? (segmentation.ignore.insert(4), 0) : segmentation.ignore.erase(4);
             ignore_shrubs ? (segmentation.ignore.insert(2), 0) : segmentation.ignore.erase(2);
             // log parameters
@@ -135,6 +141,8 @@ private:
                 std::boolalpha << "SegmentationSystem::Config" << std::endl <<
                     "\tvoxel_size: " << segmentation.voxel_size << "," << std::endl << 
                     "\tmax_distance: " << segmentation.max_distance << "," << std::endl << 
+                    "\tignore_ground: " << ignore_ground << "," << std::endl << 
+                    "\tignore_trunks: " << ignore_trunks << "," << std::endl << 
                     "\tignore_canopy: " << ignore_canopy << "," << std::endl << 
                     "\tignore_shrubs: " << ignore_shrubs);
             // odometry system

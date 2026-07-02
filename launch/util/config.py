@@ -18,6 +18,8 @@ class Config:
             'path_to_model': ((pathlib.Path, True), False), 
             'voxel_size': (float, False), 
             'max_distance': (float, False), 
+            'ignore_ground': (bool, False),  
+            'ignore_trunks': (bool, False),
             'ignore_canopy': (bool, False),  
             'ignore_shrubs': (bool, False),
         }

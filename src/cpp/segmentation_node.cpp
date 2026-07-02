@@ -15,6 +15,8 @@
 // path_to_model
 // voxel_size
 // max_distance
+// ignore_ground
+// ignore_trunks
 // ignore_canopy
 // ignore_shrubs
 
@@ -117,10 +119,16 @@ SegmentationNode::Config::Config(rclcpp::Node* node) {
     // TODO: I would like my system to be class-name agnostic, so I've moved these parameters here
     // however, the actual class numbers should not be hard-coded...
     // this is a problem for a different day
+    bool ignore_ground = config.ignore.count(1) > 0;
+    bool ignore_trunks = config.ignore.count(3) > 0;
     bool ignore_canopy = config.ignore.count(4) > 0;
     bool ignore_shrubs = config.ignore.count(2) > 0;
+    util::opt_param<bool>(node, ignore_ground, "ignore_ground");
+    util::opt_param<bool>(node, ignore_trunks, "ignore_trunks");
     util::opt_param<bool>(node, ignore_canopy, "ignore_canopy");
     util::opt_param<bool>(node, ignore_shrubs, "ignore_shrubs");
+    ignore_ground ? (config.ignore.insert(1), 0) : config.ignore.erase(1);
+    ignore_trunks ? (config.ignore.insert(3), 0) : config.ignore.erase(3);
     ignore_canopy ? (config.ignore.insert(4), 0) : config.ignore.erase(4);
     ignore_shrubs ? (config.ignore.insert(2), 0) : config.ignore.erase(2);
     // log parameters
@@ -128,6 +136,8 @@ SegmentationNode::Config::Config(rclcpp::Node* node) {
         std::boolalpha << "SegmentationSystem::Config" << std::endl <<
             "\tvoxel_size: " << config.voxel_size << "," << std::endl << 
             "\tmax_distance: " << config.max_distance << "," << std::endl << 
+            "\tignore_ground: " << ignore_ground << "," << std::endl << 
+            "\tignore_trunks: " << ignore_trunks << "," << std::endl << 
             "\tignore_canopy: " << ignore_canopy << "," << std::endl << 
             "\tignore_shrubs: " << ignore_shrubs);
 }
