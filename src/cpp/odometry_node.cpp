@@ -181,6 +181,7 @@ int main(int argc, char* argv[]) {
 
 OdometryNode::Config::Config(rclcpp::Node* node) {
     util::opt_param<float>(node, config.map.max_distance, "max_distance");
+    util::opt_param<float>(node, config.map.min_weight, "min_weight");
     util::opt_param<float>(node, config.map.voxel_size, "voxel_size");
     util::opt_param<size_t>(node, config.map.voxel_capacity, "voxel_capacity");
     // threshold
@@ -198,6 +199,7 @@ OdometryNode::Config::Config(rclcpp::Node* node) {
     RCLCPP_INFO_STREAM(node->get_logger(), 
         std::boolalpha << "OdometrySystem::Config" << std::endl <<
             "\tmax_distance: " << config.map.max_distance << "," << std::endl <<
+            "\tmin_weight: " << config.map.min_weight << "," << std::endl <<
             "\tvoxel_size: " << config.map.voxel_size << "," << std::endl <<
             "\tvoxel_capacity: " << config.map.voxel_capacity << "," << std::endl <<
             "\tthreshold_initial: " << config.threshold.threshold_initial << "," << std::endl <<

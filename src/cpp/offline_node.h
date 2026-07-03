@@ -140,6 +140,7 @@ private:
             // odometry system
             odometry.map.max_distance = segmentation.max_distance;
             odometry.map.voxel_size = segmentation.voxel_size;
+            util::opt_param<float>(node, odometry.map.min_weight, "min_weight");
             util::opt_param<size_t>(node, odometry.map.voxel_capacity, "voxel_capacity");
             // threshold
             util::opt_param<float>(node, odometry.threshold.threshold_initial, "threshold_initial");
@@ -156,6 +157,7 @@ private:
             RCLCPP_INFO_STREAM(node->get_logger(), 
                 std::boolalpha << "OdometrySystem::Config" << std::endl <<
                     "\tmax_distance: " << odometry.map.max_distance << "," << std::endl <<
+                    "\tmin_weight: " << odometry.map.min_weight << "," << std::endl <<
                     "\tvoxel_size: " << odometry.map.voxel_size << "," << std::endl <<
                     "\tvoxel_capacity: " << odometry.map.voxel_capacity << "," << std::endl <<
                     "\tthreshold_initial: " << odometry.threshold.threshold_initial << "," << std::endl <<
