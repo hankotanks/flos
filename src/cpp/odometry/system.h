@@ -1,7 +1,8 @@
 #pragma once
 
-// sophus
+// system
 #include <limits>
+// sophus
 #include <sophus/se3.hpp>
 // tbb
 #include <tbb/global_control.h>
@@ -18,7 +19,8 @@ class OdometrySystem: util::Profiler {
 public:
     struct Config {
         struct {
-            float max_distance{50.0};
+            float max_distance{100.0};
+            float min_weight{0.25};
             float voxel_size{1.0}; // NOTE: downsampling approach has changed from kiss-icp
             size_t voxel_capacity{20};
         } map;
@@ -29,7 +31,7 @@ public:
         struct {
             bool confidence_weighting{true};
             bool correspondence_restriction{true};
-            bool correspondence_with_voxel_belief{false};
+            bool correspondence_with_voxel_belief{true};
             size_t max_iterations{500};
             size_t max_threads{0};
             float convergence_criterion{0.0001};
@@ -74,7 +76,7 @@ public:
 private:
     class AdaptiveThreshold {
     public:
-        explicit AdaptiveThreshold(double max_distance, double initial, double min_motion) : 
+        explicit AdaptiveThreshold(float max_distance, float initial, float min_motion) : 
             max_distance_(max_distance), model_sse_(initial * initial), min_motion_(min_motion) { /* STUB */ }
         AdaptiveThreshold() = delete;
         AdaptiveThreshold(const AdaptiveThreshold&) = delete;
@@ -83,23 +85,23 @@ private:
         AdaptiveThreshold& operator=(AdaptiveThreshold&&) = delete;
         ~AdaptiveThreshold() = default;
     public:
-        inline double compute() const noexcept { return std::sqrt(model_sse_ / static_cast<double>(num_sample_)); }
+        inline float compute() const noexcept { return std::sqrt(model_sse_ / static_cast<float>(num_sample_)); }
         void update(const Sophus::SE3f& deviation) noexcept;
     private:
-        double max_distance_;
-        double model_sse_;
-        double min_motion_;
+        float max_distance_;
+        float model_sse_;
+        float min_motion_;
         size_t num_sample_{1};
     };
 private:
     // constructs and solves the linear system, returning dx
-    Eigen::Matrix<float, 6, 1> solve(const Wrapper& points, double sigma, util::Profiler& profiler) noexcept;
+    Eigen::Matrix<float, 6, 1> solve(const Wrapper& points, float sigma, util::Profiler& profiler) noexcept;
     // returns pose and deviation respectively
     std::pair<Sophus::SE3f, Sophus::SE3f> align(Wrapper& points, const Sophus::SE3f& delta, util::Profiler& profiler);
 private:
     Config config_;
     // NOTE: see note in segmentation/node.h
-    static constexpr double VOXEL_SIZE_SCALAR{1.5};
+    static constexpr float VOXEL_SIZE_SCALAR{1.5};
     Sophus::SE3f last_pose_;
     Sophus::SE3f last_delta_;
     unsigned int init_seconds_{std::numeric_limits<unsigned int>::max()};

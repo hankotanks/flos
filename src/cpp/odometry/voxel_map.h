@@ -16,8 +16,9 @@
 template<typename F>
 struct VoxelMap {
 public:
-    explicit VoxelMap(double max_distance, double voxel_size, size_t voxel_capacity) : 
-        max_distance_(max_distance), voxel_size_(voxel_size), voxel_capacity_(voxel_capacity) { /* STUB */ }
+    explicit VoxelMap(float max_distance, float min_weight, float voxel_size, size_t voxel_capacity) : 
+        max_distance_(max_distance), min_weight_(min_weight), 
+        voxel_size_(voxel_size), voxel_resolution_(voxel_size / static_cast<float>(voxel_capacity)), voxel_capacity_(voxel_capacity) { /* STUB */ }
     VoxelMap(const VoxelMap&) = delete;
     VoxelMap(VoxelMap&&) = delete;
     VoxelMap& operator=(const VoxelMap&) = delete;
@@ -52,8 +53,10 @@ public:
     std::optional<Neighbor> closest(const Eigen::Vector3f& query, typename F::point_data_type data, Predicate&& pred, float max_distance_sq = std::numeric_limits<float>::max()) const;
 private:
     // configuration options
-    double max_distance_;
-    double voxel_size_;
+    float max_distance_;
+    float min_weight_;
+    float voxel_size_;
+    float voxel_resolution_;
     size_t voxel_capacity_;
 private:
     tsl::robin_map<Eigen::Vector3i, VoxelData<F>> map_;
@@ -80,7 +83,6 @@ void VoxelMap<F>::update(F& points, const Sophus::SE3f& pose) {
 
 template<typename F>
 void VoxelMap<F>::extend(const F& points, const Sophus::SE3f& pose) {
-    const double resolution_sq = voxel_size_ * voxel_size_ / static_cast<double>(voxel_capacity_);
     for(size_t i = 0; i < points.size(); ++i) {
         const auto& [point, data] = points[i];
         const Eigen::Vector3i voxel = util::point_to_voxel(point, voxel_size_);
@@ -91,7 +93,7 @@ void VoxelMap<F>::extend(const F& points, const Sophus::SE3f& pose) {
                 std::forward_as_tuple(voxel_capacity_));
             search = it;
         }
-        search.value().add(resolution_sq, point, data);
+        search.value().add(voxel_resolution_, min_weight_, point, data);
     }
     // update the VoxelData
     for(auto it = map_.begin(); it != map_.end(); ++it) {

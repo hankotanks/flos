@@ -1,10 +1,21 @@
 #include "offline_node.h"
 
-// rerun
+// system
 #include <optional>
+// rerun
 #include <rerun.hpp>
 // util
 #include "util/cloud.h"
+
+// PARAMETERS
+// incoming_points_topic [REQUIRED]
+// path_to_bag [REQUIRED]
+// path_to_result
+// path_to_model
+// frames
+
+// TOPICS
+// sub: incoming_points_topic [PointCloud2]
 
 class RerunNode : public OfflineNode {
 public:

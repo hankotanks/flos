@@ -89,7 +89,7 @@ def setup(context, *args, **kwargs):
                     'ros2', 'launch', str(path_to_launch),
                     'visualize:=false',
                     f'path_to_bag:={str(bag)}',
-                    f'path_to_result:={str(path_to_result_inner / dataset / bag_name)}',
+                    f'path_to_result:={str(path_to_result_inner / dataset / bag_name / f"{PACKAGE_NAME}_{bag_name}_tum.txt")}',
                     f'path_to_config:={str(config)}'
                 ],
                 output = 'screen',

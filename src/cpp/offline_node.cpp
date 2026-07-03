@@ -1,10 +1,30 @@
 #include "offline_node.h"
 
+// ros
+#include <std_msgs/msg/float32_multi_array.hpp>
+#include <nav_msgs/msg/odometry.hpp>
+
+// PARAMETERS
+// incoming_points_topic [REQUIRED]
+// path_to_bag [REQUIRED]
+// path_to_result
+// path_to_model
+// frames
+
+// TOPICS
+// sub: incoming_points_topic [PointCloud2]
+// pub: $/bag_progress [Float32MultiArray]
+// pub: $/odometry [Odometry]
+// pub: $/map [PointCloud2]
+// pub: $/map/previous [PointCloud2]
+// pub: $/map/points [PointCloud2]
+// pub: /tf [TF]
+
 class DefaultOfflineNode : public OfflineNode {
 public:
     explicit DefaultOfflineNode() : OfflineNode() {
         scan_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/map/points", 10);
-        local_map_previous_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/map/pre", 10);
+        local_map_previous_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/map/previous", 10);
         local_map_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/map", 10);
         tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
         odometry_publisher_ = this->create_publisher<nav_msgs::msg::Odometry>("/" PROJECT_NAME "/odometry", 10);

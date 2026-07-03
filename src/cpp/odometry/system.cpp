@@ -34,13 +34,13 @@ template<typename T>
 void deskew_frame_inner(util::CloudView& points, const std::string& name, const Sophus::SE3f& motion) noexcept {
     std::span<const T> timestamps = points.field<T>(name);
     const auto& [t_min, t_max] = std::minmax_element(timestamps.begin(), timestamps.end());
-    const auto t_norm = [&](const double t) { 
+    const auto t_norm = [&](const float t) { 
         return (t - *t_min) / (*t_max - *t_min); 
     };
     const auto& omega = motion.log();
     tbb::parallel_for(tbb::blocked_range<size_t>{0, points.size()}, [&](const tbb::blocked_range<size_t>& range) {
         for(size_t i = range.begin(); i < range.end(); ++i) {
-            const T stamp = t_norm(points[i].field<T>(name));
+            const T stamp = t_norm(static_cast<float>(points[i].field<T>(name)));
             const auto pose = Sophus::SE3f::exp((static_cast<float>(stamp) - 1.f) * omega);
             points[i].point() = pose * points[i].point();
         };
@@ -75,7 +75,7 @@ bool pred_none(const Belief& data, Semantics point, Semantics query) {
 OdometrySystem::OdometrySystem(const Config& config) : util::Profiler("OdometrySystem"),
     config_(config),
     pred_(config.registration.correspondence_restriction ? (config.registration.correspondence_with_voxel_belief ? pred_query_to_voxel : pred_query_to_point) : pred_none),
-    map_(config.map.max_distance, config.map.voxel_size, config.map.voxel_capacity),
+    map_(config.map.max_distance, config.map.min_weight, config.map.voxel_size, config.map.voxel_capacity),
     threshold_(config.map.max_distance, config.threshold.threshold_initial, config.threshold.min_motion) {
     size_t max_threads = config.registration.max_threads > 0 ? \
         config.registration.max_threads : tbb::this_task_arena::max_concurrency();
@@ -135,10 +135,10 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::CloudView& points, uns
 }
 
 void OdometrySystem::AdaptiveThreshold::update(const Sophus::SE3f& deviation) noexcept {
-    const double model_error = [&]() {
-        const double theta = Eigen::AngleAxisf(deviation.rotationMatrix()).angle();
-        const double delta_rot = 2.0 * max_distance_ * std::sin(theta / 2.0);
-        const double delta_trans = deviation.translation().norm();
+    const float model_error = [&]() {
+        const float theta = Eigen::AngleAxisf(deviation.rotationMatrix()).angle();
+        const float delta_rot = 2.0 * max_distance_ * std::sin(theta / 2.0);
+        const float delta_trans = deviation.translation().norm();
         return delta_trans + delta_rot;
     }();
     if (model_error > min_motion_) {
@@ -147,12 +147,12 @@ void OdometrySystem::AdaptiveThreshold::update(const Sophus::SE3f& deviation) no
     }
 }
 
-Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const Wrapper& points, double sigma, util::Profiler& profiler) noexcept {
+Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const Wrapper& points, float sigma, util::Profiler& profiler) noexcept {
     using Correspondence = std::tuple<Eigen::Vector3f, Semantics, VoxelMap<Wrapper>::Neighbor>;
     
     tbb::concurrent_vector<Correspondence> correspondences;
     correspondences.reserve(points.size());
-    double correspondence_distance_sq = sigma * sigma * config_.registration.correspondence_multiplier * config_.registration.correspondence_multiplier;
+    float correspondence_distance_sq = sigma * sigma * config_.registration.correspondence_multiplier * config_.registration.correspondence_multiplier;
     {
         util::Profiler subprofiler{"correspondences", &profiler};
         tbb::parallel_for(tbb::blocked_range<size_t>{0, points.size()}, [&](const tbb::blocked_range<size_t>& range) {
@@ -209,7 +209,7 @@ std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, con
     if(map_.empty()) return std::make_pair(initial_guess, Sophus::SE3f{});
     points.transform(initial_guess);
     // compute adaptive threshold
-    double sigma = threshold_.compute();
+    float sigma = threshold_.compute();
     // retrieve fields ahead of time to avoid repeated queries
     // perform ICP
     Sophus::SE3f T_icp{};

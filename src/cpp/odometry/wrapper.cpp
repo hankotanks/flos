@@ -1,4 +1,6 @@
 #include "wrapper.h"
+
+// system
 #include <limits>
 
 Belief::Belief() { 
@@ -25,7 +27,7 @@ float Belief::weight(const Semantics& data) const noexcept {
     // consider KL or Jensen-Shannon
     for(size_t i = 0; i < Semantics::CLASS_COUNT; ++i) w += confidence[i] * data.confidence[i];
     assert(w >= 0.f && w <= 1.0);
-    return w * ((prediction == std::numeric_limits<size_t>::max()) ? 1.f : Semantics::CLASS_WEIGHT[prediction]);
+    return w;
 }
 
 void Belief::finish() noexcept {

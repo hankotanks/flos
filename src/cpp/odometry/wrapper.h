@@ -10,7 +10,6 @@
 // represents the semantics of a single point
 struct Semantics {
     static constexpr size_t CLASS_COUNT{5}; // IGNORE = 0, GROUND = 1, SHRUB = 2, STEM = 3, CANOPY = 4
-    static constexpr std::array<float, CLASS_COUNT> CLASS_WEIGHT{0.0, 1.0,  1.0, 1.0, 0.5}; // NOTE: here for testing purposes
     size_t prediction;
     std::array<float, CLASS_COUNT> confidence;
     explicit Semantics() = default;

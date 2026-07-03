@@ -3,21 +3,17 @@
 // system
 #include <filesystem>
 #include <fstream>
-// ros
 #include <limits>
 #include <memory>
+// ros
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/logging.hpp>
-#include <std_msgs/msg/float32_multi_array.hpp>
-#include <sensor_msgs/msg/imu.hpp>
+#include <std_msgs/msg/header.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
-#include <nav_msgs/msg/odometry.hpp>
 // package
 #include "odometry/system.h"
 #include "segmentation/system.h"
 // util
-#include "sensor_msgs/msg/point_cloud2.hpp"
-#include "std_msgs/msg/header.hpp"
 #include "util/cloud.h"
 #include "util/rosbag.h"
 #include "util/rosargs.h"
@@ -35,18 +31,12 @@ std::shared_ptr<T> deserialize_next_msg(const rclcpp::SerializedMessage& msg_ser
 // PARAMETERS
 // incoming_points_topic [REQUIRED]
 // path_to_bag [REQUIRED]
-// path_to_result [REQUIRED]
+// path_to_result
 // path_to_model
 // frames
 
 // TOPICS
 // sub: incoming_points_topic [PointCloud2]
-// pub: $/bag_progress [Float32MultiArray]
-// pub: $/odometry [Odometry]
-// pub: $/map [PointCloud2]
-// pub: $/map/pre [PointCloud2]
-// pub: $/map/points [PointCloud2]
-// pub: /tf [TF]
 
 class OfflineNode : public rclcpp::Node, util::Profiler {
 public:
@@ -57,7 +47,7 @@ public:
         // declare parameters
         this->declare_parameter<std::string>("incoming_points_topic");
         this->declare_parameter<std::string>("path_to_bag");
-        this->declare_parameter<std::string>("path_to_result");
+        this->declare_parameter<std::string>("path_to_result", "");
         // store parameters
         util::opt_param<size_t>(this, msg_count_, "frames");
         this->get_parameter("incoming_points_topic", incoming_points_topic_);
@@ -79,11 +69,13 @@ public:
             RCLCPP_ERROR_ONCE(this->get_logger(), "path_to_result is required");
             rclcpp::shutdown();
         }
-        path_to_result_ = path_to_result;
         // create output directory (if it doesn't exist)
-        std::filesystem::path path_to_result_parent = path_to_result_.parent_path();
-        if(!std::filesystem::exists(path_to_result_parent)) {
-            std::filesystem::create_directories(path_to_result_parent);
+        if(!path_to_result.empty()) {
+            path_to_result_ = path_to_result;
+            std::filesystem::path path_to_result_parent = path_to_result_.parent_path();
+            if(!std::filesystem::exists(path_to_result_parent)) {
+                std::filesystem::create_directories(path_to_result_parent);
+            }
         }
         // path to model
         std::filesystem::path path_to_model_default{PROJECT_ROOT};
@@ -248,6 +240,7 @@ private:
 
     void save() {
         if(poses_.empty()) return;
+        if(path_to_result_.empty()) return;
         // record TUM poses
         std::ofstream f{path_to_result_};
         for(auto& [header, pose] : poses_) {
