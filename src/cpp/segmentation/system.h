@@ -10,7 +10,7 @@ class SegmentationSystem : util::Profiler {
 public:
     struct Config {
         float voxel_size{1.0};
-        float max_distance{25.0};
+        float max_distance{100.0};
         std::set<size_t> ignore{0, 2, 4}; // NOTE: by default, ignore shrubs and canopy
     };
 public:

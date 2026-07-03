@@ -34,13 +34,13 @@ template<typename T>
 void deskew_frame_inner(util::CloudView& points, const std::string& name, const Sophus::SE3f& motion) noexcept {
     std::span<const T> timestamps = points.field<T>(name);
     const auto& [t_min, t_max] = std::minmax_element(timestamps.begin(), timestamps.end());
-    const auto t_norm = [&](const float t) { 
+    const auto t_norm = [&](const T t) { 
         return (t - *t_min) / (*t_max - *t_min); 
     };
     const auto& omega = motion.log();
     tbb::parallel_for(tbb::blocked_range<size_t>{0, points.size()}, [&](const tbb::blocked_range<size_t>& range) {
         for(size_t i = range.begin(); i < range.end(); ++i) {
-            const T stamp = t_norm(static_cast<float>(points[i].field<T>(name)));
+            const T stamp = t_norm(points[i].field<T>(name));
             const auto pose = Sophus::SE3f::exp((static_cast<float>(stamp) - 1.f) * omega);
             points[i].point() = pose * points[i].point();
         };

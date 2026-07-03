@@ -20,7 +20,7 @@ def setup(context, *args, **kwargs):
     except RuntimeError as e:
         LOGGER.error(e.args[0])
         exit(1)
-    
+
     node_offline = launch_ros.actions.Node(
         package = PACKAGE_NAME,
         executable = 'offline_node',

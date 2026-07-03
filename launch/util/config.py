@@ -9,9 +9,8 @@ class Config:
     class Component(enum.Enum):
         OFFLINE = {
             'incoming_points_topic': (str, True),
-            'incoming_imu_topic': (str, False),
             'path_to_bag': ((pathlib.Path, True), True),
-            'path_to_result': ((pathlib.Path, False), True),
+            'path_to_result': ((pathlib.Path, False), False),
             'frames': (int, False),
         }
         SEGMENTATION = {

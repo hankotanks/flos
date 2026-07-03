@@ -18,7 +18,7 @@ struct VoxelMap {
 public:
     explicit VoxelMap(float max_distance, float min_weight, float voxel_size, size_t voxel_capacity) : 
         max_distance_(max_distance), min_weight_(min_weight), 
-        voxel_size_(voxel_size), voxel_resolution_(voxel_size / static_cast<float>(voxel_capacity)), voxel_capacity_(voxel_capacity) { /* STUB */ }
+        voxel_size_(voxel_size), voxel_resolution_(voxel_size * voxel_size / static_cast<float>(voxel_capacity)), voxel_capacity_(voxel_capacity) { /* STUB */ }
     VoxelMap(const VoxelMap&) = delete;
     VoxelMap(VoxelMap&&) = delete;
     VoxelMap& operator=(const VoxelMap&) = delete;
