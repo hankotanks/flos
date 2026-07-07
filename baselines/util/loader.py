@@ -10,11 +10,12 @@ def resolve(base_path: pathlib.Path, extension):
     return files[0].resolve(), base_path.name
 
 class Loader:
-    def parser():
+    def parser(require_path_to_config: bool = False):
         p = argparse.ArgumentParser()
+        p.add_argument("dataset")
         p.add_argument("path_to_bags")
         p.add_argument("path_to_result")
-        p.add_argument("--path_to_config")
+        p.add_argument("--path_to_config", required = require_path_to_config)
         p.add_argument("--name")
         return p
         
@@ -37,7 +38,7 @@ class Loader:
                         name = config.stem
                     name = stem + name
 
-                result = (self.path_to_result / name / 'digiforests' / bag_name).resolve()
+                result = (self.path_to_result / name / self.dataset / bag_name).resolve()
                 result.mkdir(parents = True, exist_ok = True)
 
                 sma_config = (self.path_to_result / name / 'config.yaml').resolve()
@@ -46,6 +47,8 @@ class Loader:
                 yield name, config, bag_path, metadata_path, result
 
     def __init__(self, args):
+        self.dataset = args.dataset
+
         self.path_to_bags = pathlib.Path(args.path_to_bags)
         if not self.path_to_bags.exists():
             raise RuntimeError(f'path_to_bags does not exist: {args.path_to_bags}')

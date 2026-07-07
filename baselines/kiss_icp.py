@@ -6,7 +6,7 @@ sys.path.append(str(pathlib.Path(__file__).resolve().parent))
 from util.loader import Loader, resolve
 
 # example
-# python3 baselines/kiss_icp.py ../digi_ros2/ ../digi_ros2/sma/results/ --config '{"max_range": 50.0}' --name kiss_icp_50m
+# python3 baselines/kiss_icp.py digiforests ../digi_ros2/ ../digi_ros2/sma/results/ --config '{"max_range": 50.0}' --name kiss_icp_50m
 
 def main():
     parser = Loader.parser()
@@ -22,8 +22,7 @@ def main():
         # run kiss-icp
         subprocess.run(cmd, cwd = result, shell = True)
         # copy trajectory to correct location
-        result = (result / 'results' / 'latest').resolve()
-        path_to_traj_src, _ = resolve(result, "poses_tum.txt")
+        path_to_traj_src, _ = resolve(result / 'results' / 'latest', "poses_tum.txt")
         path_to_traj_dst = result / path_to_traj_src.name
         path_to_traj_dst.write_text(path_to_traj_src.read_text())
 
