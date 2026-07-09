@@ -110,7 +110,7 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::CloudView& points, uns
     Eigen::Matrix<float,6,1> xi;
     xi = predicted_delta.log();
     statistics.velocity.linear.initial = xi.tail<3>().norm() / dt_curr;
-    statistics.velocity.angular.initial = xi.head<3>().norm() / dt_curr;
+    statistics.velocity.angular.initial = std::fmod(std::fabs(xi.head<3>().norm()) / dt_curr, 6.28f);
     // compute pose w/ ICP
     const auto [pose, deviation] = OdometrySystem::align(points_kp_wrapper, predicted_delta, profiler);
     threshold_.update(deviation);
@@ -129,7 +129,7 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::CloudView& points, uns
     // update velocity
     xi = last_delta_.log();
     statistics.velocity.linear.solved = xi.tail<3>().norm() / dt_curr;
-    statistics.velocity.angular.solved = xi.head<3>().norm() / dt_curr;
+    statistics.velocity.angular.solved = std::fmod(std::fabs(xi.head<3>().norm()) / dt_curr, 6.28f);
     // return reference to the current pose
     return last_pose_;
 }

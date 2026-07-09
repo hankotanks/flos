@@ -102,6 +102,10 @@ public:
     void filter(const std::string& name, const std::function<bool(const T&)>& pred);
     // filter by distance
     void filter_by_distance(const Eigen::Vector3f& origin, float minima, float maxima);
+    // filter by distance and scalar predicate
+    // applies the distance filter to all points where the predicate returns truthy
+    template<typename T>
+    void filter_by_distance(const Eigen::Vector3f& origin, float minima, float maxima, const std::string& name, const std::function<bool(const T&)>& pred);
     // sort the field based on a comparator over a field
     template<typename T> 
     void sort(const std::string& name, const std::function<bool(const T&, const T&)>& comp);

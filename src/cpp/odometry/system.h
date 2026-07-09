@@ -19,14 +19,14 @@ class OdometrySystem: util::Profiler {
 public:
     struct Config {
         struct {
-            float max_distance{100.0};
-            float min_weight{0.25};
-            float voxel_size{1.0}; // NOTE: downsampling approach has changed from kiss-icp
+            float max_distance{100.f};
+            float min_weight{0.25f};
+            float voxel_size{1.f}; // NOTE: downsampling approach has changed from kiss-icp
             size_t voxel_capacity{20};
         } map;
         struct {
-            float threshold_initial{2.0};
-            float min_motion{0.1};
+            float threshold_initial{2.f};
+            float min_motion{0.1f};
         } threshold;
         struct {
             bool confidence_weighting{true};
@@ -34,8 +34,8 @@ public:
             bool correspondence_with_voxel_belief{true};
             size_t max_iterations{500};
             size_t max_threads{0};
-            float convergence_criterion{0.0001};
-            float correspondence_multiplier{3.0};
+            float convergence_criterion{0.0001f};
+            float correspondence_multiplier{3.f};
         } registration;
     };
 public:

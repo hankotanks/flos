@@ -9,9 +9,13 @@
 class SegmentationSystem : util::Profiler {
 public:
     struct Config {
-        float voxel_size{1.0};
-        float max_distance{100.0};
+        float voxel_size{1.f};
+        float max_distance{MAX_DISTANCE_DEFAULT};
+        float max_distance_neighborhood{MAX_DISTANCE_DEFAULT * 0.5f};
+        std::set<size_t> nearby{1}; // NOTE: by default, limit ground to local_distance
         std::set<size_t> ignore{0, 2, 4}; // NOTE: by default, ignore shrubs and canopy
+    private:
+        static constexpr float MAX_DISTANCE_DEFAULT{100.f};
     };
 public:
     class Model : util::Profiler {
@@ -47,10 +51,11 @@ public:
     ~SegmentationSystem() = default;
 public:
     // NOTE: Config::voxel_size is scaled by this constant for unified parameter passing between segmentation and odometry
-    static constexpr double VOXEL_SIZE_SCALAR{0.5};
+    static constexpr float VOXEL_SIZE_SCALAR{0.5f};
+    static constexpr float VOXEL_SIZE_SCALAR_INFERENCE{0.25f};
     // scalar for map distance
     // NOTE: the idea is that we want the map to be larger than any incoming scan's max distance
-    static constexpr double MAX_DISTANCE_SCALAR{1.0};
+    static constexpr float MAX_DISTANCE_SCALAR{1.f};
 protected:
     // system configuration
     Config config_;    

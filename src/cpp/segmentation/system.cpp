@@ -13,7 +13,7 @@ SegmentationSystem::Model::Model(const SegmentationSystem::Config& config, const
     infer_(helper_.attr("infer")) { /* STUB */ }
 
 void preprocess_inner(const SegmentationSystem::Config& config, util::Cloud& cloud) {
-    double voxel_size = config.voxel_size * SegmentationSystem::VOXEL_SIZE_SCALAR;
+    double voxel_size = config.voxel_size * SegmentationSystem::VOXEL_SIZE_SCALAR_INFERENCE;
     util::voxel_downsample(cloud, voxel_size);
     double max_distance = config.max_distance * SegmentationSystem::MAX_DISTANCE_SCALAR;
     cloud.filter_by_distance(Eigen::Vector3f::Zero(), 0.f, max_distance);
@@ -54,8 +54,13 @@ void SegmentationSystem::Model::infer(util::Cloud& cloud, bool preprocessed) {
     } catch(const py::cast_error&) {
         throw std::runtime_error("inference failed");
     }
-    // TODO: do we still perform the belief update with points of ignored classes?
     cloud.filter<uint8_t>("class", [this](const uint8_t& scalar) {
         return this->config_.ignore.count(scalar) == 0;
     });
+    // TODO: in progress
+    cloud.filter_by_distance<uint8_t>(Eigen::Vector3f::Zero(), 0.f, config_.max_distance_neighborhood, "class", [this](const uint8_t& scalar) -> bool {
+        return this->config_.nearby.count(scalar) > 0;
+    });
+    double voxel_size = config_.voxel_size * SegmentationSystem::VOXEL_SIZE_SCALAR;
+    util::voxel_downsample(cloud, voxel_size);
 }

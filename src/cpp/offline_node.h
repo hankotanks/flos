@@ -113,6 +113,7 @@ private:
             // segmentation system
             util::opt_param<float>(node, segmentation.voxel_size, "voxel_size");
             util::opt_param<float>(node, segmentation.max_distance, "max_distance");
+            util::opt_param<float>(node, segmentation.max_distance_neighborhood, "max_distance_neighborhood");
             // TODO: I would like my system to be class-name agnostic, so I've moved these parameters here
             // however, the actual class numbers should not be hard-coded...
             // this is a problem for a different day
@@ -128,15 +129,33 @@ private:
             ignore_trunks ? (segmentation.ignore.insert(3), 0) : segmentation.ignore.erase(3);
             ignore_canopy ? (segmentation.ignore.insert(4), 0) : segmentation.ignore.erase(4);
             ignore_shrubs ? (segmentation.ignore.insert(2), 0) : segmentation.ignore.erase(2);
+            // NOTE: same as above TODO
+            bool nearby_ground = segmentation.nearby.count(1) > 0;
+            bool nearby_trunks = segmentation.nearby.count(3) > 0;
+            bool nearby_canopy = segmentation.nearby.count(4) > 0;
+            bool nearby_shrubs = segmentation.nearby.count(2) > 0;
+            util::opt_param<bool>(node, nearby_ground, "nearby_ground");
+            util::opt_param<bool>(node, nearby_trunks, "nearby_trunks");
+            util::opt_param<bool>(node, nearby_canopy, "nearby_canopy");
+            util::opt_param<bool>(node, nearby_shrubs, "nearby_shrubs");
+            nearby_ground ? (segmentation.nearby.insert(1), 0) : segmentation.nearby.erase(1);
+            nearby_trunks ? (segmentation.nearby.insert(3), 0) : segmentation.nearby.erase(3);
+            nearby_canopy ? (segmentation.nearby.insert(4), 0) : segmentation.nearby.erase(4);
+            nearby_shrubs ? (segmentation.nearby.insert(2), 0) : segmentation.nearby.erase(2);
             // log parameters
             RCLCPP_INFO_STREAM(node->get_logger(), 
                 std::boolalpha << "SegmentationSystem::Config" << std::endl <<
                     "\tvoxel_size: " << segmentation.voxel_size << "," << std::endl << 
                     "\tmax_distance: " << segmentation.max_distance << "," << std::endl << 
+                    "\tmax_distance_neighborhood: " << segmentation.max_distance_neighborhood << "," << std::endl << 
                     "\tignore_ground: " << ignore_ground << "," << std::endl << 
                     "\tignore_trunks: " << ignore_trunks << "," << std::endl << 
                     "\tignore_canopy: " << ignore_canopy << "," << std::endl << 
-                    "\tignore_shrubs: " << ignore_shrubs);
+                    "\tignore_shrubs: " << ignore_shrubs << "," << std::endl << 
+                    "\tnearby_ground: " << nearby_ground << "," << std::endl << 
+                    "\tnearby_trunks: " << nearby_trunks << "," << std::endl << 
+                    "\tnearby_canopy: " << nearby_canopy << "," << std::endl << 
+                    "\tnearby_shrubs: " << nearby_shrubs);
             // odometry system
             odometry.map.max_distance = segmentation.max_distance;
             odometry.map.voxel_size = segmentation.voxel_size;

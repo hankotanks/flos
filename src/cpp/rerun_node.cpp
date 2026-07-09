@@ -20,7 +20,9 @@
 class RerunNode : public OfflineNode {
 public:
     explicit RerunNode() : OfflineNode(), rr_("visualizer") {
-        rr_.spawn().throw_on_failure();
+        rerun::SpawnOptions options;
+        if(RerunNode::MEMORY_LIMIT > 0) options.memory_limit = std::to_string(RerunNode::MEMORY_LIMIT) + "GB";
+        rr_.spawn(options).throw_on_failure();
     }
 protected:
     virtual void publish_scan(const std_msgs::msg::Header::_stamp_type& stamp, const util::CloudView& cloud) override {
@@ -88,6 +90,7 @@ private:
     }
 private:
     static constexpr float DEFAULT_POINT_RADIUS{0.2f};
+    static constexpr size_t MEMORY_LIMIT{4};
     rerun::RecordingStream rr_;
 };
 

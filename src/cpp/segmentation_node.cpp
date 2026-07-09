@@ -15,10 +15,15 @@
 // path_to_model
 // voxel_size
 // max_distance
+// max_distance_neighborhood
 // ignore_ground
 // ignore_trunks
 // ignore_canopy
 // ignore_shrubs
+// nearby_ground
+// nearby_trunks
+// nearby_canopy
+// nearby_shrubs
 
 // TOPICS
 // sub: incoming_points_topic (default: $/raw/points) [PointCloud2]
@@ -116,6 +121,7 @@ int main(int argc, char* argv[]) {
 SegmentationNode::Config::Config(rclcpp::Node* node) {
     util::opt_param<float>(node, config.voxel_size, "voxel_size");
     util::opt_param<float>(node, config.max_distance, "max_distance");
+    util::opt_param<float>(node, config.max_distance_neighborhood, "max_distance_neighborhood");
     // TODO: I would like my system to be class-name agnostic, so I've moved these parameters here
     // however, the actual class numbers should not be hard-coded...
     // this is a problem for a different day
@@ -131,13 +137,31 @@ SegmentationNode::Config::Config(rclcpp::Node* node) {
     ignore_trunks ? (config.ignore.insert(3), 0) : config.ignore.erase(3);
     ignore_canopy ? (config.ignore.insert(4), 0) : config.ignore.erase(4);
     ignore_shrubs ? (config.ignore.insert(2), 0) : config.ignore.erase(2);
+    // TODO: similar situation with SegmentationSystem::Config::nearby
+    bool nearby_ground = config.nearby.count(1) > 0;
+    bool nearby_trunks = config.nearby.count(3) > 0;
+    bool nearby_canopy = config.nearby.count(4) > 0;
+    bool nearby_shrubs = config.nearby.count(2) > 0;
+    util::opt_param<bool>(node, nearby_ground, "nearby_ground");
+    util::opt_param<bool>(node, nearby_trunks, "nearby_trunks");
+    util::opt_param<bool>(node, nearby_canopy, "nearby_canopy");
+    util::opt_param<bool>(node, nearby_shrubs, "nearby_shrubs");
+    nearby_ground ? (config.nearby.insert(1), 0) : config.nearby.erase(1);
+    nearby_trunks ? (config.nearby.insert(3), 0) : config.nearby.erase(3);
+    nearby_canopy ? (config.nearby.insert(4), 0) : config.nearby.erase(4);
+    nearby_shrubs ? (config.nearby.insert(2), 0) : config.nearby.erase(2);
     // log parameters
     RCLCPP_INFO_STREAM(node->get_logger(), 
         std::boolalpha << "SegmentationSystem::Config" << std::endl <<
             "\tvoxel_size: " << config.voxel_size << "," << std::endl << 
             "\tmax_distance: " << config.max_distance << "," << std::endl << 
+            "\tmax_distance_neighborhood: " << config.max_distance_neighborhood << "," << std::endl << 
             "\tignore_ground: " << ignore_ground << "," << std::endl << 
             "\tignore_trunks: " << ignore_trunks << "," << std::endl << 
             "\tignore_canopy: " << ignore_canopy << "," << std::endl << 
-            "\tignore_shrubs: " << ignore_shrubs);
+            "\tignore_shrubs: " << ignore_shrubs << "," << std::endl << 
+            "\tnearby_ground: " << nearby_ground << "," << std::endl << 
+            "\tnearby_trunks: " << nearby_trunks << "," << std::endl << 
+            "\tnearby_canopy: " << nearby_canopy << "," << std::endl << 
+            "\tnearby_shrubs: " << nearby_shrubs);
 }

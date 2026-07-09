@@ -367,6 +367,34 @@ void CloudView::filter_by_distance(const Eigen::Vector3f& origin, float minima, 
 }
 
 template<typename T>
+void CloudView::filter_by_distance(const Eigen::Vector3f& origin, float minima, float maxima, const std::string& name, const std::function<bool(const T&)>& pred) {
+    float minima_sq = minima * minima;
+    float maxima_sq = maxima * maxima;
+    std::span<const T> field = CloudView::field<T>(name);
+    for(size_t i = CloudView::size(); i-- > 0;) {
+        if((pred)(field[i])) {
+            float d_sq = (points_[i] - origin).squaredNorm();
+            if(d_sq >= minima_sq && d_sq <= maxima_sq) continue; 
+            points_.erase(points_.begin() + i);
+            for(Field& field : fields_) {
+                std::visit([i](auto& vec) { 
+                    vec.erase(vec.begin() + i); 
+                }, field.data_);
+            }
+        }
+    }
+}
+
+template void CloudView::filter_by_distance<int8_t>(const Eigen::Vector3f&, float, float, const std::string&, const std::function<bool(const int8_t&)>&);
+template void CloudView::filter_by_distance<uint8_t>(const Eigen::Vector3f&, float, float, const std::string&, const std::function<bool(const uint8_t&)>&);
+template void CloudView::filter_by_distance<int16_t>(const Eigen::Vector3f&, float, float, const std::string&, const std::function<bool(const int16_t&)>&);
+template void CloudView::filter_by_distance<uint16_t>(const Eigen::Vector3f&, float, float, const std::string&, const std::function<bool(const uint16_t&)>&);
+template void CloudView::filter_by_distance<int32_t>(const Eigen::Vector3f&, float, float, const std::string&, const std::function<bool(const int32_t&)>&);
+template void CloudView::filter_by_distance<uint32_t>(const Eigen::Vector3f&, float, float, const std::string&, const std::function<bool(const uint32_t&)>&);
+template void CloudView::filter_by_distance<float>(const Eigen::Vector3f&, float, float, const std::string&, const std::function<bool(const float&)>&);
+template void CloudView::filter_by_distance<double>(const Eigen::Vector3f&, float, float, const std::string&, const std::function<bool(const double&)>&);
+
+template<typename T>
 void CloudView::sort(const std::string& name, const std::function<bool(const T&, const T&)>& comp) {
     std::span<const T> scalars = CloudView::field<T>(name);
     // build a list of sorted indices
