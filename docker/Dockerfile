@@ -11,28 +11,6 @@ RUN echo 'Etc/UTC' > /etc/timezone && \
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 
-# ENV DEBIAN_FRONTEND=noninteractive
-# ENV PYTHON_VERSION=3.10.14
-# ENV PYTHON_PREFIX=/opt/python3.10
-# 
-# RUN apt-get update && apt-get install -y \
-#     wget build-essential libssl-dev zlib1g-dev \
-#     libncurses5-dev libncursesw5-dev libreadline-dev \
-#     libsqlite3-dev libffi-dev libbz2-dev liblzma-dev \
-#     tk-dev uuid-dev curl xz-utils \
-# 
-# RUN wget "https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz" && \
-#     tar -xzf Python-{PYTHON_VERSION}.tgz && \
-#     rm Python-{PYTHON_VERSION}.tgz
-# 
-# # build and install Python
-# RUN cd Python-${PYTHON_VERSION} && \
-#     ./configure --prefix=${PYTHON_PREFIX} --enable-optimizations && \
-#     make -j$(nproc) && \
-#     make install
-# 
-# ENV PATH="${PYTHON_PREFIX}/bin:${PATH}"
-
 # basic dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential git wget curl unzip ninja-build clangd \
@@ -50,7 +28,7 @@ RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
 
 # install ROS2 and related packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ros-kilted-ros-base ros-kilted-rviz2 \
+    ros-kilted-ros-base ros-kilted-rviz2 ros-kilted-rmw-zenoh-cpp \
     python3-colcon-common-extensions python3-rosdep python3-vcstool \
     && rm -rf /var/lib/apt/lists/*
 RUN rosdep init 2>/dev/null || true && rosdep update
@@ -72,7 +50,7 @@ RUN python3 -m pip install --break-system-packages --no-cache-dir torch-scatter 
 RUN python3 -m pip install --no-cache-dir catkin-pkg 
 # other python deps
 RUN python3 -m pip install --no-cache-dir \
-    spconv-cu126 addict lightning tensorboard typer open3d evo
+    spconv-cu126 "scipy==1.16.0" addict lightning tensorboard typer open3d evo
 
 # once it gets merged in, use the master
 RUN sh -c "$(curl -L https://raw.githubusercontent.com/balancedscorpion/zsh-in-docker/new_user/zsh-in-docker.sh)" -- \
@@ -95,6 +73,11 @@ RUN python3 -c 'import site; print([p for p in site.getsitepackages() if p.endsw
     && echo "    source /root/ros_ws/install/setup.zsh 2>/dev/null || true" >> /root/.zshrc \
     && echo "}" >> /root/.zshrc \
     && echo "ros2-env" >> /root/.zshrc
+
+# install typst for evaluation table generation
+WORKDIR /tmp
+RUN wget -qO typst.tar.xz https://github.com/typst/typst/releases/latest/download/typst-x86_64-unknown-linux-musl.tar.xz \
+    && tar xf typst.tar.xz --strip-components=1 -C /usr/local/bin typst-x86_64-unknown-linux-musl/typst
 
 ENV PATH="/root/.local/bin:${PATH}"
 

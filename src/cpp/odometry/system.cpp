@@ -70,6 +70,22 @@ bool pred_query_to_voxel(const Belief& data, Semantics point, Semantics query) {
 bool pred_none(const Belief& data, Semantics point, Semantics query) {
     return true;
 }
+
+float linear_velocity(const Eigen::Matrix<float,6,1>& xi, float dt) {
+    return xi.tail<3>().norm() / dt;
+}
+
+Eigen::Vector3f angular_wrap(const Eigen::Vector3f& rot) {
+    double angle = rot.norm();
+    if(angle < 1e-12) return rot;
+    double wrapped = std::fmod(angle + M_PI, 2.0 * M_PI) - M_PI;
+    return rot * (wrapped / angle);
+}
+
+float angular_velocity(const Eigen::Matrix<float,6,1>& xi, float dt) {
+    Eigen::Vector3f omega = angular_wrap(xi.head<3>()) / dt;
+    return omega.norm();
+}
 } // private scope
 
 OdometrySystem::OdometrySystem(const Config& config) : util::Profiler("OdometrySystem"),
@@ -107,10 +123,11 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::CloudView& points, uns
     Sophus::SE3f predicted_delta = Sophus::SE3f::exp(scale * last_delta_.log());
     // reset stats
     statistics = Statistics{};
-    Eigen::Matrix<float,6,1> xi;
-    xi = predicted_delta.log();
-    statistics.velocity.linear.initial = xi.tail<3>().norm() / dt_curr;
-    statistics.velocity.angular.initial = std::fmod(std::fabs(xi.head<3>().norm()) / dt_curr, 6.28f);
+    {
+        Eigen::Matrix<float, 6, 1> xi = predicted_delta.log();
+        statistics.velocity.linear.initial = linear_velocity(xi, dt_curr);
+        statistics.velocity.angular.initial = angular_velocity(xi, dt_curr);
+    }
     // compute pose w/ ICP
     const auto [pose, deviation] = OdometrySystem::align(points_kp_wrapper, predicted_delta, profiler);
     threshold_.update(deviation);
@@ -127,9 +144,11 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::CloudView& points, uns
     prev_stamp_ = last_stamp_;
     last_stamp_ = stamp;
     // update velocity
-    xi = last_delta_.log();
-    statistics.velocity.linear.solved = xi.tail<3>().norm() / dt_curr;
-    statistics.velocity.angular.solved = std::fmod(std::fabs(xi.head<3>().norm()) / dt_curr, 6.28f);
+    {
+        Eigen::Matrix<float, 6, 1> xi = last_delta_.log();
+        statistics.velocity.linear.solved = linear_velocity(xi, dt_curr);
+        statistics.velocity.angular.solved = angular_velocity(xi, dt_curr);
+    }
     // return reference to the current pose
     return last_pose_;
 }
@@ -232,4 +251,21 @@ std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, con
     Sophus::SE3f pose = T_icp * initial_guess;
     // return transformation and deviation
     return std::make_pair(pose, initial_guess.inverse() * pose);
+}
+
+std::ostream& operator<<(std::ostream& stream, const OdometrySystem::Config& config) {
+    return stream << std::boolalpha << "OdometrySystem::Config" << std::endl <<
+        "\tmax_distance: " << config.map.max_distance << "," << std::endl <<
+        "\tmin_weight: " << config.map.min_weight << "," << std::endl <<
+        "\tvoxel_size: " << config.map.voxel_size << "," << std::endl <<
+        "\tvoxel_capacity: " << config.map.voxel_capacity << "," << std::endl <<
+        "\tthreshold_initial: " << config.threshold.threshold_initial << "," << std::endl <<
+        "\tmin_motion: " << config.threshold.min_motion << "," << std::endl <<
+        "\tconfidence_weighting: " << config.registration.confidence_weighting << "," << std::endl <<
+        "\tcorrespondence_restriction: " << config.registration.correspondence_restriction << "," << std::endl <<
+        "\tcorrespondence_with_voxel_belief: " << config.registration.correspondence_with_voxel_belief << "," << std::endl <<
+        "\tmax_iterations: " << config.registration.max_iterations << "," << std::endl <<
+        "\tmax_threads: " << config.registration.max_threads << "," << std::endl <<
+        "\tconvergence_criterion: " << config.registration.convergence_criterion << "," << std::endl <<
+        "\tcorrespondence_multiplier: " << config.registration.correspondence_multiplier;
 }

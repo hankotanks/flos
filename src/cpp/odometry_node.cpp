@@ -7,12 +7,12 @@
 #include <nav_msgs/msg/odometry.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 // package
+#include "odometry_node_config.h"
 #include "odometry/system.h"
 // util
 #include "util/buffer_node.h"
 #include "util/cloud.h"
 #include "util/profiler.h"
-#include "util/rosargs.h"
 
 // PARAMETERS
 // debug
@@ -65,17 +65,12 @@ public:
         BufferNode::stop(); 
     }
 protected:
-    struct Config {
-        OdometrySystem::Config config;
-        Config(rclcpp::Node* node);
-    };
-protected:
     // output frame_id
     static constexpr std::string LOCAL_MAP_FRAME = "odom_frame"; 
     // number of seconds between map publications
     static constexpr double LOCAL_MAP_RATE = 5.0; 
     // config
-    Config config_;
+    OdometryNodeConfig config_;
     // core
     OdometrySystem system_;
     // publisher for local map
@@ -177,38 +172,4 @@ int main(int argc, char* argv[]) {
     rclcpp::spin(std::static_pointer_cast<rclcpp::Node>(node));
     rclcpp::shutdown();
     return 0;
-}
-
-OdometryNode::Config::Config(rclcpp::Node* node) {
-    util::opt_param<float>(node, config.map.max_distance, "max_distance");
-    util::opt_param<float>(node, config.map.min_weight, "min_weight");
-    util::opt_param<float>(node, config.map.voxel_size, "voxel_size");
-    util::opt_param<size_t>(node, config.map.voxel_capacity, "voxel_capacity");
-    // threshold
-    util::opt_param<float>(node, config.threshold.threshold_initial, "threshold_initial");
-    util::opt_param<float>(node, config.threshold.min_motion, "min_motion");
-    // registration
-    util::opt_param<bool>(node, config.registration.confidence_weighting, "confidence_weighting");
-    util::opt_param<bool>(node, config.registration.correspondence_restriction, "correspondence_restriction");
-    util::opt_param<bool>(node, config.registration.correspondence_with_voxel_belief, "correspondence_with_voxel_belief");
-    util::opt_param<size_t>(node, config.registration.max_iterations, "max_iterations");
-    util::opt_param<size_t>(node, config.registration.max_threads, "max_threads");
-    util::opt_param<float>(node, config.registration.convergence_criterion, "convergence_criterion");
-    util::opt_param<float>(node, config.registration.correspondence_multiplier, "correspondence_distance_multiplier");
-    // log parameters
-    RCLCPP_INFO_STREAM(node->get_logger(), 
-        std::boolalpha << "OdometrySystem::Config" << std::endl <<
-            "\tmax_distance: " << config.map.max_distance << "," << std::endl <<
-            "\tmin_weight: " << config.map.min_weight << "," << std::endl <<
-            "\tvoxel_size: " << config.map.voxel_size << "," << std::endl <<
-            "\tvoxel_capacity: " << config.map.voxel_capacity << "," << std::endl <<
-            "\tthreshold_initial: " << config.threshold.threshold_initial << "," << std::endl <<
-            "\tmin_motion: " << config.threshold.min_motion << "," << std::endl <<
-            "\tconfidence_weighting: " << config.registration.confidence_weighting << "," << std::endl <<
-            "\tcorrespondence_restriction: " << config.registration.correspondence_restriction << "," << std::endl <<
-            "\tcorrespondence_with_voxel_belief: " << config.registration.correspondence_with_voxel_belief << "," << std::endl <<
-            "\tmax_iterations: " << config.registration.max_iterations << "," << std::endl <<
-            "\tmax_threads: " << config.registration.max_threads << "," << std::endl <<
-            "\tconvergence_criterion: " << config.registration.convergence_criterion << "," << std::endl <<
-            "\tcorrespondence_multiplier: " << config.registration.correspondence_multiplier);
 }

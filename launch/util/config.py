@@ -1,6 +1,7 @@
 import enum
 import pathlib
 import yaml
+import typing
 
 import launch
 import launch_ros
@@ -17,10 +18,9 @@ class Config:
             'path_to_model': ((pathlib.Path, True), False), 
             'voxel_size': (float, False), 
             'max_distance': (float, False), 
-            'ignore_ground': (bool, False),  
-            'ignore_trunks': (bool, False),
-            'ignore_canopy': (bool, False),  
-            'ignore_shrubs': (bool, False),
+            'max_distance_neighborhood': (float, False), 
+            'ignore': (typing.List[int], False),
+            'nearby': (typing.List[int], False),
         }
         ODOMETRY = {
             'voxel_size': (float, False), 
@@ -43,81 +43,76 @@ class Config:
 
         self.param = {component: {} for component in Config.Component}
 
-        def parse(component, key, val, cwd = pathlib.Path.cwd()):
-            if val is None:
-                return None
-            
-            ty, _ = component.value[key]
-            if ty is str:
-                return val
-            elif isinstance(ty, tuple):
-                ty, strict = ty
-                if ty is not pathlib.Path:
-                    raise AssertionError('invalid component parameters')
+        def parse(ty, val, key, cwd=pathlib.Path.cwd()):
+            if val is None: return None
+            strict = False
+            if isinstance(ty, tuple): ty, strict = ty
+            origin = typing.get_origin(ty)
+            args = typing.get_args(ty)
+            if origin is list:
+                if not isinstance(val, (list, tuple)): raise RuntimeError(f'{key} must be a list: {val}')
+                subtype = args[0]
+                return [parse(subtype, x, key, cwd) for x in val]
+            if ty is pathlib.Path:
                 val_abs = pathlib.Path(val)
                 try:
-                    return str(val_abs.resolve(strict = strict))
-                except:
+                    return str(val_abs.resolve(strict=strict))
+                except FileNotFoundError:
                     try:
-                        val_abs = (cwd / val_abs)
-                        return str(val_abs.resolve(strict = strict))
-                    except:
+                        return str((cwd / val_abs).resolve(strict=strict))
+                    except FileNotFoundError:
                         raise RuntimeError(f'{key} could not be resolved: {val}')
-            elif ty is bool:
+            if ty is str: return str(val)
+            if ty is bool:
                 if isinstance(val, bool):
                     return val
-                elif not isinstance(val, str):
-                    raise AssertionError('unreachable')
-                if val not in ['true', 'false']:
-                    raise RuntimeError(f'{key} must be a boolean [true, false]: {val}')
-                return True if val == 'true' else False
-            elif ty is int:
-                if isinstance(val, int):
-                    return val
-                elif not isinstance(val, str):
-                    raise AssertionError('unreachable')
+                if isinstance(val, str):
+                    if val == "true":
+                        return True
+                    if val == "false":
+                        return False
+                raise RuntimeError(f'{key} must be a boolean [true, false]: {val}')
+            if ty is int:
+                if isinstance(val, int): return val
                 try:
                     return int(val)
-                except:
+                except Exception:
                     raise RuntimeError(f'{key} must be an integer: {val}')
-            elif ty is float:
-                if isinstance(val, float):
-                    return val
-                elif not isinstance(val, str):
-                    raise AssertionError('unreachable')
+            if ty is float:
+                if isinstance(val, float): return val
                 try:
                     return float(val)
-                except:
+                except Exception:
                     raise RuntimeError(f'{key} must be a number: {val}')
-            else:
-                raise AssertionError('invalid component parameters')
-    
+            raise AssertionError(f'invalid parameter type: {ty}')
+        
         if path_to_config is not None and len(path_to_config) > 0:
             param_from_config = {}
             try:
-                path_to_config = pathlib.Path(path_to_config).resolve(strict = True)
+                path_to_config = pathlib.Path(path_to_config).resolve(strict=True)
                 with open(path_to_config, 'r') as f:
                     param_from_config = yaml.safe_load(f)
-            except:
+            except Exception:
                 raise RuntimeError(f'path_to_config does not exist: {path_to_config}')
 
             for component in Config.Component:
                 for key in component.value.keys():
-                    if (p := parse(component, key, param_from_config.get(key), path_to_config.parent)) is not None:
+                    ty, _ = component.value[key]
+                    if (p := parse(ty, param_from_config.get(key), key, path_to_config.parent)) is not None:
                         self.param[component][key] = p
+
 
         for component in Config.Component:
             for key in component.value.keys():
+                ty, req = component.value[key]
                 val = launch.substitutions.LaunchConfiguration(key).perform(context)
                 val = val if len(val) > 0 else None
-                if (p := parse(component, key, val)) is not None:
-                    self.param[component][key] = p
-                else:
-                    ty, req = component.value[key]
-                    if req and self.param[component].get(key) is None:
-                        raise RuntimeError(f'missing required parameter: {key} [{ty.__name__}]')
 
-                
+                if (p := parse(ty, val, key)) is not None:
+                    self.param[component][key] = p
+                elif req and self.param[component].get(key) is None:
+                    raise RuntimeError(f'missing required parameter: {key} [{ty}]')
+                        
     def declare_launch_arguments():
         processed = set()
         arguments = [

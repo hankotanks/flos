@@ -1,63 +1,109 @@
 #pragma once
 
+// system
+#include <filesystem>
 // ros
 #include <rclcpp/rclcpp.hpp>
 
 namespace util {
-// helper function for range bounded optional parameters
-// so I can keep defaults in OdometrySystem::Config directly
-#if 0
 template<typename T>
-static std::optional<T> numeric_param(rclcpp::Node* node, const std::string& name, std::optional<T> to = std::nullopt) {
-    static_assert(std::is_integral_v<T> || std::is_floating_point_v<T> || std::is_same_v<T, bool>);
-    if constexpr (std::is_same_v<T, bool>) {
-        node->declare_parameter<bool>(name);
-        rclcpp::Parameter value;
-        node->get_parameter(name, value);
-        auto overrides = node->get_node_parameters_interface()->get_parameter_overrides();
-        if(overrides.find(name) == overrides.end()) return std::nullopt;
-        return value.as_bool();
-    } else {
-        rcl_interfaces::msg::ParameterDescriptor desc{};
-        desc.dynamic_typing = true;
-        if constexpr (std::is_integral_v<T>) {
-            rcl_interfaces::msg::IntegerRange range{};
-            range.from_value = 0;
-            range.to_value = std::numeric_limits<rcl_interfaces::msg::IntegerRange::_to_value_type>::max();
-            desc.integer_range.push_back(range);
-        } else if constexpr (std::is_floating_point_v<T>) {
-            rcl_interfaces::msg::FloatingPointRange range{};
-            range.from_value = 0.0;
-            range.to_value = std::numeric_limits<rcl_interfaces::msg::FloatingPointRange::_to_value_type>::max();
-            desc.floating_point_range.push_back(range);
+struct is_std_vector : std::false_type {};
+
+template<typename T, typename Alloc>
+struct is_std_vector<std::vector<T, Alloc>> : std::true_type {};
+
+template<typename T>
+struct is_supported_parameter_type : std::bool_constant<std::is_same_v<T, bool> || std::is_integral_v<T> || std::is_floating_point_v<T> || std::is_same_v<T, std::string> || is_std_vector<T>::value> { /* STUB */ };
+
+template<typename T>
+bool param_opt(rclcpp::Node* node, const std::string& name, T& value) noexcept {
+    static_assert(is_supported_parameter_type<T>::value, "unsupported parameter type");
+    if(!node->has_parameter(name)) {
+        if constexpr (std::is_same_v<T, std::size_t>) {
+            node->declare_parameter<int64_t>(name, static_cast<int64_t>(value));
+        } else if constexpr (is_std_vector<T>::value) {
+            if constexpr (std::is_same_v<typename T::value_type, std::size_t>) {
+                std::vector<int64_t> value_int64;
+                value_int64.reserve(value.size());
+                std::transform(value.begin(), value.end(),
+                    std::back_inserter(value_int64), [](size_t val) { return static_cast<int64_t>(val); });
+                node->declare_parameter<std::vector<int64_t>>(name, value_int64);
+            } else {
+                node->declare_parameter<T>(name, value);
+            }
+        } else {
+            node->declare_parameter<T>(name, value);
         }
-        node->declare_parameter(name, rclcpp::ParameterValue{}, desc);
-        T value;
-        if(node->get_parameter(name, value)) return value;
-        return std::nullopt;
+    }
+    const auto& overrides = node->get_node_parameters_interface()->get_parameter_overrides();
+    if(overrides.find(name) != overrides.end()) {
+        if constexpr (std::is_same_v<T, std::size_t>) {
+            int64_t value_int64;
+            node->get_parameter(name, value_int64);
+            if(value_int64 < 0) {
+                RCLCPP_ERROR_STREAM_ONCE(node->get_logger(), name << " must be positive: " << value_int64);
+                rclcpp::shutdown();
+            }
+            value = static_cast<size_t>(value_int64);
+        } else if constexpr (is_std_vector<T>::value) {
+            if constexpr (std::is_same_v<typename T::value_type, std::size_t>) {
+                std::vector<int64_t> value_int64;
+                node->get_parameter(name, value_int64);
+                value.clear();
+                value.reserve(value_int64.size());
+                std::transform(value_int64.begin(), value_int64.end(),
+                    std::back_inserter(value), [node, &name](int64_t val) { 
+                        if(val < 0) {
+                            RCLCPP_ERROR_STREAM_ONCE(node->get_logger(), "all " << name << " values must be positive, but contained: " << val);
+                            rclcpp::shutdown();
+                        }
+                        return static_cast<size_t>(val); 
+                    });
+            } else {
+                node->get_parameter(name, value);
+            }
+        } else {
+            node->get_parameter(name, value);
+        }
+        return true;
+    }
+    return false;
+}
+
+template<typename T>
+void param_req(rclcpp::Node* node, const std::string& name, T& value) noexcept {
+    if(!param_opt(node, name, value)) {
+        RCLCPP_ERROR_STREAM_ONCE(node->get_logger(), "missing a required argument: " << name);
+        rclcpp::shutdown();
     }
 }
-#endif
 
-// NOTE: This is terrible, but I'm leaving it for now
-// C++ can't resolve the type for size_t, because it could be int64_t, unsigned long, etc..
-// so I made this map from one type to another
-template<typename T>
-struct type_map;
-template<> struct type_map<size_t> { using to = int64_t; };
-template<> struct type_map<float> { using to = float; };
-template<> struct type_map<double> { using to = double; };
-template<> struct type_map<bool> { using to = bool; };
+bool param_opt_path(rclcpp::Node* node, const std::string& name, std::filesystem::path& value, bool file, bool exists = false, bool create_directories = false) {
+    std::string path_raw;
+    if(param_opt<std::string>(node, name, path_raw)) {
+        std::filesystem::path path{path_raw};
+        if(!std::filesystem::exists(path)) {
+            if(exists) {
+                RCLCPP_ERROR_STREAM_ONCE(node->get_logger(), name << " did not exist: " << path_raw);
+                rclcpp::shutdown();
+            }
+            if(create_directories) {
+                std::filesystem::create_directories(file ? path.parent_path() : path);
+            }
+        } else if(std::filesystem::is_directory(path) && file) {
+            RCLCPP_ERROR_STREAM_ONCE(node->get_logger(), name << " expected a file, but found a directory: " << path_raw);
+            rclcpp::shutdown();
+        }
+        value = path;
+        return true;
+    }
+    return false;
+}
 
-template<typename T>
-static void opt_param(rclcpp::Node* node, T& value, const std::string& name) {
-    static_assert(std::is_integral_v<T> || std::is_floating_point_v<T> || std::is_same_v<T, bool>);
-    using R = typename type_map<T>::to;
-    T temp;
-    node->declare_parameter<R>(name, temp);
-    node->get_parameter(name, temp);
-    const auto& overrides = node->get_node_parameters_interface()->get_parameter_overrides();
-    if(overrides.count(name) == 0) return;
-    value = temp;
+void param_req_path(rclcpp::Node* node, const std::string& name, std::filesystem::path& value, bool file, bool exists = false, bool create_directories = false) {
+    if(!param_opt_path(node, name, value, file, exists, create_directories)) {
+        RCLCPP_ERROR_STREAM_ONCE(node->get_logger(), "missing a required argument: " << name);
+        rclcpp::shutdown();
+    }
 }
 }

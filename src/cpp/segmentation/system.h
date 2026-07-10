@@ -1,5 +1,7 @@
 #pragma once
 
+// system
+#include <filesystem>
 // pybind
 #include <pybind11/embed.h>
 // util
@@ -9,13 +11,16 @@
 class SegmentationSystem : util::Profiler {
 public:
     struct Config {
+        static constexpr std::array<std::string, 5> CLASS_HINT{"ignore", "ground", "shrubs", "trunks", "canopy"};
         float voxel_size{1.f};
         float max_distance{MAX_DISTANCE_DEFAULT};
         float max_distance_neighborhood{MAX_DISTANCE_DEFAULT * 0.5f};
-        std::set<size_t> nearby{1}; // NOTE: by default, limit ground to local_distance
-        std::set<size_t> ignore{0, 2, 4}; // NOTE: by default, ignore shrubs and canopy
+        std::set<size_t> nearby; // NOTE: by default, limit ground to local_distance
+        std::set<size_t> ignore{0, 4}; // NOTE: by default, ignore canopy
+    public:
+        friend std::ostream& operator<<(std::ostream& stream, const Config& config);
     private:
-        static constexpr float MAX_DISTANCE_DEFAULT{100.f};
+        static constexpr float MAX_DISTANCE_DEFAULT{50.f};
     };
 public:
     class Model : util::Profiler {
@@ -30,7 +35,7 @@ public:
         Model& operator=(Model&&) = delete;
         ~Model() = default;
     private:
-        explicit Model(const SegmentationSystem::Config& config, const std::string& path_to_model, util::Profiler* profiler);
+        explicit Model(const SegmentationSystem::Config& config, const std::filesystem::path& path_to_model, util::Profiler* profiler);
     private:
         py::object module_;
         py::object helper_;
@@ -41,7 +46,7 @@ public:
     explicit SegmentationSystem(const Config& config) : util::Profiler("SegmentationSystem"), config_(config) { /* STUB */ }
 public:
     void preprocess(util::Cloud& cloud);
-    SegmentationSystem::Model load(const std::string& path_to_model);
+    SegmentationSystem::Model load(const std::filesystem::path& path_to_model);
 public:
     SegmentationSystem() = delete;
     SegmentationSystem(const SegmentationSystem&) = delete;

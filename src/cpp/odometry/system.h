@@ -19,8 +19,8 @@ class OdometrySystem: util::Profiler {
 public:
     struct Config {
         struct {
-            float max_distance{100.f};
-            float min_weight{0.25f};
+            float max_distance{50.f};
+            float min_weight{0.5f};
             float voxel_size{1.f}; // NOTE: downsampling approach has changed from kiss-icp
             size_t voxel_capacity{20};
         } map;
@@ -37,6 +37,8 @@ public:
             float convergence_criterion{0.0001f};
             float correspondence_multiplier{3.f};
         } registration;
+    public:
+        friend std::ostream& operator<<(std::ostream& stream, const Config& config);
     };
 public:
     explicit OdometrySystem(const Config& config);

@@ -24,6 +24,7 @@ def setup(context, *args, **kwargs):
         executable = 'rerun_node',
         emulate_tty = True,
         output = 'screen',
+        # prefix=['gdb -ex "set pagination off" -ex run -ex "thread apply all bt full" --args'],
         parameters = [
             {
                 'use_sim_time': True,
