@@ -21,11 +21,15 @@ while (( $# > 0 )); do
     MOUNT_FLAGS+=(-v "${path_local}:${path_container}")
 done
 
+if [[ -n "${DISPLAY:-}" ]]; then
+    MOUNT_FLAGS+=(--env "DISPLAY=$DISPLAY")
+    MOUNT_FLAGS+=(--env "QT_X11_NO_MITSHM=1")
+    MOUNT_FLAGS+=(--volume /tmp/.X11-unix:/tmp/.X11-unix:rw)
+fi
+
+
 podman run -it \
   --device nvidia.com/gpu=all \
   "${MOUNT_FLAGS[@]}" \
-  --env DISPLAY="$DISPLAY" \
-  --env QT_X11_NO_MITSHM=1 \
-  --volume /tmp/.X11-unix:/tmp/.X11-unix:rw \
   --security-opt label=disable \
   forest_segmentation_devkit

@@ -109,7 +109,7 @@ private:
     rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr bag_progress_publisher_;
 private:
     // output frame_id
-    static constexpr std::string LOCAL_MAP_FRAME = "odom_frame";
+    static constexpr std::string LOCAL_MAP_FRAME{"odom_frame"};
 };
 
 int main(int argc, char* argv[]) {

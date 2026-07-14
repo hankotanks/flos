@@ -103,7 +103,7 @@ private:
 private:
     Config config_;
     // NOTE: see note in segmentation/node.h
-    static constexpr float VOXEL_SIZE_SCALAR{1.5};
+    static constexpr float VOXEL_SIZE_SCALAR{1.f};
     Sophus::SE3f last_pose_;
     Sophus::SE3f last_delta_;
     unsigned int init_seconds_{std::numeric_limits<unsigned int>::max()};

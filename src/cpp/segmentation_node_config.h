@@ -15,7 +15,7 @@ struct SegmentationNodeConfig {
         util::param_opt(node, "voxel_size", config.voxel_size);
         util::param_opt(node, "max_distance", config.max_distance);
         util::param_opt(node, "max_distance_neighborhood", config.max_distance_neighborhood);
-        // TODO: I would like my system to be class-name agnostic, so I've moved these parameters here
+        // DONE: I would like my system to be class-name agnostic, so I've moved these parameters here
         // however, the actual class numbers should not be hard-coded...
         // this is a problem for a different day
         std::vector<size_t> ignore;

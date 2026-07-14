@@ -66,9 +66,9 @@ public:
     }
 protected:
     // output frame_id
-    static constexpr std::string LOCAL_MAP_FRAME = "odom_frame"; 
+    static constexpr std::string LOCAL_MAP_FRAME{"odom_frame"}; 
     // number of seconds between map publications
-    static constexpr double LOCAL_MAP_RATE = 5.0; 
+    static constexpr float LOCAL_MAP_RATE{5.f}; 
     // config
     OdometryNodeConfig config_;
     // core
