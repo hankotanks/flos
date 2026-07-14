@@ -43,14 +43,16 @@ std::shared_ptr<T> deserialize_next_msg(const rclcpp::SerializedMessage& msg_ser
 
 class OfflineNode : public rclcpp::Node, util::Profiler {
 public:
-    explicit OfflineNode() : rclcpp::Node(NODE_NAME), util::Profiler(NODE_NAME),
+    explicit OfflineNode(const bool flags = true) : rclcpp::Node(NODE_NAME), util::Profiler(NODE_NAME),
         segmentation_config_(this),
         segmentation_system_(segmentation_config_.config),
         odometry_config_(this),
         odometry_system_(odometry_config_.config) {
         // declare parameters
-        util::param_req(this, "incoming_points_topic", incoming_points_topic_);
-        util::param_req_path(this, "path_to_bag", path_to_bag_, true, true);
+        if(flags) {
+            util::param_req(this, "incoming_points_topic", incoming_points_topic_);
+            util::param_req_path(this, "path_to_bag", path_to_bag_, true, true);
+        }
         util::param_opt_path(this, "path_to_result", path_to_result_, true, false, true);        
     }
     // delete extraneous constructors

@@ -11,7 +11,7 @@
 
 class RerunNodeWildScenes : public RerunNode {
 public:
-    explicit RerunNodeWildScenes() : RerunNode() {
+    explicit RerunNodeWildScenes() : RerunNode(false) {
         std::filesystem::path path_to_scans;
         util::param_req_path(this, "path_to_scans", path_to_scans, false, true);
         // get all file names for later

@@ -19,7 +19,7 @@
 
 class RerunNode : public OfflineNode {
 public:
-    explicit RerunNode() : OfflineNode(), rr_("visualizer") {
+    explicit RerunNode(const bool flags = true) : OfflineNode(flags), rr_("visualizer") {
         rerun::SpawnOptions options;
         if(RerunNode::MEMORY_LIMIT > 0) options.memory_limit = std::to_string(RerunNode::MEMORY_LIMIT) + "GB";
         rr_.spawn(options).throw_on_failure();
