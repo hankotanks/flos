@@ -3,7 +3,7 @@
 // sophus
 #include <sophus/se3.hpp>
 // package
-#include "frame.h"
+#include "odometry/frame.h"
 // util
 #include "util/cloud.h"
 

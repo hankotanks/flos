@@ -9,8 +9,8 @@
 #include <tbb/concurrent_vector.h>
 #include <tbb/task_arena.h>
 // package
-#include "voxel_map.h"
-#include "wrapper.h"
+#include "odometry/voxel_map.h"
+#include "odometry/wrapper.h"
 // util
 #include "util/cloud.h"
 #include "util/profiler.h"

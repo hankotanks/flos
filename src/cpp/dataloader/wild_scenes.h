@@ -5,7 +5,7 @@
 // ros
 #include <rclcpp/rclcpp.hpp>
 // package
-#include "dataloader.h"
+#include "dataloader/dataloader.h"
 
 class WildScenesDataloader : public Dataloader {
     friend class Dataloader;

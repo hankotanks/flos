@@ -1,4 +1,4 @@
-#include "voxel.h"
+#include "util/voxel.h"
 
 namespace util {
 void voxel_downsample(util::CloudView& cloud, const double voxel_size) {

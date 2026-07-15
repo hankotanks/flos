@@ -9,7 +9,7 @@
 // sophus
 #include <sophus/se3.hpp>
 // package
-#include "frame.h"
+#include "odometry/frame.h"
 // util
 #include "util/voxel.h" // DO NOT REMOVE, required for the Eigen::Vector3i hash implementation
 

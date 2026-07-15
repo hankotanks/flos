@@ -1,11 +1,10 @@
-#include "dataloader.h"
+#include "dataloader/dataloader.h"
 
 // system
 #include <typeinfo>
-#include <fstream>
 // package
-#include "bag.h"
-#include "wild_scenes.h"
+#include "dataloader/bag.h"
+#include "dataloader/wild_scenes.h"
 // util
 #include "util/rosargs.h"
 
