@@ -90,5 +90,5 @@ std::ostream& operator<<(std::ostream& stream, const SegmentationSystem::Config&
         "\tmax_distance: " << config.max_distance << "," << std::endl << 
         "\tmax_distance_neighborhood: " << config.max_distance_neighborhood << "," << std::endl << 
         "\tignore: " << format(config.ignore) << "," << std::endl << 
-        "\tnearby: " << format(config.nearby) << "," << std::endl;
+        "\tnearby: " << format(config.nearby);
 }

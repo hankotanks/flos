@@ -23,6 +23,7 @@ configure_node(segmentation_node
     segmentation/system.cpp
     util/cloud.cpp
     util/voxel.cpp
+    util/rosargs.cpp
   HEADERS
     segmentation/system.h
     util/buffer_node.h
@@ -48,6 +49,7 @@ configure_node(odometry_node
     odometry/wrapper.cpp
     util/cloud.cpp
     util/voxel.cpp
+    util/rosargs.cpp
   HEADERS
     odometry/voxel_map.h
     odometry/system.h
@@ -75,14 +77,19 @@ add_executable(offline_node)
 configure_node(offline_node
   SOURCES
     offline_node.cpp
+    dataloader/dataloader.cpp
+    dataloader/bag.cpp
+    dataloader/wild_scenes.cpp
     segmentation/system.cpp
     odometry/system.cpp
     odometry/wrapper.cpp
     util/cloud.cpp
     util/voxel.cpp
+    util/rosargs.cpp
     util/rosbag.cpp 
   HEADERS
     offline_node.h
+    dataloader/dataloader.h
     segmentation/system.h
     odometry/voxel_map.h
     odometry/system.h
@@ -114,15 +121,20 @@ add_executable(rerun_node)
 configure_node(rerun_node
   SOURCES
     rerun_node.cpp
+    dataloader/dataloader.cpp
+    dataloader/bag.cpp
+    dataloader/wild_scenes.cpp
     segmentation/system.cpp
     odometry/system.cpp
     odometry/wrapper.cpp
     util/cloud.cpp
     util/voxel.cpp
+    util/rosargs.cpp
     util/rosbag.cpp 
   HEADERS
     rerun_node.h
     offline_node.h
+    dataloader/dataloader.h
     segmentation/system.h
     odometry/voxel_map.h
     odometry/system.h
@@ -151,47 +163,5 @@ configure_node(rerun_node
     ${sensor_msgs_TARGETS}
     ${nav_msgs_TARGETS})
 
-
-add_executable(rerun_node_wild_scenes)
-configure_node(rerun_node_wild_scenes
-  SOURCES
-    rerun_node_wild_scenes.cpp
-    segmentation/system.cpp
-    odometry/system.cpp
-    odometry/wrapper.cpp
-    util/cloud.cpp
-    util/voxel.cpp
-    util/rosbag.cpp 
-  HEADERS
-    rerun_node.h
-    offline_node.h
-    segmentation/system.h
-    odometry/voxel_map.h
-    odometry/system.h
-    odometry/frame.h
-    odometry/wrapper.h
-    util/buffer_node.h
-    util/cloud.h
-    util/voxel.h
-    util/stl_vector_eigen.h
-    util/profiler.h
-    util/rosargs.h
-    util/rosbag.h
-  LIBRARIES
-    Eigen3::Eigen
-    pybind11::embed
-    tsl::robin_map
-    Sophus::Sophus
-    TBB::tbb
-    rerun_sdk
-  PACKAGES
-    rclcpp::rclcpp
-    tf2_ros::tf2_ros
-    rosbag2_cpp::rosbag2_cpp rosbag2_storage::rosbag2_storage
-    ${std_msgs_TARGETS}
-    ${geometry_msgs_TARGETS}
-    ${sensor_msgs_TARGETS}
-    ${nav_msgs_TARGETS})
-
-install(TARGETS segmentation_node odometry_node offline_node rerun_node rerun_node_wild_scenes
+install(TARGETS segmentation_node odometry_node offline_node rerun_node
   DESTINATION lib/${PROJECT_NAME})

@@ -37,6 +37,7 @@ public:
         BufferNode("incoming_points_topic", "/" PROJECT_NAME "/raw/points"),
         config_(this),
         system_(config_.config) {
+        if(!rclcpp::ok()) return;
         // point publisher (subscriber is now handled by BufferNode)
         outgoing_points_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/inference", 10);
         // start the worker

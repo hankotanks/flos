@@ -45,6 +45,7 @@ public:
         BufferNode("incoming_points_topic", "/" PROJECT_NAME "/inference"),
         config_(this),
         system_(config_.config) {
+        if(!rclcpp::ok()) return;
         if(debug_) { // initialize map publisher
             local_map_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/map", 10);
             outgoing_points_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/map/points", 10);

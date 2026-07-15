@@ -15,21 +15,10 @@
 #include "segmentation/system.h"
 #include "odometry_node_config.h"
 #include "odometry/system.h"
+#include "dataloader/dataloader.h"
 // util
-#include "sensor_msgs/msg/point_cloud2.hpp"
 #include "util/cloud.h"
-#include "util/rosbag.h"
 #include "util/rosargs.h"
-
-namespace {
-template <typename T>
-std::shared_ptr<T> deserialize_next_msg(const rclcpp::SerializedMessage& msg_ser) {
-    const auto msg = std::make_shared<T>();
-    const rclcpp::Serialization<T> serializer;
-    serializer.deserialize_message(&msg_ser, msg.get());
-    return msg;
-}
-} // namespace
 
 // PARAMETERS
 // incoming_points_topic [REQUIRED]
@@ -43,16 +32,13 @@ std::shared_ptr<T> deserialize_next_msg(const rclcpp::SerializedMessage& msg_ser
 
 class OfflineNode : public rclcpp::Node, util::Profiler {
 public:
-    explicit OfflineNode(const bool flags = true) : rclcpp::Node(NODE_NAME), util::Profiler(NODE_NAME),
+    explicit OfflineNode() : rclcpp::Node(NODE_NAME), util::Profiler(NODE_NAME),
+        loader_(Dataloader::choose(this)),
         segmentation_config_(this),
         segmentation_system_(segmentation_config_.config),
         odometry_config_(this),
         odometry_system_(odometry_config_.config) {
-        // declare parameters
-        if(flags) {
-            util::param_req(this, "incoming_points_topic", incoming_points_topic_);
-            util::param_req_path(this, "path_to_bag", path_to_bag_, true, true);
-        }
+        if(!rclcpp::ok()) return;
         util::param_opt_path(this, "path_to_result", path_to_result_, true, false, true);        
     }
     // delete extraneous constructors
@@ -61,21 +47,19 @@ public:
     OfflineNode& operator=(const OfflineNode&) = delete;
     OfflineNode& operator=(OfflineNode&&) = delete;
     ~OfflineNode() {
-        if(bag_) {
-            bag_->close();
-        }
         OfflineNode::save();
     }
 public:
     void run() {
+        if(!rclcpp::ok()) return;
         py::scoped_interpreter guard{};
         SegmentationSystem::Model model = segmentation_system_.load(segmentation_config_.path_to_model);
         RCLCPP_INFO_ONCE(this->get_logger(), NODE_NAME " successfully loaded inference model");
         // initialize and set total message count
-        if(msg_count_ == 0) msg_count_ = this->init();
+        msg_count_ = this->loader_->init(this->shared_from_this());
         // infer lidar messages from the given bag
-        while(rclcpp::ok() && !this->finished() && msg_processed_++ < msg_count_) {
-            auto [cloud, header] = this->next();
+        while(rclcpp::ok() && !this->loader_->finished() && msg_processed_++ < msg_count_) {
+            auto [cloud, header] = this->loader_->next();
             Sophus::SE3f pose;
             {
                 util::Profiler profiler{"frame", this};
@@ -97,34 +81,6 @@ public:
             const auto [percent, remaining] = OfflineNode::compute_bag_progress();
             this->publish_bag_progress(header.stamp, percent, remaining);
         }
-        
-        // close bag
-        bag_->close();
-        bag_ = nullptr;
-    }
-protected:
-    virtual size_t init() {
-        // construct bag reader
-        bag_ = std::make_unique<util::BufferableBag>(path_to_bag_, 
-            // NOTE: this REQUIRES OfflineSegmentationNode to be constructed with std::make_shared
-            std::make_shared<util::BufferableBag::TFBridge>(this->shared_from_this()), 
-            std::vector<std::string>{incoming_points_topic_});
-
-        return bag_->message_count();
-    }
-
-    virtual bool finished() {
-        return bag_->finished();
-    }
-
-    virtual std::pair<util::Cloud, std_msgs::msg::Header> next() {
-        // get next message from bag
-        const rosbag2_storage::SerializedBagMessage serialized_bag_msg = bag_->PopNextMessage();
-        const auto& topic = serialized_bag_msg.topic_name;
-        const rclcpp::SerializedMessage msg_ser(*serialized_bag_msg.serialized_data);
-        // this condition should always be truthy... but whatever...
-        std::shared_ptr<sensor_msgs::msg::PointCloud2> msg = deserialize_next_msg<sensor_msgs::msg::PointCloud2>(msg_ser);
-        return std::make_pair(msg, msg->header);
     }
 protected:
     virtual void publish_scan(const std_msgs::msg::Header::_stamp_type& stamp, const util::CloudView& cloud) { /* STUB */ };
@@ -181,14 +137,15 @@ private:
     std::filesystem::path path_to_bag_;
     std::filesystem::path path_to_result_;
 private:
+    // bag
+    std::unique_ptr<Dataloader> loader_{nullptr};
     // segmentation
     SegmentationNodeConfig segmentation_config_;
     SegmentationSystem segmentation_system_;
     // odometry
     OdometryNodeConfig odometry_config_;
     OdometrySystem odometry_system_;
-    // bag
-    std::unique_ptr<util::BufferableBag> bag_;
+    // progress
     size_t msg_count_{0};
     size_t msg_processed_{0};
     // local map

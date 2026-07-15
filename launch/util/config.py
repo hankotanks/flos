@@ -9,10 +9,10 @@ import launch_ros
 class Config:
     class Component(enum.Enum):
         OFFLINE = {
-            'incoming_points_topic': (str, True),
-            'path_to_bag': ((pathlib.Path, True), True),
+            'path_to_data': ((pathlib.Path, True), True),
             'path_to_result': ((pathlib.Path, False), False),
             'frames': (int, False),
+            'incoming_points_topic': (str, False), # NOTE: specific to BagDataloader
         }
         SEGMENTATION = {
             'path_to_model': ((pathlib.Path, True), False), 
@@ -50,7 +50,9 @@ class Config:
             origin = typing.get_origin(ty)
             args = typing.get_args(ty)
             if origin is list:
-                if not isinstance(val, (list, tuple)): raise RuntimeError(f'{key} must be a list: {val}')
+                if not isinstance(val, (list, tuple)):
+                    if isinstance(val, str): return parse(ty, yaml.safe_load(val), key, cwd)
+                    raise RuntimeError(f'{key} must be a list: {val}')
                 subtype = args[0]
                 return [parse(subtype, x, key, cwd) for x in val]
             if ty is pathlib.Path:

@@ -78,32 +78,7 @@ void param_req(rclcpp::Node* node, const std::string& name, T& value) noexcept {
     }
 }
 
-bool param_opt_path(rclcpp::Node* node, const std::string& name, std::filesystem::path& value, bool file, bool exists = false, bool create_directories = false) {
-    std::string path_raw;
-    if(param_opt<std::string>(node, name, path_raw)) {
-        std::filesystem::path path{path_raw};
-        if(!std::filesystem::exists(path)) {
-            if(exists) {
-                RCLCPP_ERROR_STREAM_ONCE(node->get_logger(), name << " did not exist: " << path_raw);
-                rclcpp::shutdown();
-            }
-            if(create_directories) {
-                std::filesystem::create_directories(file ? path.parent_path() : path);
-            }
-        } else if(std::filesystem::is_directory(path) && file) {
-            RCLCPP_ERROR_STREAM_ONCE(node->get_logger(), name << " expected a file, but found a directory: " << path_raw);
-            rclcpp::shutdown();
-        }
-        value = path;
-        return true;
-    }
-    return false;
-}
+bool param_opt_path(rclcpp::Node* node, const std::string& name, std::filesystem::path& value, bool exists = false, std::optional<bool> file = std::nullopt, bool create_directories = false);
 
-void param_req_path(rclcpp::Node* node, const std::string& name, std::filesystem::path& value, bool file, bool exists = false, bool create_directories = false) {
-    if(!param_opt_path(node, name, value, file, exists, create_directories)) {
-        RCLCPP_ERROR_STREAM_ONCE(node->get_logger(), "missing a required argument: " << name);
-        rclcpp::shutdown();
-    }
-}
+void param_req_path(rclcpp::Node* node, const std::string& name, std::filesystem::path& value, bool exists = false, std::optional<bool> file = std::nullopt, bool create_directories = false);
 }

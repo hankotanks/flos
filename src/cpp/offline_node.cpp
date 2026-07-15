@@ -3,6 +3,7 @@
 // ros
 #include <std_msgs/msg/float32_multi_array.hpp>
 #include <nav_msgs/msg/odometry.hpp>
+#include <tf2_ros/transform_broadcaster.hpp>
 
 // PARAMETERS
 // incoming_points_topic [REQUIRED]
@@ -23,6 +24,7 @@
 class DefaultOfflineNode : public OfflineNode {
 public:
     explicit DefaultOfflineNode() : OfflineNode() {
+        if(!rclcpp::ok()) return;
         scan_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/map/points", 10);
         local_map_previous_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/map/previous", 10);
         local_map_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/map", 10);
