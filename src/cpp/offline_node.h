@@ -21,8 +21,8 @@
 #include "util/rosargs.h"
 
 // PARAMETERS
-// incoming_points_topic [REQUIRED]
-// path_to_bag [REQUIRED]
+// incoming_points_topic [REQUIRED for BagDataloader]
+// path_to_data [REQUIRED]
 // path_to_result
 // path_to_model
 // frames
@@ -78,8 +78,8 @@ public:
             this->publish_local_map(header.stamp, *local_map_);
             this->publish_pose(header.stamp, header.frame_id, pose);
             this->publish_statistics(header.stamp, odometry_system_.statistics);
-            const auto [percent, remaining] = OfflineNode::compute_bag_progress();
-            this->publish_bag_progress(header.stamp, percent, remaining);
+            const auto [percent, remaining] = OfflineNode::compute_progress();
+            this->publish_progress(header.stamp, percent, remaining);
         }
     }
 protected:
@@ -87,9 +87,9 @@ protected:
     virtual void publish_local_map(const std_msgs::msg::Header::_stamp_type& stamp, const util::CloudView& cloud, bool previous = false) { /* STUB */ };
     virtual void publish_pose(const std_msgs::msg::Header::_stamp_type& stamp, const std_msgs::msg::Header::_frame_id_type& frame_id, const Sophus::SE3f& pose) { /* STUB */ };
     virtual void publish_statistics(const std_msgs::msg::Header::_stamp_type& stamp, const OdometrySystem::Statistics& statistics) { /* STUB */ };
-    virtual void publish_bag_progress(const std_msgs::msg::Header::_stamp_type& stamp, float percent, float remaining) { /* STUB */ }
+    virtual void publish_progress(const std_msgs::msg::Header::_stamp_type& stamp, float percent, float remaining) { /* STUB */ }
 private:
-    std::pair<float, float> compute_bag_progress() {
+    std::pair<float, float> compute_progress() {
         if(msg_count_ == 0) return std::make_pair(0.f, std::numeric_limits<float>::max());
         static const auto start_time = std::chrono::steady_clock::now();
         const auto now = std::chrono::steady_clock::now();
@@ -133,11 +133,8 @@ private:
     }
 private:
     // parameters
-    std::string incoming_points_topic_;
-    std::filesystem::path path_to_bag_;
     std::filesystem::path path_to_result_;
-private:
-    // bag
+    // dataloader
     std::unique_ptr<Dataloader> loader_{nullptr};
     // segmentation
     SegmentationNodeConfig segmentation_config_;

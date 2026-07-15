@@ -132,7 +132,6 @@ configure_node(rerun_node
     util/rosargs.cpp
     util/rosbag.cpp 
   HEADERS
-    rerun_node.h
     offline_node.h
     dataloader/dataloader.h
     segmentation/system.h

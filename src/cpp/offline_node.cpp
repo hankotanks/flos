@@ -14,7 +14,7 @@
 
 // TOPICS
 // sub: incoming_points_topic [PointCloud2]
-// pub: $/bag_progress [Float32MultiArray]
+// pub: $/progress [Float32MultiArray]
 // pub: $/odometry [Odometry]
 // pub: $/map [PointCloud2]
 // pub: $/map/previous [PointCloud2]
@@ -31,7 +31,7 @@ public:
         tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
         odometry_publisher_ = this->create_publisher<nav_msgs::msg::Odometry>("/" PROJECT_NAME "/odometry", 10);
         statistics_publisher_ = this->create_publisher<std_msgs::msg::Float32MultiArray>("/" PROJECT_NAME "/statistics", 10);
-        bag_progress_publisher_ = this->create_publisher<std_msgs::msg::Float32MultiArray>("/" PROJECT_NAME "/bag_progress", 10);
+        progress_publisher = this->create_publisher<std_msgs::msg::Float32MultiArray>("/" PROJECT_NAME "/progress", 10);
     }
 protected:
     virtual void publish_scan(const std_msgs::msg::Header::_stamp_type& stamp, const util::CloudView& cloud) override {
@@ -94,12 +94,12 @@ protected:
         }
     }
 
-    virtual void publish_bag_progress(const std_msgs::msg::Header::_stamp_type& stamp, float percent, float remaining) override {
+    virtual void publish_progress(const std_msgs::msg::Header::_stamp_type& stamp, float percent, float remaining) override {
         std_msgs::msg::Float32MultiArray msg;
         msg.data.resize(2);
         msg.data[0] = percent;
         msg.data[1] = remaining;
-        bag_progress_publisher_->publish(msg);
+        progress_publisher->publish(msg);
     }
 private:
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr scan_publisher_;
@@ -108,7 +108,7 @@ private:
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odometry_publisher_;
     rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr statistics_publisher_;
-    rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr bag_progress_publisher_;
+    rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr progress_publisher;
 private:
     // output frame_id
     static constexpr std::string LOCAL_MAP_FRAME{"odom_frame"};
