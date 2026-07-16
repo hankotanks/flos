@@ -99,9 +99,10 @@ class PointTransformerV3Lightning(pl.LightningModule):
         batch should be a dict with keys pos, intensity.
         coords (pos) should be batched with shape Nx4, where the first column is batch_idx
         """
+        coord = batch["pos"][:, 1:]
         data_dict = {
-            "feat": batch["intensity"],
-            "coord": batch["pos"][:, 1:],
+            "feat": torch.ones((coord.shape[0], 1), device = coord.device, dtype = coord.dtype),
+            "coord": coord,
             "batch": batch["pos"][:, 0].long(),
             "grid_size": 0.1
         }

@@ -2,9 +2,5 @@ spconv-cu126
 # other pinned dependencies
 -r ./dependencies/pytorch.txt
 -r ./dependencies/pyg.txt
-# remaining large dependencies
+# remaining general dependencies
 addict
-lightning
-tensorboard
-typer
-open3d
