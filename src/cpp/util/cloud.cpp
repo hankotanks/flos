@@ -335,14 +335,14 @@ struct FieldWriter {
         using namespace sensor_msgs;
         using namespace sensor_msgs::msg;
         switch(datatype) {
-        case PointField::INT8:    return It { PointCloud2Iterator<int8_t>   (msg, name) };
-        case PointField::UINT8:   return It { PointCloud2Iterator<uint8_t>  (msg, name) };
-        case PointField::INT16:   return It { PointCloud2Iterator<int16_t>  (msg, name) };
-        case PointField::UINT16:  return It { PointCloud2Iterator<uint16_t> (msg, name) };
-        case PointField::INT32:   return It { PointCloud2Iterator<int32_t>  (msg, name) };
-        case PointField::UINT32:  return It { PointCloud2Iterator<uint32_t> (msg, name) };
-        case PointField::FLOAT32: return It { PointCloud2Iterator<float>    (msg, name) };
-        case PointField::FLOAT64: return It { PointCloud2Iterator<double>   (msg, name) };
+        case PointField::INT8:    return It { PointCloud2Iterator<i1>(msg, name) };
+        case PointField::UINT8:   return It { PointCloud2Iterator<u1>(msg, name) };
+        case PointField::INT16:   return It { PointCloud2Iterator<i2>(msg, name) };
+        case PointField::UINT16:  return It { PointCloud2Iterator<u2>(msg, name) };
+        case PointField::INT32:   return It { PointCloud2Iterator<i4>(msg, name) };
+        case PointField::UINT32:  return It { PointCloud2Iterator<u4>(msg, name) };
+        case PointField::FLOAT32: return It { PointCloud2Iterator<f4>(msg, name) };
+        case PointField::FLOAT64: return It { PointCloud2Iterator<f8>(msg, name) };
         default: throw std::logic_error("unsupported field type");
         }
     }()) { /* STUB */ }
@@ -405,14 +405,14 @@ sensor_msgs::msg::PointCloud2 Cloud::message(const std_msgs::msg::Header& header
 Cloud::Field::Field(uint8_t datatype) : data_([&]() -> Cloud::Field::Data {
     using namespace sensor_msgs::msg;
     switch(datatype) {
-    case PointField::INT8:    return Data { std::vector<int8_t>   (0) };
-    case PointField::UINT8:   return Data { std::vector<uint8_t>  (0) };
-    case PointField::INT16:   return Data { std::vector<int16_t>  (0) };
-    case PointField::UINT16:  return Data { std::vector<uint16_t> (0) };
-    case PointField::INT32:   return Data { std::vector<int32_t>  (0) };
-    case PointField::UINT32:  return Data { std::vector<uint32_t> (0) };
-    case PointField::FLOAT32: return Data { std::vector<float>    (0) };
-    case PointField::FLOAT64: return Data { std::vector<double>   (0) };
+    case PointField::INT8:    return Data { std::vector<i1>(0) };
+    case PointField::UINT8:   return Data { std::vector<u1>(0) };
+    case PointField::INT16:   return Data { std::vector<i2>(0) };
+    case PointField::UINT16:  return Data { std::vector<u2>(0) };
+    case PointField::INT32:   return Data { std::vector<i4>(0) };
+    case PointField::UINT32:  return Data { std::vector<u4>(0) };
+    case PointField::FLOAT32: return Data { std::vector<f4>(0) };
+    case PointField::FLOAT64: return Data { std::vector<f8>(0) };
     default: throw std::logic_error("unsupported field type");
     }
 }()) { /* STUB */ }
@@ -434,55 +434,55 @@ T& Cloud::Field::operator[](size_t index) {
     return std::get<std::vector<T>>(data_)[index];
 }
 
-template int8_t&   Cloud::Field::operator[](size_t index);
-template uint8_t&  Cloud::Field::operator[](size_t index);
-template int16_t&  Cloud::Field::operator[](size_t index);
-template uint16_t& Cloud::Field::operator[](size_t index);
-template int32_t&  Cloud::Field::operator[](size_t index);
-template uint32_t& Cloud::Field::operator[](size_t index);
-template float&    Cloud::Field::operator[](size_t index);
-template double&   Cloud::Field::operator[](size_t index);
+template i1& Cloud::Field::operator[](size_t index);
+template u1& Cloud::Field::operator[](size_t index);
+template i2& Cloud::Field::operator[](size_t index);
+template u2& Cloud::Field::operator[](size_t index);
+template i4& Cloud::Field::operator[](size_t index);
+template u4& Cloud::Field::operator[](size_t index);
+template f4& Cloud::Field::operator[](size_t index);
+template f8& Cloud::Field::operator[](size_t index);
 
 template<typename T>
 const T& Cloud::Field::operator[](size_t index) const {
     return std::get<std::vector<T>>(data_)[index];
 }
 
-template const int8_t&   Cloud::Field::operator[](size_t index) const;
-template const uint8_t&  Cloud::Field::operator[](size_t index) const;
-template const int16_t&  Cloud::Field::operator[](size_t index) const;
-template const uint16_t& Cloud::Field::operator[](size_t index) const;
-template const int32_t&  Cloud::Field::operator[](size_t index) const;
-template const uint32_t& Cloud::Field::operator[](size_t index) const;
-template const float&    Cloud::Field::operator[](size_t index) const;
-template const double&   Cloud::Field::operator[](size_t index) const;
+template const i1& Cloud::Field::operator[](size_t index) const;
+template const u1& Cloud::Field::operator[](size_t index) const;
+template const i2& Cloud::Field::operator[](size_t index) const;
+template const u2& Cloud::Field::operator[](size_t index) const;
+template const i4& Cloud::Field::operator[](size_t index) const;
+template const u4& Cloud::Field::operator[](size_t index) const;
+template const f4& Cloud::Field::operator[](size_t index) const;
+template const f8& Cloud::Field::operator[](size_t index) const;
 
 template<typename T>
 void Cloud::add_field(const std::string& name, const std::vector<T>& scalars) noexcept {
     assert(Cloud::size() == scalars.size());
     assert(!desc->names_.contains(name));
     uint8_t datatype;
-    if constexpr (std::is_same_v<T, int8_t>)        datatype = sensor_msgs::msg::PointField::INT8;
-    else if constexpr (std::is_same_v<T, uint8_t>)  datatype = sensor_msgs::msg::PointField::UINT8;
-    else if constexpr (std::is_same_v<T, int16_t>)  datatype = sensor_msgs::msg::PointField::INT16;
-    else if constexpr (std::is_same_v<T, uint16_t>) datatype = sensor_msgs::msg::PointField::UINT16;
-    else if constexpr (std::is_same_v<T, int32_t>)  datatype = sensor_msgs::msg::PointField::INT32;
-    else if constexpr (std::is_same_v<T, uint32_t>) datatype = sensor_msgs::msg::PointField::UINT32;
-    else if constexpr (std::is_same_v<T, float>)    datatype = sensor_msgs::msg::PointField::FLOAT32;
-    else if constexpr (std::is_same_v<T, double>)   datatype = sensor_msgs::msg::PointField::FLOAT64;
+    if      constexpr (std::is_same_v<T, i1>) datatype = sensor_msgs::msg::PointField::INT8;
+    else if constexpr (std::is_same_v<T, u1>) datatype = sensor_msgs::msg::PointField::UINT8;
+    else if constexpr (std::is_same_v<T, i2>) datatype = sensor_msgs::msg::PointField::INT16;
+    else if constexpr (std::is_same_v<T, u2>) datatype = sensor_msgs::msg::PointField::UINT16;
+    else if constexpr (std::is_same_v<T, i4>) datatype = sensor_msgs::msg::PointField::INT32;
+    else if constexpr (std::is_same_v<T, u4>) datatype = sensor_msgs::msg::PointField::UINT32;
+    else if constexpr (std::is_same_v<T, f4>) datatype = sensor_msgs::msg::PointField::FLOAT32;
+    else if constexpr (std::is_same_v<T, f8>) datatype = sensor_msgs::msg::PointField::FLOAT64;
     else static_assert(Cloud::False<T>, "unsupported field type");
     desc_.add_field(datatype, name);
     fields_.emplace_back(scalars);
 }
 
-template void Cloud::add_field<int8_t>   (const std::string&, const std::vector<int8_t>&)   noexcept;
-template void Cloud::add_field<uint8_t>  (const std::string&, const std::vector<uint8_t>&)  noexcept;
-template void Cloud::add_field<int16_t>  (const std::string&, const std::vector<int16_t>&)  noexcept;
-template void Cloud::add_field<uint16_t> (const std::string&, const std::vector<uint16_t>&) noexcept;
-template void Cloud::add_field<int32_t>  (const std::string&, const std::vector<int32_t>&)  noexcept;
-template void Cloud::add_field<uint32_t> (const std::string&, const std::vector<uint32_t>&) noexcept;
-template void Cloud::add_field<float>    (const std::string&, const std::vector<float>&)    noexcept;
-template void Cloud::add_field<double>   (const std::string&, const std::vector<double>&)   noexcept;
+template void Cloud::add_field<i1>(const std::string&, const std::vector<i1>&) noexcept;
+template void Cloud::add_field<u1>(const std::string&, const std::vector<u1>&) noexcept;
+template void Cloud::add_field<i2>(const std::string&, const std::vector<i2>&) noexcept;
+template void Cloud::add_field<u2>(const std::string&, const std::vector<u2>&) noexcept;
+template void Cloud::add_field<i4>(const std::string&, const std::vector<i4>&) noexcept;
+template void Cloud::add_field<u4>(const std::string&, const std::vector<u4>&) noexcept;
+template void Cloud::add_field<f4>(const std::string&, const std::vector<f4>&) noexcept;
+template void Cloud::add_field<f8>(const std::string&, const std::vector<f8>&) noexcept;
 
 template<typename T>
 void Cloud::add_field(const std::string& name, const T& scalar) noexcept {
@@ -490,14 +490,14 @@ void Cloud::add_field(const std::string& name, const T& scalar) noexcept {
     Cloud::add_field(name, scalars);
 }
 
-template void Cloud::add_field<int8_t>   (const std::string&, const int8_t&)   noexcept;
-template void Cloud::add_field<uint8_t>  (const std::string&, const uint8_t&)  noexcept;
-template void Cloud::add_field<int16_t>  (const std::string&, const int16_t&)  noexcept;
-template void Cloud::add_field<uint16_t> (const std::string&, const uint16_t&) noexcept;
-template void Cloud::add_field<int32_t>  (const std::string&, const int32_t&)  noexcept;
-template void Cloud::add_field<uint32_t> (const std::string&, const uint32_t&) noexcept;
-template void Cloud::add_field<float>    (const std::string&, const float&)    noexcept;
-template void Cloud::add_field<double>   (const std::string&, const double&)   noexcept;
+template void Cloud::add_field<i1>(const std::string&, const i1&) noexcept;
+template void Cloud::add_field<u1>(const std::string&, const u1&) noexcept;
+template void Cloud::add_field<i2>(const std::string&, const i2&) noexcept;
+template void Cloud::add_field<u2>(const std::string&, const u2&) noexcept;
+template void Cloud::add_field<i4>(const std::string&, const i4&) noexcept;
+template void Cloud::add_field<u4>(const std::string&, const u4&) noexcept;
+template void Cloud::add_field<f4>(const std::string&, const f4&) noexcept;
+template void Cloud::add_field<f8>(const std::string&, const f8&) noexcept;
 
 #ifdef GENERATE_CLOUD_PYBIND_MODULE
 template<typename T>
@@ -505,14 +505,14 @@ void Cloud::add_field_from_py_object(const std::string& name, py::object obj) no
     Cloud::add_field(name, obj.cast<std::vector<T>>());
 }
 
-template void Cloud::add_field_from_py_object<int8_t>   (const std::string&, py::object) noexcept;
-template void Cloud::add_field_from_py_object<uint8_t>  (const std::string&, py::object) noexcept;
-template void Cloud::add_field_from_py_object<int16_t>  (const std::string&, py::object) noexcept;
-template void Cloud::add_field_from_py_object<uint16_t> (const std::string&, py::object) noexcept;
-template void Cloud::add_field_from_py_object<int32_t>  (const std::string&, py::object) noexcept;
-template void Cloud::add_field_from_py_object<uint32_t> (const std::string&, py::object) noexcept;
-template void Cloud::add_field_from_py_object<float>    (const std::string&, py::object) noexcept;
-template void Cloud::add_field_from_py_object<double>   (const std::string&, py::object) noexcept;
+template void Cloud::add_field_from_py_object<i1>(const std::string&, py::object) noexcept;
+template void Cloud::add_field_from_py_object<u1>(const std::string&, py::object) noexcept;
+template void Cloud::add_field_from_py_object<i2>(const std::string&, py::object) noexcept;
+template void Cloud::add_field_from_py_object<u2>(const std::string&, py::object) noexcept;
+template void Cloud::add_field_from_py_object<i4>(const std::string&, py::object) noexcept;
+template void Cloud::add_field_from_py_object<u4>(const std::string&, py::object) noexcept;
+template void Cloud::add_field_from_py_object<f4>(const std::string&, py::object) noexcept;
+template void Cloud::add_field_from_py_object<f8>(const std::string&, py::object) noexcept;
 #endif // GENERATE_CLOUD_PYBIND_MODULE
 } // namespace util
 

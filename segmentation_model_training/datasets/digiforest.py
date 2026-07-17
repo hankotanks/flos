@@ -82,7 +82,46 @@ class Labels:
             remapped_labels[tree_but_not_sub_class_mask] = Labels.To.IGNORE.value
 
         return remapped_labels
+    
+def voxel_down_sample(
+    pos: np.ndarray,
+    voxel_size: float,
+    intensity: np.ndarray | None = None,
+    semantics: np.ndarray | None = None,
+    instance: np.ndarray | None = None,
+):
+    voxel_coords = np.floor(pos / voxel_size).astype(np.int64)
 
+    _, first_indices, inverse = np.unique(
+        voxel_coords,
+        axis=0,
+        return_index=True,
+        return_inverse=True,
+    )
+
+    # representative point per voxel
+    indices = np.sort(first_indices)
+
+    pos_down = pos[indices]
+
+    intensity_down = (
+        intensity[indices] if intensity is not None else None
+    )
+
+    instance_down = (
+        instance[indices] if instance is not None else None
+    )
+
+    if semantics is not None:
+        semantics_down = np.empty(len(indices), dtype=semantics.dtype)
+
+        for voxel_idx in range(len(indices)):
+            voxel_labels = semantics[inverse == voxel_idx]
+            semantics_down[voxel_idx] = np.bincount(voxel_labels).argmax()
+    else:
+        semantics_down = None
+
+    return pos_down, intensity_down, semantics_down, instance_down
 
 class DigiForestDataset(BaseDataset):
     num_classes = len(Labels.To)
@@ -100,6 +139,7 @@ class DigiForestDataset(BaseDataset):
         pre_transform=None,
         pre_filter=None,
         delete_existing_processed_files: bool = False,
+        voxel_size: Union[float, None] = None,
         root_to_data_dir_callable=None,
         return_filename: bool = False,
     ):
@@ -108,6 +148,7 @@ class DigiForestDataset(BaseDataset):
         self.include_semantics = include_semantics
         self.include_instance = include_instance
         self.include_offsets = include_offsets
+        self.voxel_size = voxel_size
 
         self.vds = vds
 
@@ -152,15 +193,12 @@ class DigiForestDataset(BaseDataset):
 
         pos = cloud.points.astype(np.float32)  # astype copies if copy!=False
         # sanity checks on data cant happen here? ex. num of points too low etc.
-        pos_t = torch.from_numpy(pos)
-        data = {"pos": pos_t}
-
+        
         # intensity
         intensity = cloud.get_attribute("intensity").numpy().astype(np.float32)
-        intensity_t = torch.from_numpy(intensity)
-        data["intensity"] = intensity_t
 
         # data gets modified based on the state machine
+        semantics = None
         if self.include_semantics:
             # int32 causes issues
             semantics = labels.semantics.astype(np.int64).reshape(-1)
@@ -170,9 +208,8 @@ class DigiForestDataset(BaseDataset):
                     f"semantics shape {semantics.shape}, pos shape {pos.shape},"
                     " unequal points"
                 )
-            semantics_t = torch.from_numpy(semantics)
-            data["semantics"] = semantics_t
 
+        instance_v = None
         if self.include_instance:
             # instance is int64 (long). int32 causes issues
             instance_v = labels.instance.astype(np.int64).reshape(-1)
@@ -182,6 +219,26 @@ class DigiForestDataset(BaseDataset):
                     f"instance_v shape {instance_v.shape}, pos shape {pos.shape},"
                     " unequal points"
                 )
+            
+        if self.voxel_size is not None:
+            pos, intensity, semantics, instance_v = voxel_down_sample(
+                pos,
+                self.voxel_size,
+                intensity,
+                semantics,
+                instance_v,
+            )
+            
+        pos_t = torch.from_numpy(pos)
+        data = {"pos": pos_t}
+        intensity_t = torch.from_numpy(intensity)
+        data["intensity"] = intensity_t
+
+        if semantics is not None:
+            semantics_t = torch.from_numpy(semantics)
+            data["semantics"] = semantics_t
+
+        if instance_v is not None:
             instance_t = torch.from_numpy(instance_v)
             data["instance"] = instance_t
             # useful meta information

@@ -44,14 +44,15 @@ class PointTransformerV3Lightning(pl.LightningModule):
 
         self.point_transformer = PointTransformerV3(
             in_channels=self.hparams.in_channels,
-            enc_depths=(1, 1, 1, 1, 1),
-            enc_channels=(embedding_size, embedding_size*2, embedding_size*4, embedding_size*8, embedding_size*8),
-            enc_num_head=(1, 1, 2, 4, 4),
-            enc_patch_size=(512, 512, 512, 512, 512),
-            dec_depths=(1, 1, 1, 1),
-            dec_channels=(embedding_size*4, embedding_size*4, embedding_size*2, embedding_size),
-            dec_num_head=(2, 2, 1, 1),
-            dec_patch_size=(512, 512, 512, 512),
+            stride=(2, 2, 2),
+            enc_depths=(1, 1, 1, 1),
+            enc_channels=(embedding_size, embedding_size*2, embedding_size*4, embedding_size*8),
+            enc_num_head=(1, 1, 2, 4),
+            enc_patch_size=(256, 256, 256, 256),
+            dec_depths=(1, 1, 1),
+            dec_channels=(embedding_size*4, embedding_size*2, embedding_size),
+            dec_num_head=(2, 1, 1),
+            dec_patch_size=(256, 256, 256),
             mlp_ratio=2,
         )
 
