@@ -32,7 +32,7 @@ public:
 
 struct Wrapper : public Frame<Wrapper, Semantics, Belief> {
     friend Belief;
-    Wrapper(util::CloudView& points);
+    Wrapper(util::Cloud& points);
     virtual inline size_t size() const noexcept override final { return points_.size(); };
     void transform(const Sophus::SE3f& t) const noexcept;
     virtual std::pair<Eigen::Vector3f&, Semantics> operator[](size_t i) noexcept override final;

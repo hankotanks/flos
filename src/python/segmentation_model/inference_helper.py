@@ -27,4 +27,4 @@ class InferenceHelper:
         np_pred = pred.cpu().numpy().reshape(-1).astype(np.uint8)
         np_conf = conf.cpu().numpy().astype(np.float32)
         # although the return is very likely still a copy
-        return cloud_bindings.FieldUInt8(np_pred), [cloud_bindings.FieldFloat32(np_conf[:, i]) for i in range(np_conf.shape[1])]
+        return cloud_bindings.FieldU1(np_pred), [cloud_bindings.FieldF4(np_conf[:, i]) for i in range(np_conf.shape[1])]

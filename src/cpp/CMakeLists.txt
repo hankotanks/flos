@@ -22,7 +22,6 @@ configure_node(segmentation_node
     segmentation_node.cpp
     segmentation/system.cpp
     util/cloud.cpp
-    util/voxel.cpp
     util/rosargs.cpp
   HEADERS
     segmentation/system.h
@@ -48,7 +47,6 @@ configure_node(odometry_node
     odometry/system.cpp
     odometry/wrapper.cpp
     util/cloud.cpp
-    util/voxel.cpp
     util/rosargs.cpp
   HEADERS
     odometry/voxel_map.h
@@ -84,9 +82,9 @@ configure_node(offline_node
     odometry/system.cpp
     odometry/wrapper.cpp
     util/cloud.cpp
-    util/voxel.cpp
     util/rosargs.cpp
     util/rosbag.cpp 
+    util/tinyply.cpp
   HEADERS
     offline_node.h
     dataloader/dataloader.h
@@ -102,6 +100,7 @@ configure_node(offline_node
     util/profiler.h
     util/rosargs.h
     util/rosbag.h
+    util/tinyply.h
   LIBRARIES
     Eigen3::Eigen
     pybind11::embed
@@ -128,9 +127,9 @@ configure_node(rerun_node
     odometry/system.cpp
     odometry/wrapper.cpp
     util/cloud.cpp
-    util/voxel.cpp
     util/rosargs.cpp
     util/rosbag.cpp 
+    util/tinyply.cpp
   HEADERS
     offline_node.h
     dataloader/dataloader.h
@@ -146,6 +145,7 @@ configure_node(rerun_node
     util/profiler.h
     util/rosargs.h
     util/rosbag.h
+    util/tinyply.h
   LIBRARIES
     Eigen3::Eigen
     pybind11::embed

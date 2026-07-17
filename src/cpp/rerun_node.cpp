@@ -26,12 +26,12 @@ public:
         rr_.spawn(options).throw_on_failure();
     }
 protected:
-    virtual void publish_scan(const std_msgs::msg::Header::_stamp_type& stamp, const util::CloudView& cloud) override {
+    virtual void publish_scan(const std_msgs::msg::Header::_stamp_type& stamp, const util::Cloud& cloud) override {
         RerunNode::set_stamp(stamp);
         RerunNode::publish_points(cloud, "scan", rerun::Color(255, 255, 255));
     }
 
-    virtual void publish_local_map(const std_msgs::msg::Header::_stamp_type& stamp, const util::CloudView& cloud, bool previous) override {
+    virtual void publish_local_map(const std_msgs::msg::Header::_stamp_type& stamp, const util::Cloud& cloud, bool previous) override {
         RerunNode::set_stamp(stamp);
         if(previous) {
             RerunNode::publish_points(cloud, "map/previous", rerun::Color(255, 0, 0), 0.9f);
@@ -67,14 +67,14 @@ protected:
         rr_.log("progress/remaining", rerun::Scalar(remaining));
     }
 private:
-    void publish_points(const util::CloudView& cloud, const std::string& topic, std::optional<rerun::Color> single_color = std::nullopt, float radius_scalar = 1.f) {
+    void publish_points(const util::Cloud& cloud, const std::string& topic, std::optional<rerun::Color> single_color = std::nullopt, float radius_scalar = 1.f) {
         if(cloud.empty()) return;
         std::map<uint8_t, std::vector<rerun::Position3D>> scans;
+        const auto semantics = cloud.field<uint8_t>("class");
         for(size_t i = 0; i < cloud.size(); ++i) {
-            uint8_t semantics = cloud[i].field<uint8_t>("class");
-            if(scans.count(semantics) == 0) scans[semantics] = {};
-            const auto& point = cloud[i].point();
-            scans[semantics].emplace_back(point.x(), point.y(), point.z());
+            if(scans.count(semantics[i]) == 0) scans[semantics[i]] = {};
+            const auto& point = cloud[i];
+            scans[semantics[i]].emplace_back(point.x(), point.y(), point.z());
         }
         for(const auto& [semantics, points] : scans) {
             auto msg = rerun::Points3D()

@@ -39,7 +39,7 @@
 
 class OdometryNode : 
     util::Profiler, 
-    public BufferNode<std::pair<util::CloudView, std_msgs::msg::Header>, sensor_msgs::msg::PointCloud2> {
+    public BufferNode<std::pair<util::Cloud, std_msgs::msg::Header>, sensor_msgs::msg::PointCloud2> {
 public:
     explicit OdometryNode() : util::Profiler(NODE_NAME),
         BufferNode("incoming_points_topic", "/" PROJECT_NAME "/inference"),
@@ -161,8 +161,8 @@ protected:
         }
     }
 
-    virtual std::pair<util::CloudView, std_msgs::msg::Header> read(const std::shared_ptr<sensor_msgs::msg::PointCloud2>& msg) noexcept final override {
-        util::CloudView cloud{msg};
+    virtual std::pair<util::Cloud, std_msgs::msg::Header> read(const std::shared_ptr<sensor_msgs::msg::PointCloud2>& msg) noexcept final override {
+        util::Cloud cloud{msg};
         return std::make_pair(std::move(cloud), msg->header);
     }
 };

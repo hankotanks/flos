@@ -18,7 +18,7 @@ namespace {
 static constexpr std::array<std::string, 4> timestamp_field_names = {"timestamps", "time", "timestamp", "t"};
 
 template<typename T>
-std::optional<std::string> get_timestamp_field_name(util::CloudView& points) noexcept {
+std::optional<std::string> get_stamps_field_name(util::Cloud& points) noexcept {
     for(const std::string& name : timestamp_field_names) {
         try {
             (void) points.field<T>(name);
@@ -31,32 +31,30 @@ std::optional<std::string> get_timestamp_field_name(util::CloudView& points) noe
 }
 
 template<typename T>
-void deskew_frame_inner(util::CloudView& points, const std::string& name, const Sophus::SE3f& motion) noexcept {
-    std::span<const T> timestamps = points.field<T>(name);
-    const auto& [t_min, t_max] = std::minmax_element(timestamps.begin(), timestamps.end());
+void deskew_frame_inner(util::Cloud& points, const std::string& name, const Sophus::SE3f& motion) noexcept {
+    std::span<const T> stamps = points.field<T>(name);
+    const auto& [t_min, t_max] = std::minmax_element(stamps.begin(), stamps.end());
     const auto t_norm = [&](const T t) { 
         return (t - *t_min) / (*t_max - *t_min); 
     };
     const auto& omega = motion.log();
     tbb::parallel_for(tbb::blocked_range<size_t>{0, points.size()}, [&](const tbb::blocked_range<size_t>& range) {
         for(size_t i = range.begin(); i < range.end(); ++i) {
-            const T stamp = t_norm(points[i].field<T>(name));
+            const T stamp = t_norm(stamps[i]);
             const auto pose = Sophus::SE3f::exp((static_cast<float>(stamp) - 1.f) * omega);
-            points[i].point() = pose * points[i].point();
+            points[i] = pose * points[i];
         };
     });
 }
 
-void deskew_frame(util::CloudView& points, const Sophus::SE3f& motion) noexcept {
-    auto field_name = get_timestamp_field_name<float>(points);
-    if(field_name) {
-        deskew_frame_inner<float>(points, *field_name, motion);
+void deskew_frame(util::Cloud& points, const Sophus::SE3f& motion) noexcept {
+    auto name = get_stamps_field_name<float>(points);
+    if(name) {
+        deskew_frame_inner<float>(points, *name, motion);
         return;
     }
-    field_name = get_timestamp_field_name<double>(points);
-    if(field_name) {
-        deskew_frame_inner<double>(points, *field_name, motion);
-    }
+    name = get_stamps_field_name<double>(points);
+    if(name) deskew_frame_inner<double>(points, *name, motion);
 }
 
 bool pred_query_to_point(const Belief& data, Semantics point, Semantics query) {
@@ -99,7 +97,7 @@ OdometrySystem::OdometrySystem(const Config& config) : util::Profiler("OdometryS
         tbb::global_control::max_allowed_parallelism, static_cast<size_t>(max_threads));
 }
 
-const Sophus::SE3f& OdometrySystem::register_to_map(util::CloudView& points, unsigned int seconds, unsigned int nanoseconds) noexcept {
+const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigned int seconds, unsigned int nanoseconds) noexcept {
     util::Profiler profiler{"registration", this};
     // deskewing
     {
@@ -107,10 +105,10 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::CloudView& points, uns
         deskew_frame(points, last_delta_);
     }
     // downsample incoming points to obtain keypoints and the preprocessed frame
-    util::CloudView points_kp{points};
+    util::Cloud points_kp{points};
     {
         util::Profiler subprofiler{"voxel_downsample", &profiler};
-        util::voxel_downsample(points_kp, config_.map.voxel_size * OdometrySystem::VOXEL_SIZE_SCALAR);
+        points_kp.downsample(config_.map.voxel_size * OdometrySystem::VOXEL_SIZE_SCALAR);
     }
     Wrapper points_kp_wrapper{points_kp};
     // compute delta

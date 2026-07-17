@@ -52,7 +52,7 @@ public:
 public:
     // main registration function
     // NOTE: deskews and transforms points by the solution pose
-    const Sophus::SE3f& register_to_map(util::CloudView& points, unsigned int seconds, unsigned int nanoseconds) noexcept;
+    const Sophus::SE3f& register_to_map(util::Cloud& points, unsigned int seconds, unsigned int nanoseconds) noexcept;
     // returns the current local map
     const VoxelMap<Wrapper>::Cloud& cloud() const noexcept { return map_.cloud(); }
 public:

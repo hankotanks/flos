@@ -34,14 +34,14 @@ public:
         progress_publisher = this->create_publisher<std_msgs::msg::Float32MultiArray>("/" PROJECT_NAME "/progress", 10);
     }
 protected:
-    virtual void publish_scan(const std_msgs::msg::Header::_stamp_type& stamp, const util::CloudView& cloud) override {
+    virtual void publish_scan(const std_msgs::msg::Header::_stamp_type& stamp, const util::Cloud& cloud) override {
         std_msgs::msg::Header header;
         header.stamp = stamp;
         header.frame_id = DefaultOfflineNode::LOCAL_MAP_FRAME;
         scan_publisher_->publish(std::move(cloud.message(header)));
     }
 
-    virtual void publish_local_map(const std_msgs::msg::Header::_stamp_type& stamp, const util::CloudView& cloud, bool previous) override {
+    virtual void publish_local_map(const std_msgs::msg::Header::_stamp_type& stamp, const util::Cloud& cloud, bool previous) override {
         std_msgs::msg::Header header;
         header.stamp = stamp;
         header.frame_id = DefaultOfflineNode::LOCAL_MAP_FRAME;

@@ -44,7 +44,7 @@ void Belief::finish() noexcept {
     for(size_t i = 0; i < Semantics::CLASS_COUNT; ++i) confidence[i] /= sum;
 }
 
-Wrapper::Wrapper(util::CloudView& points) : points_(points.points()), class_(points.field<uint8_t>("class")) {
+Wrapper::Wrapper(util::Cloud& points) : points_(points.points()), class_(points.field<uint8_t>("class")) {
     for(size_t i = 0; i < Semantics::CLASS_COUNT; ++i) {
         confidence_[i] = points.field_opt<float>(std::to_string(i));
     }

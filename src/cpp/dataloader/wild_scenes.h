@@ -22,6 +22,6 @@ public:
     virtual std::pair<util::Cloud, std_msgs::msg::Header> next() override final;
 private:
     static constexpr std::string LIDAR_FRAME{"lidar_frame"};
-    std::vector<std::filesystem::path> scans_;
+    std::vector<std::pair<std_msgs::msg::Header, std::filesystem::path>> scans_;
     size_t index_{0};
 };

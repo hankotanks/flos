@@ -2,10 +2,6 @@
 
 // eigen
 #include <Eigen/Dense>
-// robin_map
-#include <tsl/robin_map.h>
-// util
-#include "util/cloud.h"
 
 template <>
 struct std::hash<Eigen::Vector3i> {
@@ -16,8 +12,6 @@ struct std::hash<Eigen::Vector3i> {
 };
 
 namespace util {
-void voxel_downsample(util::CloudView& cloud, const double voxel_size);
-
 inline Eigen::Vector3i point_to_voxel(const Eigen::Vector3f& point, double voxel_size) {
     return {
         static_cast<int>(std::floor(point.x() / voxel_size)),
