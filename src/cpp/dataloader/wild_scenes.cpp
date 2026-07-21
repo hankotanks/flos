@@ -6,6 +6,7 @@
 #include "util/tinyply.h"
 
 WildScenesDataloader::WildScenesDataloader(rclcpp::Node* node) : Dataloader(node) {
+    if(!std::filesystem::is_directory(path_to_data_)) throw Dataloader::UnsupportedFormat{"must supply a directory"};
     bool valid = std::any_of(std::filesystem::directory_iterator(path_to_data_), std::filesystem::directory_iterator{},
         [](const auto& entry) { return entry.is_regular_file() && entry.path().extension() == ".ply"; });
     if(!valid) throw Dataloader::UnsupportedFormat{"no PLY files in data folder"};

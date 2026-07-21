@@ -7,6 +7,15 @@
 #include <iostream>
 #include <iomanip>
 
+// helper macro for treating the profiler a block wrapper
+#ifndef PROFILER_DISABLE
+#define PROFILE(name, parent) \
+    for(bool _once_##name = true; _once_##name; _once_##name = false) \
+        for(util::Profiler name{#name, parent}; _once_##name; _once_##name = false)
+#else
+#define PROFILE(name, parent) 
+#endif // PROFILER_DISABLE
+
 namespace util {
 #ifndef PROFILER_DISABLE
 class Profiler {

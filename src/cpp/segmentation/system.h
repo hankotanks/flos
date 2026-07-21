@@ -23,7 +23,7 @@ public:
         static constexpr float MAX_DISTANCE_DEFAULT{50.f};
     };
 public:
-    class Model : util::Profiler {
+    class Model {
         friend SegmentationSystem;
     public:
         void infer(util::Cloud& cloud, bool preprocessed = false);
@@ -37,6 +37,7 @@ public:
     private:
         explicit Model(const SegmentationSystem::Config& config, const std::filesystem::path& path_to_model, util::Profiler* profiler);
     private:
+        util::Profiler* profiler_;
         py::object module_;
         py::object helper_;
         py::object infer_;

@@ -97,10 +97,19 @@ private:
         size_t num_sample_{1};
     };
 private:
+    // get the predicted delta (and handle statistics)
+    void prologue(Sophus::SE3f& delta, unsigned int seconds, unsigned int nanoseconds) noexcept;
+    // handle end of frame (saving last_pose and final velocity statistics)
+    void epilogue(const Sophus::SE3f& pose, unsigned int seconds, unsigned int nanoseconds) noexcept;
+private:
+    // find correspondences
+    using Correspondence = std::tuple<Eigen::Vector3f, Semantics, VoxelMap<Wrapper>::Neighbor>;
+    using CorrespondenceSet = tbb::concurrent_vector<Correspondence>;
+    CorrespondenceSet correspond(const Wrapper& points, float sigma) const noexcept;
     // constructs and solves the linear system, returning dx
-    Eigen::Matrix<float, 6, 1> solve(const Wrapper& points, float sigma, util::Profiler& profiler) noexcept;
+    Eigen::Matrix<float, 6, 1> solve(const Wrapper& points, const CorrespondenceSet& correspondences) noexcept;
     // returns pose and deviation respectively
-    std::pair<Sophus::SE3f, Sophus::SE3f> align(Wrapper& points, const Sophus::SE3f& delta, util::Profiler& profiler);
+    std::pair<Sophus::SE3f, Sophus::SE3f> align(Wrapper& points, const Sophus::SE3f& delta);
 private:
     Config config_;
     // NOTE: see note in segmentation/node.h

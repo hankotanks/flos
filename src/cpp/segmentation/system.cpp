@@ -4,10 +4,9 @@
 #include <stdexcept>
 // util
 #include "util/profiler.h"
-#include "util/voxel.h"
 
 SegmentationSystem::Model::Model(const SegmentationSystem::Config& config, const std::filesystem::path& path_to_model, util::Profiler* profiler) :
-    util::Profiler("Model", profiler),
+    profiler_(profiler),
     config_(config),
     module_(py::module_::import("segmentation_model.inference_helper")),
     helper_(module_.attr("InferenceHelper")(path_to_model.string())),
@@ -21,8 +20,9 @@ void preprocess_inner(const SegmentationSystem::Config& config, util::Cloud& clo
 }
 
 void SegmentationSystem::preprocess(util::Cloud& cloud) {
-    util::Profiler profiler{"preprocess", this};
-    preprocess_inner(config_, cloud);
+    PROFILE(preprocessing, this) {
+        preprocess_inner(config_, cloud);
+    }
 }
 
 SegmentationSystem::Model SegmentationSystem::load(const std::filesystem::path& path_to_model) {
@@ -30,40 +30,47 @@ SegmentationSystem::Model SegmentationSystem::load(const std::filesystem::path& 
 }
 
 void SegmentationSystem::Model::infer(util::Cloud& cloud, bool preprocessed) {
-    util::Profiler profiler{"infer", this};
-    // conditionally preprocess
-    if(!preprocessed) {
-        util::Profiler subprofiler{"preprocess", &profiler};
-        preprocess_inner(config_, cloud);
-    }
-    py::object points = cloud.points_as_py_object();
-    try {
-        // perform inference
-        py::tuple result;
-        {  
-            util::Profiler subprofiler{"python", &profiler};
-            result = infer_(points).cast<py::tuple>();
+    PROFILE(inference, profiler_) {
+        if(!preprocessed) {
+            PROFILE(preprocessing, &inference) {
+                preprocess_inner(config_, cloud);
+            }
         }
-        // output
-        cloud.add_field_from_py_object<uint8_t>("class", result[0]);
-        py::list result_confidence = result[1].cast<py::list>();
-        for(size_t i = 0; i < result_confidence.size(); ++i) {
-            if(this->config_.ignore.count(i) > 0) continue;
-            cloud.add_field_from_py_object<float>(std::to_string(i), result_confidence[i]);
+        py::object points = cloud.points_as_py_object();
+        try {
+            // perform inference
+            py::tuple result;
+            PROFILE(python, &inference) {
+                result = infer_(points).cast<py::tuple>();
+            }
+            // output
+            cloud.add_field_from_py_object<uint8_t>("class", result[0]);
+            py::list result_confidence = result[1].cast<py::list>();
+            for(size_t i = 0; i < result_confidence.size(); ++i) {
+                if(this->config_.ignore.count(i) > 0) continue;
+                cloud.add_field_from_py_object<float>(std::to_string(i), result_confidence[i]);
+            }
+        } catch(const py::cast_error&) {
+            throw std::runtime_error("inference failed");
         }
-    } catch(const py::cast_error&) {
-        throw std::runtime_error("inference failed");
+        PROFILE(postprocessing, &inference) {
+            // remove ignored classes
+            cloud.filter<uint8_t>("class", [this](const uint8_t& scalar) {
+                return this->config_.ignore.count(scalar) == 0;
+            });
+            // NOTE: filter the 'nearby' classes to 'max_distance_neighborhood'
+            if(!config_.nearby.empty()) {
+                cloud.filter_by_distance<uint8_t>(Eigen::Vector3f::Zero(), 0.f, config_.max_distance_neighborhood, "class", [this](const uint8_t& scalar) -> bool {
+                    return this->config_.nearby.count(scalar) > 0;
+                });
+            }
+            // downsample only if the inference resolution was different from the output resolution
+            if(std::abs(SegmentationSystem::VOXEL_SIZE_SCALAR - SegmentationSystem::VOXEL_SIZE_SCALAR_INFERENCE) > 0.01) {
+                double voxel_size = config_.voxel_size * SegmentationSystem::VOXEL_SIZE_SCALAR;
+                cloud.downsample(voxel_size);
+            }
+        }
     }
-    cloud.filter<uint8_t>("class", [this](const uint8_t& scalar) {
-        return this->config_.ignore.count(scalar) == 0;
-    });
-    // TODO: in progress
-    cloud.filter_by_distance<uint8_t>(Eigen::Vector3f::Zero(), 0.f, config_.max_distance_neighborhood, "class", [this](const uint8_t& scalar) -> bool {
-        return this->config_.nearby.count(scalar) > 0;
-    });
-    if(std::abs(SegmentationSystem::VOXEL_SIZE_SCALAR - SegmentationSystem::VOXEL_SIZE_SCALAR_INFERENCE) < 0.01) return;
-    double voxel_size = config_.voxel_size * SegmentationSystem::VOXEL_SIZE_SCALAR;
-    cloud.downsample(voxel_size);
 }
 
 std::ostream& operator<<(std::ostream& stream, const SegmentationSystem::Config& config) {

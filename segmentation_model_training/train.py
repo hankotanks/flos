@@ -20,7 +20,8 @@ TRAIN_ROOT = pathlib.Path(__file__).resolve(strict = True).parent
 MODEL_ROOT = (TRAIN_ROOT.parent / 'models').resolve(strict = True)
 
 def train(config_model: typing.Dict, config_trainer: typing.Dict, config_data: typing.Dict, 
-    log: pathlib.Path, data: pathlib.Path, logger: typing.List[lightning.loggers.Logger], seed = None, verbose = False):
+    log: pathlib.Path, ckpt: typing.Union[pathlib.Path, None], data: pathlib.Path, 
+    logger: typing.List[lightning.loggers.Logger], seed = None, verbose = False):
     # data prep
     transform_pre = transforms.Compose([utils.transforms.CenterGlobal(verbose = verbose)])
     transform_batch = transforms.Compose([
@@ -44,11 +45,11 @@ def train(config_model: typing.Dict, config_trainer: typing.Dict, config_data: t
     monitor = lightning.callbacks.LearningRateMonitor(logging_interval = "step")
     
     # checkpoint
-    ckpt_key = config_trainer.pop("checkpoint_metric_key") # metric_key = "val/MulticlassAccuracy"
-    ckpt = lightning.callbacks.ModelCheckpoint(
+    model_ckpt_key = config_trainer.pop("checkpoint_metric_key") # metric_key = "val/MulticlassAccuracy"
+    model_ckpt = lightning.callbacks.ModelCheckpoint(
         dirpath = None,  # use the default_root_dir of trainer
-        monitor = ckpt_key,
-        filename = ckpt_key.replace("/", "_") + "_{epoch:02d}_{" + ckpt_key + ":.2f}",
+        monitor = model_ckpt_key,
+        filename = model_ckpt_key.replace("/", "_") + "_{epoch:02d}_{" + model_ckpt_key + ":.2f}",
         auto_insert_metric_name = False,
         mode = "max",
         save_last = True,
@@ -62,8 +63,8 @@ def train(config_model: typing.Dict, config_trainer: typing.Dict, config_data: t
     torch.set_float32_matmul_precision("medium")
     del config_trainer["seed"]
     # profiler = PyTorchProfiler(profile_memory = True)
-    trainer = lightning.Trainer(logger = logger, callbacks = [monitor, ckpt], default_root_dir = log, **config_trainer) # resume_from_checkpoint=ckpt, # profiler=profiler,
-    trainer.fit(model, datamodule = datamodule)
+    trainer = lightning.Trainer(logger = logger, callbacks = [monitor, model_ckpt], default_root_dir = log, **config_trainer) # resume_from_checkpoint=ckpt, # profiler=profiler,
+    trainer.fit(model, datamodule = datamodule, ckpt_path = str(ckpt) if model_ckpt is not None else None)
    
     # test
     if "test" in datamodule.prepare_splits: trainer.test(model, datamodule = datamodule)
@@ -73,19 +74,39 @@ def args():
     parser.add_argument("--data", type = pathlib.Path, required = True,
         help = 'path to data (containing ./raw, etc)')
     parser.add_argument("--name", type = str, required = False, 
-        default = MODEL_ROOT / str(max([int(p.name) for p in MODEL_ROOT.iterdir() if p.is_dir() and p.name.isdigit()], default = -1) + 1), 
+        default = str(max([int(p.name) for p in MODEL_ROOT.iterdir() if p.is_dir() and p.name.isdigit()], default = -1) + 1), 
         help = 'PROJECT_ROOT/models/name')
     parser.add_argument("--threads", type = int, 
         default = None, 
         help = 'number of threads to use for the data module')
-    parser.add_argument("--debug", type = bool,
+    parser.add_argument("--resume", action = "store_true",
+        help = 'resume from the last checkpoint')
+    parser.add_argument("--debug", action = "store_true",
         help = 'enable debug')
     return parser.parse_args()
+
+def version(args: argparse.Namespace):
+    if not args.resume:
+        return None, None
+    run_dir = MODEL_ROOT / args.name
+    if run_dir.exists():
+        v = [int(p.name.removeprefix("version_"))
+            for p in run_dir.iterdir()
+                if p.is_dir() 
+                    and p.name.startswith("version_")
+                    and p.name.removeprefix("version_").isdigit()]
+        v = max(v, default = None)
+        if v is not None:
+            ckpt = MODEL_ROOT / args.name / f'version_{v}' / 'checkpoints' / 'last.ckpt'
+            ckpt = ckpt.resolve(strict = True)
+            return v, ckpt
+    return None, None
 
 def main(args: argparse.Namespace):    
     # set up the tb logger since that handles creation of the run dir,
     # in case no name was passed
-    logger = lightning.loggers.TensorBoardLogger(save_dir = MODEL_ROOT, name = args.name, default_hp_metric = False, version = None)
+    v, ckpt = version(args)
+    logger = lightning.loggers.TensorBoardLogger(save_dir = MODEL_ROOT, name = args.name, default_hp_metric = False, version = v)
     # get the actual run log dir
     log_dir = pathlib.Path(logger.log_dir)
     if args.debug:
@@ -125,7 +146,8 @@ def main(args: argparse.Namespace):
 
     # setup training
     train(config_model = config_model, config_trainer = config_trainer, config_data = config_data,
-        log = log_dir, data = args.data.resolve(strict = True), logger = [logger], seed = config_trainer["seed"], verbose = args.debug)
+        log = log_dir, ckpt = ckpt, data = args.data.resolve(strict = True), 
+        logger = [logger], seed = config_trainer["seed"], verbose = args.debug)
 
 if __name__ == "__main__":
     main(args())
