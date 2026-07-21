@@ -32,6 +32,7 @@ public:
             bool confidence_weighting{true};
             bool correspondence_restriction{true};
             bool correspondence_with_voxel_belief{true};
+            bool constant_velocity{true};
             size_t max_iterations{500};
             size_t max_threads{0};
             float convergence_criterion{0.0001f};

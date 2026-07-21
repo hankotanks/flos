@@ -118,7 +118,7 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigne
     float dt_curr = stamp - last_stamp_;
     float scale = 1.f;
     if(dt_prev > 1e-6) scale = static_cast<float>(dt_curr / dt_prev);
-    Sophus::SE3f predicted_delta = Sophus::SE3f::exp(scale * last_delta_.log());
+    Sophus::SE3f predicted_delta = config_.registration.constant_velocity ? Sophus::SE3f::exp(scale * last_delta_.log()) : Sophus::SE3f{};
     // reset stats
     statistics = Statistics{};
     {

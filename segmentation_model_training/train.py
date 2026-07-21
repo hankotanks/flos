@@ -1,24 +1,26 @@
 import pathlib
 import typing
-import torch
 import argparse
 
-import lightning.pytorch as lightning
+import torch
 import torchvision.transforms as transforms
+
+import lightning.pytorch as lightning
 
 import segmentation_model_training.utils as utils
 import segmentation_model_training.utils.config
 import segmentation_model_training.utils.io
 import segmentation_model_training.utils.transforms
-import segmentation_model_training.data_modules as data_modules
-import segmentation_model_training.data_modules.digiforest
+import segmentation_model_training.datamodules as datamodules
+import segmentation_model_training.datamodules.digiforest
 
 import src.python.segmentation_model.segmentation_model as segmentation_model
 
 TRAIN_ROOT = pathlib.Path(__file__).resolve(strict = True).parent
 MODEL_ROOT = (TRAIN_ROOT.parent / 'models').resolve(strict = True)
 
-def train(config_model: typing.Dict, config_trainer: typing.Dict, config_data: typing.Dict, log: pathlib.Path, data: pathlib.Path, logger: typing.List[lightning.loggers.Logger], seed = None, verbose = False):
+def train(config_model: typing.Dict, config_trainer: typing.Dict, config_data: typing.Dict, 
+    log: pathlib.Path, data: pathlib.Path, logger: typing.List[lightning.loggers.Logger], seed = None, verbose = False):
     # data prep
     transform_pre = transforms.Compose([utils.transforms.CenterGlobal(verbose = verbose)])
     transform_batch = transforms.Compose([
@@ -29,7 +31,7 @@ def train(config_model: typing.Dict, config_trainer: typing.Dict, config_data: t
     if "debug_no_augmentation" in config_data:
         debug_no_augmentation = config_data.pop("debug_no_augmentation")
         transform_batch = None if debug_no_augmentation else transform_batch
-    datamodule = data_modules.digiforest.DigiForestDataModule(data_dir = data, dataset_config = config_dataset, transform = None,
+    datamodule = datamodules.digiforest.DigiForestDataModule(data_dir = data, dataset_config = config_dataset, transform = None,
         batch_transform = transform_batch, pre_transform = transform_pre, pre_filter = None, **config_data)
     
     # model

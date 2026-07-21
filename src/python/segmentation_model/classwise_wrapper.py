@@ -14,13 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import typing
-from typing import Any, Dict, List, Optional, Sequence, Union, Callable
 
-from torch import Tensor
+import torch
 
 from torchmetrics.metric import Metric
 from torchmetrics.utilities.imports import _MATPLOTLIB_AVAILABLE
-from torchmetrics.utilities.plot import _AX_TYPE, _PLOT_OUT_TYPE
 
 if typing.TYPE_CHECKING:
     from torch.nn import Module
@@ -41,15 +39,15 @@ class WrapperMetric(Metric):
 
     """
 
-    def _wrap_update(self, update: Callable) -> Callable:
+    def _wrap_update(self, update: typing.Callable) -> typing.Callable:
         """Overwrite to do nothing, because the default wrapped functionality is handled by the wrapped metric."""
         return update
 
-    def _wrap_compute(self, compute: Callable) -> Callable:
+    def _wrap_compute(self, compute: typing.Callable) -> typing.Callable:
         """Overwrite to do nothing, because the default wrapped functionality is handled by the wrapped metric."""
         return compute
 
-    def forward(self, *args: Any, **kwargs: Any) -> Any:
+    def forward(self, *args: typing.Any, **kwargs: typing.Any) -> typing.Any:
         """Overwrite to do nothing, because the default wrapped functionality is handled by the wrapped metric."""
         raise NotImplementedError
 
@@ -142,43 +140,32 @@ class ClasswiseWrapper(WrapperMetric):
 
     """
 
-    def __init__(
-        self,
+    def __init__(self,
         metric: Metric,
-        labels: Optional[List[str]] = None,
-        prefix: Optional[str] = None,
-        postfix: Optional[str] = None,
-    ) -> None:
+        labels: typing.Optional[typing.List[str]] = None,
+        prefix: typing.Optional[str] = None,
+        postfix: typing.Optional[str] = None) -> None:
         super().__init__()
+
         if not isinstance(metric, Metric):
-            raise ValueError(
-                f"Expected argument `metric` to be an instance of `torchmetrics.Metric` but got {metric}"
-            )
+            raise ValueError(f"Expected argument `metric` to be an instance of `torchmetrics.Metric` but got {metric}")
         self.metric = metric
 
-        if labels is not None and not (
-            isinstance(labels, list) and all(isinstance(lab, str) for lab in labels)
-        ):
-            raise ValueError(
-                f"Expected argument `labels` to either be `None` or a list of strings but got {labels}"
-            )
+        if labels is not None and not (isinstance(labels, list) and all(isinstance(lab, str) for lab in labels)):
+            raise ValueError(f"Expected argument `labels` to either be `None` or a list of strings but got {labels}")
         self.labels = labels
 
         if prefix is not None and not isinstance(prefix, str):
-            raise ValueError(
-                f"Expected argument `prefix` to either be `None` or a string but got {prefix}"
-            )
+            raise ValueError(f"Expected argument `prefix` to either be `None` or a string but got {prefix}")
         self._prefix = prefix
 
         if postfix is not None and not isinstance(postfix, str):
-            raise ValueError(
-                f"Expected argument `postfix` to either be `None` or a string but got {postfix}"
-            )
+            raise ValueError(f"Expected argument `postfix` to either be `None` or a string but got {postfix}")
         self._postfix = postfix
 
         self._update_count = 1
 
-    def _convert(self, x: Tensor) -> Dict[str, Any]:
+    def _convert(self, x: torch.Tensor) -> typing.Dict[str, typing.Any]:
         if x.shape[0] == 1:
             x = x[0]
         # Will set the class name as prefix if neither prefix nor postfix is given
@@ -192,15 +179,15 @@ class ClasswiseWrapper(WrapperMetric):
             return {f"{prefix}{i}{postfix}": val for i, val in enumerate(x)}
         return {f"{prefix}{lab}{postfix}": val for lab, val in zip(self.labels, x)}
 
-    def forward(self, *args: Any, **kwargs: Any) -> Any:
+    def forward(self, *args: typing.Any, **kwargs: typing.Any) -> typing.Any:
         """Calculate on batch and accumulate to global state."""
         return self._convert(self.metric(*args, **kwargs))
 
-    def update(self, *args: Any, **kwargs: Any) -> None:
+    def update(self, *args: typing.Any, **kwargs: typing.Any) -> None:
         """Update state."""
         self.metric.update(*args, **kwargs)
 
-    def compute(self) -> Dict[str, Tensor]:
+    def compute(self) -> typing.Dict[str, torch.Tensor]:
         """Compute metric."""
         return self._convert(self.metric.compute())
 
@@ -208,17 +195,15 @@ class ClasswiseWrapper(WrapperMetric):
         """Reset metric."""
         self.metric.reset()
 
-    def __getattr__(self, name: str) -> Union[Tensor, "Module"]:
+    def __getattr__(self, name: str) -> typing.Union[torch.Tensor, "Module"]:
         """Get attribute from classwise wrapper."""
-        if name == "metric" or (
-            name in self.__dict__ and name not in self.metric.__dict__
-        ):
+        if name == "metric" or (name in self.__dict__ and name not in self.metric.__dict__):
             # we need this to prevent from infinite getattribute loop.
             return super().__getattr__(name)
 
         return getattr(self.metric, name)
 
-    def __setattr__(self, name: str, value: Any) -> None:
+    def __setattr__(self, name: str, value: typing.Any) -> None:
         """Set attribute to classwise wrapper."""
         if hasattr(self, "metric") and name in self.metric._defaults:
             setattr(self.metric, name, value)

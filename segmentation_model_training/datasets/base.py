@@ -1,15 +1,15 @@
-from pathlib import Path
+import pathlib
 import copy
-from typing import Callable, Union, Dict, List
+import typing
+import functools
+
 import torch
-from ..utils.io import load_yaml_or_json
-from torch.utils.data import Dataset
-from functools import cached_property
+import torch.utils.data
 
-from ..utils.serialize import TorchSerializedList
+from segmentation_model_training.utils.io import load_yaml_or_json
+from segmentation_model_training.utils.serialize import TorchSerializedList
 
-
-class BaseDataset(Dataset):
+class BaseDataset(torch.utils.data.Dataset):
     """
     A base dataset class that takes inspiration from pytorch
     geometric's dataset class. In essence all that should be needed is to implement
@@ -32,28 +32,22 @@ class BaseDataset(Dataset):
     # can be useful to ensure checks that model output channels equal num classes
     num_classes = 0
 
-    def __init__(
-        self,
-        root: Path,
-        split="train",
-        transform=None,
-        pre_transform=None,
-        pre_filter=None,
+    def __init__(self,
+        root: pathlib.Path,
+        split = "train",
+        transform = None,
+        pre_transform = None,
+        pre_filter = None,
         delete_existing_processed_files: bool = True,
-        root_to_data_dir_callable: Union[Callable[[str, Path], Path], None] = None,
-        return_filename: bool = False,
-    ):
-        """
-        :param return_filename: modifies getitem to return an additional str value. this should not be necessary during training
-        """
+        root_to_data_dir_callable: typing.Union[typing.Callable[[str, pathlib.Path], pathlib.Path], None] = None,
+        return_filename: bool = False):
         super().__init__()
+
         # doktor, initialize the state machine
         self.root = root
         self.split = split
         if split not in self.data_split.keys():
-            raise Exception(
-                f'split {split} not present in the data split json at {root / "raw" / "data_split.json"}'
-            )
+            raise Exception(f'split {split} not present in the data split json at {root / "raw" / "data_split.json"}')
 
         self.transform = transform
         self.pre_transform = pre_transform
@@ -65,7 +59,7 @@ class BaseDataset(Dataset):
 
         self.sample_fps = TorchSerializedList(self.get_sample_fps())
 
-    def default_rtdd_callable(self, prefix: str, in_path: Path):
+    def default_rtdd_callable(self, prefix: str, in_path: pathlib.Path):
         "prefix is either raw or processed"
         raise NotImplementedError
 
@@ -73,23 +67,21 @@ class BaseDataset(Dataset):
         return len(self.sample_fps)
 
     def __getitem__(self, idx):
-        sample_fp: Path = self.sample_fps[idx]
-        data: Dict[str, Union[str, torch.Tensor]] = torch.load(sample_fp)
+        sample_fp: pathlib.Path = self.sample_fps[idx]
+        data: typing.Dict[str, typing.Union[str, torch.Tensor]] = torch.load(sample_fp)
         if self.transform is not None:
             data = self.transform(data)
         if self.return_filename:
             data["filename"] = sample_fp.relative_to(self.root).as_posix()
         return data
 
-    @cached_property
-    def data_split(self) -> Dict[str, List[Path]]:
+    @functools.cached_property
+    def data_split(self) -> typing.Dict[str, typing.List[pathlib.Path]]:
         """hard coded requirement of existence of self.root / raw / data_split.json"""
         file_path = self.root / "raw" / "data_split.json"
         if not file_path.exists():
             raise Exception(f"File {file_path} is required for a dataset.")
-        data_split: Dict[str, List[Path]] = load_yaml_or_json(
-            self.root / "raw" / "data_split.json"
-        )
+        data_split: typing.Dict[str, typing.List[pathlib.Path]] = load_yaml_or_json(self.root / "raw" / "data_split.json")
         return data_split
 
     @property
@@ -106,21 +98,18 @@ class BaseDataset(Dataset):
         else:
             return self.root_to_data_dir_callable("processed", self.root)
 
-    def get_sample_fps(self) -> List[Path]:
+    def get_sample_fps(self) -> typing.List[pathlib.Path]:
         """gets the files from processed dir as per the state machine"""
         # its actually list[str], but whatever to satisfy mypy
-        fp_list: List[Path] = self.data_split[self.split]
+        fp_list: typing.List[pathlib.Path] = self.data_split[self.split]
         # sanity checking
         assert isinstance(fp_list, list), fp_list
         # fp list is the raw file list. need to convert to processed file loc list
         processed_fp_list = copy.deepcopy(fp_list)
         for idx in range(len(fp_list)):
-            processed_fp_list[idx] = (self.processed_dir / fp_list[idx]).with_suffix(
-                ".pt"
-            )
-            assert processed_fp_list[
-                idx
-            ].exists(), f"processed file {processed_fp_list[idx]} doesn't exist"
+            processed_fp_list[idx] = (self.processed_dir / fp_list[idx]).with_suffix(".pt")
+            assert processed_fp_list[idx].exists(), \
+                f"processed file {processed_fp_list[idx]} doesn't exist"
         return processed_fp_list
 
     def _ensure_processed_data_existence(self):
@@ -133,17 +122,15 @@ class BaseDataset(Dataset):
         # TODO: somehow dump the dataset configuration as a pickle. and compare that too
         # so that if the config changes, data is reprocessed
         if self.pre_filter is not None:
-            raise NotImplementedError(
-                "this needs additional logic and a partial rewrite since data_split needs to be updated and stored inside the processed dir."
-            )
-        self.processed_dir.mkdir(parents=True, exist_ok=True)
+            raise NotImplementedError("this needs additional logic and a partial rewrite since data_split needs to be updated and stored inside the processed dir.")
+        self.processed_dir.mkdir(parents = True, exist_ok = True)
         fp_list = copy.deepcopy(self.data_split[self.split])
 
         for fp_name in fp_list:
             # for fp_name in bar(
             #     fp_list, desc=f"Checking files for {self.split}", total=len(fp_list)
             # ):
-            raw_fp: Path = self.raw_dir / fp_name
+            raw_fp: pathlib.Path = self.raw_dir / fp_name
             assert (
                 raw_fp.exists() and raw_fp.is_file()
             ), f"{raw_fp.exists()} and {raw_fp.is_file()}, raw_fp {raw_fp}"
@@ -156,11 +143,11 @@ class BaseDataset(Dataset):
                     processed_fp.unlink()
             # TODO: pre_filter can return None, in which case this sample should be removed
             # from processed data_split.
-            processed_fp.parent.mkdir(parents=True, exist_ok=True)
+            processed_fp.parent.mkdir(parents = True, exist_ok = True)
             data = self._process_raw_file(raw_fp)
             torch.save(data, processed_fp)
 
-    def _process_raw_file(self, raw_fp: Path):
+    def _process_raw_file(self, raw_fp: pathlib.Path):
         """
         process a raw file at raw_fp and save to processed_fp.
         processed_fp will be a file ending with .pt.

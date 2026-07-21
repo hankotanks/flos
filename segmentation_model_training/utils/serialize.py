@@ -4,23 +4,25 @@
 # https://github.com/Lightning-AI/lightning/issues/17257#issuecomment-1493834663
 
 # Copyright (c) Facebook, Inc. and its affiliates.
+
 """
 List serialization code adopted from
 https://github.com/facebookresearch/detectron2/blob/main/detectron2/data/common.py
 """
 
 import pickle
+
 import numpy as np
 import torch
 
 class NumpySerializedList:
     def __init__(self, lst: list):
         def _serialize(data):
-            buffer = pickle.dumps(data, protocol=-1)
-            return np.frombuffer(buffer, dtype=np.uint8)
+            buffer = pickle.dumps(data, protocol = -1)
+            return np.frombuffer(buffer, dtype = np.uint8)
 
         self._lst = [_serialize(x) for x in lst]
-        self._addr = np.asarray([len(x) for x in self._lst], dtype=np.int64)
+        self._addr = np.asarray([len(x) for x in self._lst], dtype = np.int64)
         self._addr = np.cumsum(self._addr)
         self._lst = np.concatenate(self._lst)
 

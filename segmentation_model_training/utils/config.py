@@ -1,11 +1,8 @@
-from typing import Dict as dict
-from typing import List as list
-from typing import Tuple as tuple
-from typing import Union
+import typing
 
 def sync_config_keys(
-    configs: list[dict],
-    keys: list[str],
+    configs: typing.List[typing.Dict],
+    keys: typing.List[str],
     recursive: bool = True,
     raise_on_mismatch: bool = True,
     overwrite: bool = False,
@@ -35,14 +32,12 @@ def sync_config_keys(
         # key is defined, and master should be same as key
         if master_value != key_value:
             if raise_on_mismatch:
-                raise Exception(
-                    f"master value {master_value} is not same as key value {key_value}."
-                )
+                raise Exception(f"master value {master_value} is not same as key value {key_value}.")
             else:
                 raise NotImplementedError
         return master_value
 
-    def recursive_get_dicts(dict_: dict):
+    def recursive_get_dicts(dict_: typing.Dict):
         """
         gets all dicts that are values of keys in dict_. recursive therein.
         return is a list of dicts. will include the original dict.
@@ -60,15 +55,11 @@ def sync_config_keys(
                 dicts_to_check = recursive_get_dicts(config)
             else:
                 dicts_to_check = [config]
-
             for check_dict in dicts_to_check:
                 current_value = check_dict.get(key, "nd")
                 try:
-                    master_value = value_check_loop(
-                        master_value, current_value, raise_on_mismatch=raise_on_mismatch
-                    )
+                    master_value = value_check_loop(master_value, current_value, raise_on_mismatch = raise_on_mismatch)
                 except Exception as e:
                     print(f"Error in configuration, for key {key}: {e}")
                     import sys
-
                     sys.exit(1)

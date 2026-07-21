@@ -20,6 +20,7 @@ struct OdometryNodeConfig {
         util::param_opt(node, "confidence_weighting", config.registration.confidence_weighting);
         util::param_opt(node, "correspondence_restriction", config.registration.correspondence_restriction);
         util::param_opt(node, "correspondence_with_voxel_belief", config.registration.correspondence_with_voxel_belief);
+        util::param_opt(node, "constant_velocity", config.registration.constant_velocity);
         util::param_opt(node, "max_iterations", config.registration.max_iterations);
         util::param_opt(node, "max_threads", config.registration.max_threads);
         util::param_opt(node, "convergence_criterion", config.registration.convergence_criterion);

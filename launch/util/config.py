@@ -29,6 +29,7 @@ class Config:
             'confidence_weighting': (bool, False), 
             'correspondence_restriction': (bool, False), 
             'correspondence_with_voxel_belief': (bool, False),
+            'constant_velocity': (bool, False),
             'voxel_capacity': (int, False), 
             'max_iterations': (int, False), 
             'max_threads': (int, False), 
