@@ -16,9 +16,11 @@
 template<typename F>
 struct VoxelMap {
 public:
-    explicit VoxelMap(float max_distance, float min_weight, float voxel_size, size_t voxel_capacity) : 
-        max_distance_(max_distance), min_weight_(min_weight), 
-        voxel_size_(voxel_size), voxel_resolution_(voxel_size * voxel_size / static_cast<float>(voxel_capacity)), voxel_capacity_(voxel_capacity) { /* STUB */ }
+    explicit VoxelMap(float max_distance, float voxel_size, size_t voxel_capacity) : 
+        max_distance_(max_distance), 
+        voxel_size_(voxel_size), 
+        voxel_resolution_(voxel_size * voxel_size / static_cast<float>(voxel_capacity)), 
+        voxel_capacity_(voxel_capacity) { /* STUB */ }
     VoxelMap(const VoxelMap&) = delete;
     VoxelMap(VoxelMap&&) = delete;
     VoxelMap& operator=(const VoxelMap&) = delete;
@@ -54,7 +56,6 @@ public:
 private:
     // configuration options
     float max_distance_;
-    float min_weight_;
     float voxel_size_;
     float voxel_resolution_;
     size_t voxel_capacity_;
@@ -93,7 +94,7 @@ void VoxelMap<F>::extend(const F& points, const Sophus::SE3f& pose) {
                 std::forward_as_tuple(voxel_capacity_));
             search = it;
         }
-        search.value().add(voxel_resolution_, min_weight_, point, data);
+        search.value().add(voxel_resolution_, point, data);
     }
     // update the VoxelData
     for(auto it = map_.begin(); it != map_.end(); ++it) {

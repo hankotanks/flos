@@ -18,14 +18,12 @@ class Config:
             'path_to_model': ((pathlib.Path, True), False), 
             'voxel_size': (float, False), 
             'max_distance': (float, False), 
-            'max_distance_neighborhood': (float, False), 
             'ignore': (typing.List[int], False),
-            'nearby': (typing.List[int], False),
         }
         ODOMETRY = {
             'voxel_size': (float, False), 
             'max_distance': (float, False), 
-            'min_weight': (float, False),
+            'min_weight': (typing.Dict[int, float], False),
             'confidence_weighting': (bool, False), 
             'correspondence_restriction': (bool, False), 
             'correspondence_with_voxel_belief': (bool, False),
@@ -44,7 +42,7 @@ class Config:
 
         self.param = {component: {} for component in Config.Component}
 
-        def parse(ty, val, key, cwd=pathlib.Path.cwd()):
+        def parse(ty, val, key, cwd = pathlib.Path.cwd()):
             if val is None: return None
             strict = False
             if isinstance(ty, tuple): ty, strict = ty
@@ -56,6 +54,18 @@ class Config:
                     raise RuntimeError(f'{key} must be a list: {val}')
                 subtype = args[0]
                 return [parse(subtype, x, key, cwd) for x in val]
+            if origin is dict:
+                if not isinstance(val, dict):
+                    if isinstance(val, str):
+                        return parse(ty, yaml.safe_load(val), key, cwd)
+                    raise RuntimeError(f'{key} must be a dictionary: {val}')
+                key_ty, value_ty = args
+                keys = []
+                vals = []
+                for k, v in val.items():
+                    keys.append(parse(key_ty, k, key, cwd))
+                    vals.append(parse(value_ty, v, key, cwd))
+                return (keys, vals)
             if ty is pathlib.Path:
                 val_abs = pathlib.Path(val)
                 try:
@@ -102,8 +112,12 @@ class Config:
                 for key in component.value.keys():
                     ty, _ = component.value[key]
                     if (p := parse(ty, param_from_config.get(key), key, path_to_config.parent)) is not None:
-                        self.param[component][key] = p
-
+                        if isinstance(p, tuple):
+                            k, v = p
+                            self.param[component][key + "_key"] = k
+                            self.param[component][key + "_val"] = v
+                        else:
+                            self.param[component][key] = p
 
         for component in Config.Component:
             for key in component.value.keys():
@@ -112,7 +126,12 @@ class Config:
                 val = val if len(val) > 0 else None
 
                 if (p := parse(ty, val, key)) is not None:
-                    self.param[component][key] = p
+                    if isinstance(p, tuple):
+                        k, v = p
+                        self.param[component][key + "_key"] = k
+                        self.param[component][key + "_val"] = v
+                    else:
+                        self.param[component][key] = p
                 elif req and self.param[component].get(key) is None:
                     raise RuntimeError(f'missing required parameter: {key} [{ty}]')
                         

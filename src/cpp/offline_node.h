@@ -61,10 +61,11 @@ public:
         while(rclcpp::ok() && !this->loader_->finished() && msg_processed_++ < msg_count_) {
             auto [cloud, header] = this->loader_->next();
             Sophus::SE3f pose;
-            {
-                util::Profiler profiler{"frame", this};
+            PROFILE(frame, this) {
+                // preprocess before inference
+                model.preprocess(cloud);
                 // inference
-                model.infer(cloud, false);
+                model.infer(cloud);
                 // compute pose and store for OfflineNode::save
                 pose = odometry_system_.register_to_map(cloud, header.stamp.sec, header.stamp.nanosec);
             }

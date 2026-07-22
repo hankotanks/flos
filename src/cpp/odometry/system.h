@@ -17,10 +17,11 @@
 
 class OdometrySystem: util::Profiler {
 public:
-    struct Config {
+    struct Config { // TODO: flatten this config structure to mirror SegmentationSystem::Config
+        static constexpr std::array<std::string, 5> CLASS_HINT{"ignore", "ground", "shrubs", "trunks", "canopy"};
         struct {
             float max_distance{50.f};
-            float min_weight{0.5f};
+            std::map<size_t, float> min_weight;
             float voxel_size{1.f}; // NOTE: downsampling approach has changed from kiss-icp
             size_t voxel_capacity{20};
         } map;
@@ -31,7 +32,7 @@ public:
         struct {
             bool confidence_weighting{true};
             bool correspondence_restriction{true};
-            bool correspondence_with_voxel_belief{true};
+            bool correspondence_with_voxel_belief{true}; // TODO: this is an outdated parameter, since the final system will only use voxel belief. keep for now for future ablation study
             bool constant_velocity{true};
             size_t max_iterations{500};
             size_t max_threads{0};

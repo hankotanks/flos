@@ -42,7 +42,7 @@ public:
         point_data.reserve(voxel_capacity);
     }
 public:
-    void add(float voxel_resolution, float min_weight, const Eigen::Vector3f& point, typename F::point_data_type data) noexcept {
+    void add(float voxel_resolution, const Eigen::Vector3f& point, typename F::point_data_type data) noexcept {
         if(points.size() < points.capacity()) {
             size_t flag = std::numeric_limits<size_t>::max();
             for(size_t j = 0; j < points.size(); ++j) {
@@ -50,7 +50,7 @@ public:
                 flag = j;
                 break;
             }
-            if(flag == std::numeric_limits<size_t>::max() && this->data.weight(data) > min_weight) {
+            if(flag == std::numeric_limits<size_t>::max()) { // TODO: this is where we add the min_weight filter
                 points.emplace_back(point);
                 point_data.emplace_back(data);
                 // point_n.emplace_back(0);

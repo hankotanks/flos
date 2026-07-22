@@ -15,15 +15,7 @@
 // path_to_model
 // voxel_size
 // max_distance
-// max_distance_neighborhood
-// ignore_ground
-// ignore_trunks
-// ignore_canopy
-// ignore_shrubs
-// nearby_ground
-// nearby_trunks
-// nearby_canopy
-// nearby_shrubs
+// ignore
 
 // TOPICS
 // sub: incoming_points_topic (default: $/raw/points) [PointCloud2]
@@ -76,7 +68,7 @@ protected:
             static_assert(std::is_same_v<decltype(header), std_msgs::msg::Header>);
             { // perform the inference
                 util::Profiler profiler("inference", this);
-                model.infer(cloud, true);
+                model.infer(cloud);
             }
             // publish the result
             outgoing_points_publisher_->publish(std::move(cloud.message(header)));

@@ -13,20 +13,17 @@ public:
     struct Config {
         static constexpr std::array<std::string, 5> CLASS_HINT{"ignore", "ground", "shrubs", "trunks", "canopy"};
         float voxel_size{1.f};
-        float max_distance{MAX_DISTANCE_DEFAULT};
-        float max_distance_neighborhood{MAX_DISTANCE_DEFAULT * 0.5f};
-        std::set<size_t> nearby; // NOTE: by default, limit ground to local_distance
-        std::set<size_t> ignore{0, 4}; // NOTE: by default, ignore canopy
+        float max_distance{50.f};
+        std::set<size_t> ignore{0}; // NOTE: by default, ignore canopy
     public:
         friend std::ostream& operator<<(std::ostream& stream, const Config& config);
-    private:
-        static constexpr float MAX_DISTANCE_DEFAULT{50.f};
     };
 public:
     class Model {
         friend SegmentationSystem;
     public:
-        void infer(util::Cloud& cloud, bool preprocessed = false);
+        void infer(util::Cloud& cloud);
+        void preprocess(util::Cloud& cloud);
     public:
         Model() = delete;
         Model(const Model&) = delete;

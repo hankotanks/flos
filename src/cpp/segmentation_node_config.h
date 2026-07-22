@@ -14,22 +14,10 @@ struct SegmentationNodeConfig {
     SegmentationNodeConfig(rclcpp::Node* node) {
         util::param_opt(node, "voxel_size", config.voxel_size);
         util::param_opt(node, "max_distance", config.max_distance);
-        util::param_opt(node, "max_distance_neighborhood", config.max_distance_neighborhood);
         // DONE: I would like my system to be class-name agnostic, so I've moved these parameters here
         // however, the actual class numbers should not be hard-coded...
         // this is a problem for a different day
-        std::vector<size_t> ignore;
-        util::param_opt(node, "ignore", ignore);
-        if(!ignore.empty()) {
-            config.ignore.clear();
-            config.ignore.insert(ignore.begin(), ignore.end());
-        }
-        std::vector<size_t> nearby;
-        util::param_opt(node, "nearby", nearby);
-        if(!nearby.empty()) {
-            config.nearby.clear();
-            config.nearby.insert(nearby.begin(), nearby.end());
-        }
+        util::param_opt_set(node, "ignore", config.ignore);
         // path to the inference model
         path_to_model = PROJECT_ROOT;
         while(path_to_model.filename() != PROJECT_NAME) 

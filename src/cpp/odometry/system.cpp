@@ -89,7 +89,7 @@ float angular_velocity(const Eigen::Matrix<float,6,1>& xi, float dt) {
 OdometrySystem::OdometrySystem(const Config& config) : util::Profiler("OdometrySystem"),
     config_(config),
     pred_(config.registration.correspondence_restriction ? (config.registration.correspondence_with_voxel_belief ? pred_query_to_voxel : pred_query_to_point) : pred_none),
-    map_(config.map.max_distance, config.map.min_weight, config.map.voxel_size, config.map.voxel_capacity),
+    map_(config.map.max_distance, config.map.voxel_size, config.map.voxel_capacity),
     threshold_(config.map.max_distance, config.threshold.threshold_initial, config.threshold.min_motion) {
     size_t max_threads = config.registration.max_threads > 0 ? \
         config.registration.max_threads : tbb::this_task_arena::max_concurrency();
@@ -189,7 +189,11 @@ OdometrySystem::CorrespondenceSet OdometrySystem::correspond(const Wrapper& poin
             const auto& [point, point_data] = points[i];
             const auto& maybe = map_.closest(point, point_data, pred_, correspondence_distance_sq);
             if(maybe) {
+                // TODO: It doesn't make sense to require data.prediction to match in the predicate,
+                // then separately filter the correspondences based on the min_weight threshold
+                // this should be unified in a single stage (once I've removed the point_to_point predicate query, which is outdated)
                 const auto& neighbor = *maybe;
+                if(config_.map.min_weight.count(neighbor.data.prediction) > 0 && neighbor.weight < config_.map.min_weight.at(neighbor.data.prediction)) continue;
                 correspondences.emplace_back(point, point_data, neighbor);
             }
         }
@@ -272,9 +276,27 @@ std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, con
 }
 
 std::ostream& operator<<(std::ostream& stream, const OdometrySystem::Config& config) {
+    auto format = [&stream](const std::map<size_t, float>& indices_to_weights) -> std::string {
+        std::ostringstream oss;
+        oss << '[';
+        bool first = true;
+        for(const auto [i, w] : indices_to_weights) {
+            if(!first) oss << ", ";
+            first = false; 
+            if(i < OdometrySystem::Config::CLASS_HINT.size()) {
+                oss << OdometrySystem::Config::CLASS_HINT[i];
+            } else {
+                oss << i;
+            }
+            oss << ": " << w;
+        }
+        oss << ']';
+        return oss.str();
+    };
+
     return stream << std::boolalpha << "OdometrySystem::Config" << std::endl <<
         "\tmax_distance: " << config.map.max_distance << "," << std::endl <<
-        "\tmin_weight: " << config.map.min_weight << "," << std::endl <<
+        "\tmin_weight: " << format(config.map.min_weight) << "," << std::endl <<
         "\tvoxel_size: " << config.map.voxel_size << "," << std::endl <<
         "\tvoxel_capacity: " << config.map.voxel_capacity << "," << std::endl <<
         "\tthreshold_initial: " << config.threshold.threshold_initial << "," << std::endl <<

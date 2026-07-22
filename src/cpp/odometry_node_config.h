@@ -10,9 +10,9 @@ struct OdometryNodeConfig {
     OdometrySystem::Config config;
     OdometryNodeConfig(rclcpp::Node* node) {
         util::param_opt(node, "max_distance", config.map.max_distance);
-        util::param_opt(node, "min_weight", config.map.min_weight);
+        util::param_opt_map(node, "min_weight", config.map.min_weight);
         util::param_opt(node, "voxel_size", config.map.voxel_size);
-        util::param_opt<unsigned long>(node, "voxel_capacity", config.map.voxel_capacity);
+        util::param_opt(node, "voxel_capacity", config.map.voxel_capacity);
         // threshold
         util::param_opt(node, "threshold_initial", config.threshold.threshold_initial);
         util::param_opt(node, "min_motion", config.threshold.min_motion);

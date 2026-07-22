@@ -29,13 +29,8 @@ SegmentationSystem::Model SegmentationSystem::load(const std::filesystem::path& 
     return SegmentationSystem::Model{config_, path_to_model, this};
 }
 
-void SegmentationSystem::Model::infer(util::Cloud& cloud, bool preprocessed) {
+void SegmentationSystem::Model::infer(util::Cloud& cloud) {
     PROFILE(inference, profiler_) {
-        if(!preprocessed) {
-            PROFILE(preprocessing, &inference) {
-                preprocess_inner(config_, cloud);
-            }
-        }
         py::object points = cloud.points_as_py_object();
         try {
             // perform inference
@@ -58,18 +53,18 @@ void SegmentationSystem::Model::infer(util::Cloud& cloud, bool preprocessed) {
             cloud.filter<uint8_t>("class", [this](const uint8_t& scalar) {
                 return this->config_.ignore.count(scalar) == 0;
             });
-            // NOTE: filter the 'nearby' classes to 'max_distance_neighborhood'
-            if(!config_.nearby.empty()) {
-                cloud.filter_by_distance<uint8_t>(Eigen::Vector3f::Zero(), 0.f, config_.max_distance_neighborhood, "class", [this](const uint8_t& scalar) -> bool {
-                    return this->config_.nearby.count(scalar) > 0;
-                });
-            }
             // downsample only if the inference resolution was different from the output resolution
             if(std::abs(SegmentationSystem::VOXEL_SIZE_SCALAR - SegmentationSystem::VOXEL_SIZE_SCALAR_INFERENCE) > 0.01) {
                 double voxel_size = config_.voxel_size * SegmentationSystem::VOXEL_SIZE_SCALAR;
                 cloud.downsample(voxel_size);
             }
         }
+    }
+}
+
+void SegmentationSystem::Model::preprocess(util::Cloud& cloud) {
+    PROFILE(preprocessing, profiler_) {
+        preprocess_inner(config_, cloud);
     }
 }
 
@@ -94,7 +89,5 @@ std::ostream& operator<<(std::ostream& stream, const SegmentationSystem::Config&
     return stream << std::boolalpha << "SegmentationSystem::Config" << std::endl <<
         "\tvoxel_size: " << config.voxel_size << "," << std::endl << 
         "\tmax_distance: " << config.max_distance << "," << std::endl << 
-        "\tmax_distance_neighborhood: " << config.max_distance_neighborhood << "," << std::endl << 
-        "\tignore: " << format(config.ignore) << "," << std::endl << 
-        "\tnearby: " << format(config.nearby);
+        "\tignore: " << format(config.ignore);
 }
