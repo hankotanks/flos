@@ -2,6 +2,8 @@
 
 // system
 #include <stdexcept>
+// package
+#include "classes.h"
 // util
 #include "util/profiler.h"
 
@@ -76,8 +78,8 @@ std::ostream& operator<<(std::ostream& stream, const SegmentationSystem::Config&
         for(size_t i : indices) {
             if(!first) oss << ", ";
             first = false; 
-            if(i < SegmentationSystem::Config::CLASS_HINT.size()) {
-                oss << SegmentationSystem::Config::CLASS_HINT[i];
+            if(i < classes::COUNT) {
+                oss << classes::HINT[i];
             } else {
                 oss << i;
             }

@@ -4,14 +4,14 @@
 #include <sophus/se3.hpp>
 // package
 #include "odometry/frame.h"
+#include "classes.h"
 // util
 #include "util/cloud.h"
 
 // represents the semantics of a single point
 struct Semantics {
-    static constexpr size_t CLASS_COUNT{5}; // IGNORE = 0, GROUND = 1, SHRUB = 2, STEM = 3, CANOPY = 4
     size_t prediction;
-    std::array<float, CLASS_COUNT> confidence;
+    std::array<float, classes::COUNT> confidence;
     explicit Semantics() = default;
 };
 
@@ -26,8 +26,8 @@ struct Belief: public Voxel<Wrapper, Semantics> {
     virtual void finish() noexcept override final;
 public:
     size_t prediction;
-    std::array<float, Semantics::CLASS_COUNT> belief; 
-    std::array<float, Semantics::CLASS_COUNT> confidence;
+    std::array<float, classes::COUNT> belief; 
+    std::array<float, classes::COUNT> confidence;
 };
 
 struct Wrapper : public Frame<Wrapper, Semantics, Belief> {
@@ -42,5 +42,5 @@ private:
 private:
     std::span<Eigen::Vector3f> points_;
     std::span<const uint8_t> class_;
-    std::array<std::optional<std::span<const float>>, Semantics::CLASS_COUNT> confidence_;
+    std::array<std::optional<std::span<const float>>, classes::COUNT> confidence_;
 };

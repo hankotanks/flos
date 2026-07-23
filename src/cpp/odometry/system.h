@@ -18,7 +18,6 @@
 class OdometrySystem: util::Profiler {
 public:
     struct Config { // TODO: flatten this config structure to mirror SegmentationSystem::Config
-        static constexpr std::array<std::string, 5> CLASS_HINT{"ignore", "ground", "shrubs", "trunks", "canopy"};
         struct {
             float max_distance{50.f};
             std::map<size_t, float> min_weight;

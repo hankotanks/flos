@@ -9,6 +9,8 @@
 #include <tbb/parallel_for.h>
 #include <tbb/concurrent_vector.h>
 #include <tbb/parallel_reduce.h>
+// package
+#include "classes.h"
 // util
 #include "util/cloud.h"
 #include "util/profiler.h"
@@ -226,7 +228,7 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const Wrapper& points, const Od
                     const auto& [source, data, target] = correspondence;
                     const auto& [J_r, residual] = compute_jacobian_and_residual(source, target.point);
                     // weight the kernel based on confidence from the segmentation model
-                    float w = config_.registration.confidence_weighting ? target.weight : 1.0;
+                    float w = config_.registration.confidence_weighting ? target.weight : 1.f;
                     return System(J_r.transpose() * w * J_r, J_r.transpose() * w * residual);
                 });
         }, system_sum);
@@ -283,8 +285,8 @@ std::ostream& operator<<(std::ostream& stream, const OdometrySystem::Config& con
         for(const auto [i, w] : indices_to_weights) {
             if(!first) oss << ", ";
             first = false; 
-            if(i < OdometrySystem::Config::CLASS_HINT.size()) {
-                oss << OdometrySystem::Config::CLASS_HINT[i];
+            if(i < classes::COUNT) {
+                oss << classes::HINT[i];
             } else {
                 oss << i;
             }

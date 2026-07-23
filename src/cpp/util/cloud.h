@@ -6,6 +6,8 @@
 #include <span>
 #include <variant>
 #include <vector>
+#include <optional>
+#include <numeric>
 // eigen
 #include <Eigen/Dense>
 // ros

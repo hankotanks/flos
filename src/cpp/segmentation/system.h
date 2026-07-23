@@ -2,6 +2,7 @@
 
 // system
 #include <filesystem>
+#include <set>
 // pybind
 #include <pybind11/embed.h>
 // util
@@ -11,10 +12,9 @@
 class SegmentationSystem : util::Profiler {
 public:
     struct Config {
-        static constexpr std::array<std::string, 5> CLASS_HINT{"ignore", "ground", "shrubs", "trunks", "canopy"};
         float voxel_size{1.f};
         float max_distance{50.f};
-        std::set<size_t> ignore{0}; // NOTE: by default, ignore canopy
+        std::set<size_t> ignore{0};
     public:
         friend std::ostream& operator<<(std::ostream& stream, const Config& config);
     };
