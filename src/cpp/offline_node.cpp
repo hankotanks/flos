@@ -25,8 +25,7 @@ class DefaultOfflineNode : public OfflineNode {
 public:
     explicit DefaultOfflineNode() : OfflineNode() {
         if(!rclcpp::ok()) return;
-        scan_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/map/points", 10);
-        local_map_previous_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/map/previous", 10);
+        scan_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/scan", 10);
         local_map_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/map", 10);
         tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
         odometry_publisher_ = this->create_publisher<nav_msgs::msg::Odometry>("/" PROJECT_NAME "/odometry", 10);
@@ -42,14 +41,11 @@ protected:
     }
 
     virtual void publish_local_map(const std_msgs::msg::Header::_stamp_type& stamp, const util::Cloud& cloud, bool previous) override {
+        if(previous) return;
         std_msgs::msg::Header header;
         header.stamp = stamp;
         header.frame_id = DefaultOfflineNode::LOCAL_MAP_FRAME;
-        if(previous) {
-            local_map_previous_publisher_->publish(std::move(cloud.message(header)));
-        } else {
-            local_map_publisher_->publish(std::move(cloud.message(header)));
-        }    
+        local_map_publisher_->publish(std::move(cloud.message(header)));
     }
 
     virtual void publish_pose(const std_msgs::msg::Header::_stamp_type& stamp, const std_msgs::msg::Header::_frame_id_type& frame_id, const Sophus::SE3f& pose) override {
@@ -103,7 +99,6 @@ protected:
     }
 private:
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr scan_publisher_;
-    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr local_map_previous_publisher_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr local_map_publisher_;
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odometry_publisher_;

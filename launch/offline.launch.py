@@ -47,7 +47,7 @@ def setup(context, *args, **kwargs):
             output = 'screen',
             condition = launch.conditions.IfCondition(visualize),
             arguments = ['-d', launch.substitutions.PathJoinSubstitution([
-                launch_ros.substitutions.FindPackageShare(PACKAGE_NAME), 'rviz', 'debug.rviz'])],
+                launch_ros.substitutions.FindPackageShare(PACKAGE_NAME), 'launch', 'rviz', 'default.rviz'])],
             parameters = [{ 'use_sim_time': True }]
         ),
         launch.actions.RegisterEventHandler(

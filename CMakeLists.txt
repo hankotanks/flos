@@ -30,6 +30,6 @@ add_subdirectory(src/cpp)
 add_subdirectory(src/python)
 add_subdirectory(src/scripts)
 
-install(DIRECTORY models launch rviz DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY models launch DESTINATION share/${PROJECT_NAME})
 
 ament_package()
