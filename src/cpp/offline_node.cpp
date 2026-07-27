@@ -10,7 +10,6 @@
 // path_to_bag [REQUIRED]
 // path_to_result
 // path_to_model
-// frames
 
 // TOPICS
 // sub: incoming_points_topic [PointCloud2]
@@ -40,8 +39,7 @@ protected:
         scan_publisher_->publish(std::move(cloud.message(header)));
     }
 
-    virtual void publish_local_map(const std_msgs::msg::Header::_stamp_type& stamp, const util::Cloud& cloud, bool previous) override {
-        if(previous) return;
+    virtual void publish_local_map(const std_msgs::msg::Header::_stamp_type& stamp, const util::Cloud& cloud) override {
         std_msgs::msg::Header header;
         header.stamp = stamp;
         header.frame_id = DefaultOfflineNode::LOCAL_MAP_FRAME;

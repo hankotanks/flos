@@ -12,7 +12,6 @@
 // path_to_data [REQUIRED]
 // path_to_result
 // path_to_model
-// frames
 
 // TOPICS
 // sub: incoming_points_topic [PointCloud2]
@@ -21,9 +20,11 @@ class RerunNode : public OfflineNode {
 public:
     explicit RerunNode() : OfflineNode(), rr_("visualizer") {
         if(!rclcpp::ok()) return;
-        rerun::SpawnOptions options;
-        if(RerunNode::MEMORY_LIMIT > 0) options.memory_limit = std::to_string(RerunNode::MEMORY_LIMIT) + "GB";
-        rr_.spawn(options).throw_on_failure();
+        if(visualize_) {
+            rerun::SpawnOptions options;
+            if(RerunNode::MEMORY_LIMIT > 0) options.memory_limit = std::to_string(RerunNode::MEMORY_LIMIT) + "GB";
+            rr_.spawn(options).throw_on_failure();
+        }
     }
 protected:
     virtual void publish_scan(const std_msgs::msg::Header::_stamp_type& stamp, const util::Cloud& cloud) override {
@@ -31,13 +32,9 @@ protected:
         RerunNode::publish_points(cloud, "scan", rerun::Color(255, 255, 255));
     }
 
-    virtual void publish_local_map(const std_msgs::msg::Header::_stamp_type& stamp, const util::Cloud& cloud, bool previous) override {
+    virtual void publish_local_map(const std_msgs::msg::Header::_stamp_type& stamp, const util::Cloud& cloud) override {
         RerunNode::set_stamp(stamp);
-        if(previous) {
-            RerunNode::publish_points(cloud, "map/previous", rerun::Color(255, 0, 0), 0.9f);
-        } else {
-            RerunNode::publish_points(cloud, "map");
-        }
+        RerunNode::publish_points(cloud, "map");
     }
 
     virtual void publish_pose(const std_msgs::msg::Header::_stamp_type& stamp, const std_msgs::msg::Header::_frame_id_type& frame_id, const Sophus::SE3f& pose) override {

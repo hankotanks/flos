@@ -13,8 +13,6 @@ PACKAGE_NAME = 'forest_segmentation'
 LOGGER = launch.logging.get_logger(pathlib.Path(__file__).name)
 
 def setup(context, *args, **kwargs):
-    visualize = launch.substitutions.LaunchConfiguration('visualize')
-
     try:
         config = Config(context)
     except RuntimeError as e:
@@ -41,15 +39,6 @@ def setup(context, *args, **kwargs):
             name = 'router',
         ),
         node_offline,
-        launch_ros.actions.Node(
-            package = 'rviz2',
-            executable = 'rviz2',
-            output = 'screen',
-            condition = launch.conditions.IfCondition(visualize),
-            arguments = ['-d', launch.substitutions.PathJoinSubstitution([
-                launch_ros.substitutions.FindPackageShare(PACKAGE_NAME), 'launch', 'rviz', 'default.rviz'])],
-            parameters = [{ 'use_sim_time': True }]
-        ),
         launch.actions.RegisterEventHandler(
             event_handler = launch.event_handlers.OnProcessExit(
                 target_action = node_offline,
@@ -60,12 +49,21 @@ def setup(context, *args, **kwargs):
         )
     ]
 
+    if 'visualize' in config[Config.Component.OFFLINE] and config[Config.Component.OFFLINE]['visualize']:
+        description.append(launch_ros.actions.Node(
+            package = 'rviz2',
+            executable = 'rviz2',
+            output = 'screen',
+            arguments = ['-d', launch.substitutions.PathJoinSubstitution([
+                launch_ros.substitutions.FindPackageShare(PACKAGE_NAME), 'launch', 'rviz', 'default.rviz'])],
+            parameters = [{ 'use_sim_time': True }]
+        ))
+
     return description
 
 def generate_launch_description():
     return launch.LaunchDescription([
         launch.actions.SetEnvironmentVariable('RMW_IMPLEMENTATION', 'rmw_zenoh_cpp'),
-        launch.actions.DeclareLaunchArgument('visualize', default_value = 'true'),
         *Config.declare_launch_arguments(),
         launch.actions.OpaqueFunction(function = setup)
     ])

@@ -9,9 +9,9 @@ import launch_ros
 class Config:
     class Component(enum.Enum):
         OFFLINE = {
+            'visualize': (bool, False),
             'path_to_data': ((pathlib.Path, True), True),
             'path_to_result': ((pathlib.Path, False), False),
-            'frames': (int, False),
             'incoming_points_topic': (str, False), # NOTE: specific to BagDataloader
         }
         SEGMENTATION = {

@@ -25,7 +25,6 @@
 // path_to_data [REQUIRED]
 // path_to_result
 // path_to_model
-// frames
 
 // TOPICS
 // sub: incoming_points_topic [PointCloud2]
@@ -39,7 +38,8 @@ public:
         odometry_config_(this),
         odometry_system_(odometry_config_.config) {
         if(!rclcpp::ok()) return;
-        util::param_opt_path(this, "path_to_result", path_to_result_, true, false, true);        
+        util::param_opt(this, "visualize", visualize_);
+        util::param_opt_path(this, "path_to_result", path_to_result_, false, true, true);        
     }
     // delete extraneous constructors
     OfflineNode(const OfflineNode&) = delete;
@@ -71,13 +71,12 @@ public:
             }
             poses_.emplace_back(header, pose);
             // publications
-            this->publish_scan(header.stamp, cloud);
-            if(local_map_) {
-                this->publish_local_map(header.stamp, *local_map_, true);
+            if(visualize_) {
+                this->publish_scan(header.stamp, cloud);
+                OfflineNode::update_local_map();
+                this->publish_local_map(header.stamp, *local_map_);
+                this->publish_pose(header.stamp, header.frame_id, pose);
             }
-            OfflineNode::update_local_map();
-            this->publish_local_map(header.stamp, *local_map_);
-            this->publish_pose(header.stamp, header.frame_id, pose);
             this->publish_statistics(header.stamp, odometry_system_.statistics);
             const auto [percent, remaining] = OfflineNode::compute_progress();
             this->publish_progress(header.stamp, percent, remaining);
@@ -85,7 +84,7 @@ public:
     }
 protected:
     virtual void publish_scan(const std_msgs::msg::Header::_stamp_type& stamp, const util::Cloud& cloud) { /* STUB */ };
-    virtual void publish_local_map(const std_msgs::msg::Header::_stamp_type& stamp, const util::Cloud& cloud, bool previous = false) { /* STUB */ };
+    virtual void publish_local_map(const std_msgs::msg::Header::_stamp_type& stamp, const util::Cloud& cloud) { /* STUB */ };
     virtual void publish_pose(const std_msgs::msg::Header::_stamp_type& stamp, const std_msgs::msg::Header::_frame_id_type& frame_id, const Sophus::SE3f& pose) { /* STUB */ };
     virtual void publish_statistics(const std_msgs::msg::Header::_stamp_type& stamp, const OdometrySystem::Statistics& statistics) { /* STUB */ };
     virtual void publish_progress(const std_msgs::msg::Header::_stamp_type& stamp, float percent, float remaining) { /* STUB */ }
@@ -132,6 +131,8 @@ private:
             local_map_->add_field<uint8_t>("class", semantics);
         }
     }
+protected:
+    bool visualize_{true};
 private:
     // parameters
     std::filesystem::path path_to_result_;
