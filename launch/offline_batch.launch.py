@@ -50,13 +50,15 @@ def setup(context, *args, **kwargs):
 
     path_to_launch = ament_index_python.packages.get_package_share_directory(PACKAGE_NAME)
     path_to_launch = pathlib.Path(path_to_launch).resolve(strict = True)
-    path_to_launch = path_to_launch / 'launch' / 'offline.launch.py'
+    path_to_launch = path_to_launch / 'launch' / 'offline_rerun.launch.py'
 
     dataset = launch.substitutions.LaunchConfiguration('dataset').perform(context)
 
     name = launch.substitutions.LaunchConfiguration('name').perform(context)
     if name is None or len(name) == 0:
         name = path_to_config.stem
+
+    visualize = launch.substitutions.LaunchConfiguration('visualize').perform(context)
 
     configs = []
     if path_to_config.is_dir():
@@ -79,7 +81,8 @@ def setup(context, *args, **kwargs):
             launch.actions.ExecuteProcess(
                 cmd = [
                     'ros2', 'launch', str(path_to_launch),
-                    'visualize:=false',
+                    f'visualize:={visualize}',
+                    'visualize_map:=false',
                     f'path_to_data:={data}',
                     f'path_to_result:={path_to_result_inner / dataset / data_name / f"{PACKAGE_NAME}_{data_name}_tum.txt"}',
                     f'path_to_config:={config}'
@@ -106,5 +109,6 @@ def generate_launch_description():
         launch.actions.DeclareLaunchArgument('path_to_result'),
         launch.actions.DeclareLaunchArgument('dataset'),
         launch.actions.DeclareLaunchArgument('name', default_value = ''),
+        launch.actions.DeclareLaunchArgument('visualize', default_value = 'false'),
         launch.actions.OpaqueFunction(function = setup)
     ])

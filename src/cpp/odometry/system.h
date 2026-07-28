@@ -29,6 +29,7 @@ public:
             float min_motion{0.1f};
         } threshold;
         struct {
+            bool deskew{true};
             bool confidence_weighting{true};
             bool correspondence_restriction{true};
             bool correspondence_with_voxel_belief{true}; // TODO: this is an outdated parameter, since the final system will only use voxel belief. keep for now for future ablation study
@@ -114,13 +115,19 @@ private:
     Config config_;
     // NOTE: see note in segmentation/node.h
     static constexpr float VOXEL_SIZE_SCALAR{1.f};
+    // lookup table for min_weight
+    std::vector<float> min_weight_;
+    // previous frame state
     Sophus::SE3f last_pose_;
     Sophus::SE3f last_delta_;
     unsigned int init_seconds_{std::numeric_limits<unsigned int>::max()};
     float last_stamp_{0.f};
     float prev_stamp_{0.f};
+    // predicate for correspondence filtering
     using Predicate = bool(*)(const Belief& data, Semantics point, Semantics query);
     Predicate pred_;
+    // voxel map
     VoxelMap<Wrapper> map_;
+    // adaptive threshold
     AdaptiveThreshold threshold_;
 };

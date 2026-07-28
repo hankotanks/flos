@@ -11,6 +11,7 @@ from util.loader import Loader, resolve
 def main():
     parser = Loader.parser()
     parser.add_argument("--config")
+    parser.add_argument("--topic", default = None)
     args = parser.parse_args()
     for _, config, _, metadata, result in Loader(args):
         # construct command (with inline configuration string if provided)
@@ -19,6 +20,8 @@ def main():
         # use config specified by Loader
         if config is not None: 
             cmd += f' --config {config}'
+        if args.topic is not None:
+            cmd += f' --topic {args.topic}'
         # run kiss-icp
         subprocess.run(cmd, cwd = result, shell = True)
         # copy trajectory to correct location

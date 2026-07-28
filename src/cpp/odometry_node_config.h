@@ -17,6 +17,7 @@ struct OdometryNodeConfig {
         util::param_opt(node, "threshold_initial", config.threshold.threshold_initial);
         util::param_opt(node, "min_motion", config.threshold.min_motion);
         // registration
+        util::param_opt(node, "deskew", config.registration.deskew);
         util::param_opt(node, "confidence_weighting", config.registration.confidence_weighting);
         util::param_opt(node, "correspondence_restriction", config.registration.correspondence_restriction);
         util::param_opt(node, "correspondence_with_voxel_belief", config.registration.correspondence_with_voxel_belief);

@@ -23,8 +23,11 @@
 // PARAMETERS
 // incoming_points_topic [REQUIRED for BagDataloader]
 // path_to_data [REQUIRED]
+// visualize
+// visualize_map
 // path_to_result
 // path_to_model
+// frames
 
 // TOPICS
 // sub: incoming_points_topic [PointCloud2]
@@ -39,7 +42,9 @@ public:
         odometry_system_(odometry_config_.config) {
         if(!rclcpp::ok()) return;
         util::param_opt(this, "visualize", visualize_);
-        util::param_opt_path(this, "path_to_result", path_to_result_, false, true, true);        
+        util::param_opt(this, "visualize_map", visualize_map_);
+        util::param_opt_path(this, "path_to_result", path_to_result_, false, true, true);     
+        util::param_opt(this, "frames", msg_count_);
     }
     // delete extraneous constructors
     OfflineNode(const OfflineNode&) = delete;
@@ -56,7 +61,8 @@ public:
         SegmentationSystem::Model model = segmentation_system_.load(segmentation_config_.path_to_model);
         RCLCPP_INFO_ONCE(this->get_logger(), NODE_NAME " successfully loaded inference model");
         // initialize and set total message count
-        msg_count_ = this->loader_->init(this->shared_from_this());
+        size_t frames = this->loader_->init(this->shared_from_this());
+        if(msg_count_ == 0) msg_count_ = frames;
         // infer lidar messages from the given bag
         while(rclcpp::ok() && !this->loader_->finished() && msg_processed_++ < msg_count_) {
             auto [cloud, header] = this->loader_->next();
@@ -73,8 +79,10 @@ public:
             // publications
             if(visualize_) {
                 this->publish_scan(header.stamp, cloud);
-                OfflineNode::update_local_map();
-                this->publish_local_map(header.stamp, *local_map_);
+                if(visualize_map_) {
+                    OfflineNode::update_local_map();
+                    this->publish_local_map(header.stamp, *local_map_);
+                }
                 this->publish_pose(header.stamp, header.frame_id, pose);
             }
             this->publish_statistics(header.stamp, odometry_system_.statistics);
@@ -133,6 +141,7 @@ private:
     }
 protected:
     bool visualize_{true};
+    bool visualize_map_{true};
 private:
     // parameters
     std::filesystem::path path_to_result_;

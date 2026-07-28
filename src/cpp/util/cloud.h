@@ -85,13 +85,13 @@ public:
     void downsample(float voxel_size);
     // filter the cloud based on a certain field
     template<typename T, typename Predicate>
-    void filter(const std::string& name, const Predicate& pred);
+    void filter(const std::string& name, Predicate&& pred);
     // filter by distance
     void filter_by_distance(const Eigen::Vector3f& origin, float minima, float maxima);
     // filter by distance and scalar predicate
     // applies the distance filter to all points where the predicate returns truthy
     template<typename T, typename Predicate>
-    void filter_by_distance(const Eigen::Vector3f& origin, float minima, float maxima, const std::string& name, const Predicate& pred);
+    void filter_by_distance(const Eigen::Vector3f& origin, float minima, float maxima, const std::string& name, Predicate&& pred);
     // sort the field based on a comparator over a field
     template<typename T, typename Comparator> 
     void sort(const std::string& name, const Comparator& comp);
@@ -171,22 +171,24 @@ PYBIND11_MAKE_OPAQUE(std::vector<Eigen::Vector3f>);
 
 namespace util {
 template<typename T, typename Predicate>
-void Cloud::filter(const std::string& name, const Predicate& pred) {
+void Cloud::filter(const std::string& name, Predicate&& pred) {
     std::span<const T> field = Cloud::field<T>(name);
-    for(size_t i = Cloud::size(); i-- > 0;) {
-        if(!(pred)(field[i])) {
-            points_.erase(points_.begin() + i);
-            for(Field& field : fields_) {
-                std::visit([i](auto& vec) { 
-                    vec.erase(vec.begin() + i); 
-                }, field.data_);
+    size_t i_write = 0;
+    for (size_t i_read = 0; i_read < Cloud::size(); ++i_read) {
+        if(!pred(field[i_read])) continue;
+        if(i_write != i_read) {
+            points_[i_write] = points_[i_read];
+            for(Field& f : fields_) {
+                std::visit([&](auto& vec) { vec[i_write] = vec[i_read]; }, f.data_);
             }
         }
+        ++i_write;
     }
+    Cloud::resize(i_write);
 }
 
 template<typename T, typename Predicate>
-void Cloud::filter_by_distance(const Eigen::Vector3f& origin, float minima, float maxima, const std::string& name, const Predicate& pred) {
+void Cloud::filter_by_distance(const Eigen::Vector3f& origin, float minima, float maxima, const std::string& name, Predicate&& pred) {
     float minima_sq = minima * minima;
     float maxima_sq = maxima * maxima;
     std::span<const T> field = Cloud::field<T>(name);
@@ -207,10 +209,7 @@ void Cloud::filter_by_distance(const Eigen::Vector3f& origin, float minima, floa
         }
         ++i_write;
     }
-    points_.resize(i_write);
-    for(Field& f : fields_) {
-        std::visit([i_write](auto& vec) { vec.resize(i_write); }, f.data_);
-    }
+    Cloud::resize(i_write);
 }
 
 // TODO: this should not accessible outside the cloud.cpp translation unit

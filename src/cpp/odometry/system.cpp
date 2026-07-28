@@ -9,9 +9,11 @@
 #include <tbb/parallel_for.h>
 #include <tbb/concurrent_vector.h>
 #include <tbb/parallel_reduce.h>
+#include <tbb/enumerable_thread_specific.h>
 // package
 #include "classes.h"
 // util
+#include "odometry/wrapper.h"
 #include "util/cloud.h"
 #include "util/profiler.h"
 
@@ -97,6 +99,13 @@ OdometrySystem::OdometrySystem(const Config& config) : util::Profiler("OdometryS
         config.registration.max_threads : tbb::this_task_arena::max_concurrency();
     volatile static const tbb::global_control _ = tbb::global_control( // NOTE: static storage type is required here
         tbb::global_control::max_allowed_parallelism, static_cast<size_t>(max_threads));
+    // create lookup table for min_weight
+    if(!config_.map.min_weight.empty()) {
+        min_weight_.resize(classes::COUNT);
+        for(const auto& [cls, weight] : config_.map.min_weight) {
+            min_weight_[cls] = weight;
+        }
+    }
 }
 
 const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigned int seconds, unsigned int nanoseconds) noexcept {
@@ -105,8 +114,10 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigne
         Sophus::SE3f delta;
         OdometrySystem::prologue(delta, seconds, nanoseconds);
         // deskewing
-        PROFILE(deskew, &registration) {
-            deskew_frame(points, delta);
+        if(config_.registration.deskew) {
+            PROFILE(deskew, &registration) {
+                deskew_frame(points, delta);
+            }
         }
         // downsample incoming points to obtain keypoints and the preprocessed frame
         util::Cloud points_kp{points};
@@ -121,7 +132,9 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigne
         // append points to map
         PROFILE(update, &registration) {
             Wrapper points_wrapper{points};
-            map_.update(points_wrapper, pose);
+            map_.update([this](const Belief& belief, const Semantics& data) {
+                return belief.weight(data) > min_weight_[data.prediction]; // TODO: Consider a configuration option for this
+            }, points_wrapper, pose);
         }
         // store new pose
         OdometrySystem::epilogue(pose, seconds, nanoseconds);
@@ -189,13 +202,13 @@ OdometrySystem::CorrespondenceSet OdometrySystem::correspond(const Wrapper& poin
     tbb::parallel_for(tbb::blocked_range<size_t>{0, points.size()}, [&](const tbb::blocked_range<size_t>& range) {
         for(size_t i = range.begin(); i < range.end(); ++i) {
             const auto& [point, point_data] = points[i];
-            const auto& maybe = map_.closest(point, point_data, pred_, correspondence_distance_sq);
+            const auto& maybe = map_.closest(pred_, point, point_data, correspondence_distance_sq);
             if(maybe) {
                 // TODO: It doesn't make sense to require data.prediction to match in the predicate,
                 // then separately filter the correspondences based on the min_weight threshold
                 // this should be unified in a single stage (once I've removed the point_to_point predicate query, which is outdated)
                 const auto& neighbor = *maybe;
-                if(config_.map.min_weight.count(neighbor.data.prediction) > 0 && neighbor.weight < config_.map.min_weight.at(neighbor.data.prediction)) continue;
+                if(neighbor.weight < min_weight_[neighbor.data.prediction]) continue;
                 correspondences.emplace_back(point, point_data, neighbor);
             }
         }
@@ -263,11 +276,12 @@ std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, con
                 // Update iterations
                 T_icp = est * T_icp;
                 // Termination criteria
-                if(dx.norm() < config_.registration.convergence_criterion) break;
+                if(dx.norm() < config_.registration.convergence_criterion) goto termination;
             }            
             // accumulate iteration count
             statistics.iterations++;
         }
+termination:;
     }
     // get mean correspondences
     statistics.correspondence.mean /= static_cast<float>(statistics.iterations);
@@ -303,6 +317,7 @@ std::ostream& operator<<(std::ostream& stream, const OdometrySystem::Config& con
         "\tvoxel_capacity: " << config.map.voxel_capacity << "," << std::endl <<
         "\tthreshold_initial: " << config.threshold.threshold_initial << "," << std::endl <<
         "\tmin_motion: " << config.threshold.min_motion << "," << std::endl <<
+        "\tdeskew: " << config.registration.deskew << "," << std::endl << 
         "\tconfidence_weighting: " << config.registration.confidence_weighting << "," << std::endl <<
         "\tcorrespondence_restriction: " << config.registration.correspondence_restriction << "," << std::endl <<
         "\tcorrespondence_with_voxel_belief: " << config.registration.correspondence_with_voxel_belief << "," << std::endl <<

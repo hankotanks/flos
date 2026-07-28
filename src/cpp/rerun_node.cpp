@@ -10,8 +10,11 @@
 // PARAMETERS
 // incoming_points_topic [REQUIRED for BagDataloader]
 // path_to_data [REQUIRED]
+// visualize
+// visualize_map
 // path_to_result
 // path_to_model
+// frames
 
 // TOPICS
 // sub: incoming_points_topic [PointCloud2]

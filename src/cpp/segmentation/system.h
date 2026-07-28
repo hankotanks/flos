@@ -55,7 +55,7 @@ public:
 public:
     // NOTE: Config::voxel_size is scaled by this constant for unified parameter passing between segmentation and odometry
     static constexpr float VOXEL_SIZE_SCALAR{0.5f};
-    static constexpr float VOXEL_SIZE_SCALAR_INFERENCE{0.25f};
+    static constexpr float VOXEL_SIZE_SCALAR_INFERENCE{0.1f};
     // scalar for map distance
     // NOTE: the idea is that we want the map to be larger than any incoming scan's max distance
     static constexpr float MAX_DISTANCE_SCALAR{1.f};

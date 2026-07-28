@@ -8,8 +8,11 @@
 // PARAMETERS
 // incoming_points_topic [REQUIRED]
 // path_to_bag [REQUIRED]
+// visualize
+// visualize_map
 // path_to_result
 // path_to_model
+// frames
 
 // TOPICS
 // sub: incoming_points_topic [PointCloud2]

@@ -10,9 +10,11 @@ class Config:
     class Component(enum.Enum):
         OFFLINE = {
             'visualize': (bool, False),
+            'visualize_map': (bool, False),
             'path_to_data': ((pathlib.Path, True), True),
             'path_to_result': ((pathlib.Path, False), False),
             'incoming_points_topic': (str, False), # NOTE: specific to BagDataloader
+            'frames': (int, False),
         }
         SEGMENTATION = {
             'path_to_model': ((pathlib.Path, True), False), 
@@ -24,6 +26,7 @@ class Config:
             'voxel_size': (float, False), 
             'max_distance': (float, False), 
             'min_weight': (typing.Dict[int, float], False),
+            'deskew': (bool, False),
             'confidence_weighting': (bool, False), 
             'correspondence_restriction': (bool, False), 
             'correspondence_with_voxel_belief': (bool, False),
