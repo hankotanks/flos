@@ -64,7 +64,7 @@ def train(config_model: typing.Dict, config_trainer: typing.Dict, config_data: t
     del config_trainer["seed"]
     # profiler = PyTorchProfiler(profile_memory = True)
     trainer = lightning.Trainer(logger = logger, callbacks = [monitor, model_ckpt], default_root_dir = log, **config_trainer) # resume_from_checkpoint=ckpt, # profiler=profiler,
-    trainer.fit(model, datamodule = datamodule, ckpt_path = str(ckpt) if model_ckpt is not None else None)
+    trainer.fit(model, datamodule = datamodule, ckpt_path = str(ckpt) if ckpt is not None else None)
    
     # test
     if "test" in datamodule.prepare_splits: trainer.test(model, datamodule = datamodule)

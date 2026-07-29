@@ -41,8 +41,7 @@ public:
         point_data.reserve(voxel_capacity);
     }
 public:
-    template<typename Predicate>
-    void add(const Eigen::Vector3f& point, typename F::point_data_type data, float voxel_resolution, Predicate&& pred) noexcept {
+    void add(const Eigen::Vector3f& point, typename F::point_data_type data, float voxel_resolution) noexcept {
         if(points.size() < points.capacity()) {
             size_t flag = std::numeric_limits<size_t>::max();
             for(size_t j = 0; j < points.size(); ++j) {
@@ -50,7 +49,7 @@ public:
                 flag = j;
                 break;
             }
-            if(flag == std::numeric_limits<size_t>::max() && pred(this->data, data)) {
+            if(flag == std::numeric_limits<size_t>::max()) {
                 points.emplace_back(point);
                 point_data.emplace_back(data);
             }

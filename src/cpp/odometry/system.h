@@ -34,6 +34,7 @@ public:
             bool weighting{true}; // weights associations based on the aggreement between the point's class distribution and the voxel's accumulated belief
             bool weighting_by_belief{true}; // when false, association weights are dependent on the matched point rather than the voxel's accumulated belief
             bool restrict{true}; // filter correspondences between points with different predicted classes
+            // TODO: This option is not used in the current system (CONSIDER WHAT TO DO WITH IT)
             std::map<size_t, float> threshold; // define thresholds for target semantic classes and filter out correspondences with weights lower than...
         } correspondence;
     public:
@@ -115,7 +116,7 @@ private:
     float last_stamp_{0.f};
     float prev_stamp_{0.f};
     // predicate for correspondence filtering
-    using Predicate = bool(*)(const Belief& data, Semantics point, Semantics query);
+    using Predicate = bool(*)(const Belief&, Semantics, Semantics);
     Predicate pred_;
     // voxel map
     VoxelMap<Wrapper> map_;

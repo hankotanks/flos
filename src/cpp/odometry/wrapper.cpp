@@ -22,11 +22,11 @@ void Belief::update(const Semantics& data) noexcept {
 
 // TODO: This is NOT final
 float Belief::weight(const Semantics& data) const noexcept {
-    float w = 0.0;
+    float w = 0.f;
     // NOTE: currently, dot product
     // consider KL or Jensen-Shannon
     for(size_t i = 0; i < classes::COUNT; ++i) w += confidence[i] * data.confidence[i];
-    assert(w >= 0.f && w <= 1.0);
+    assert(w >= 0.f && w <= 1.f);
     return w;
 }
 

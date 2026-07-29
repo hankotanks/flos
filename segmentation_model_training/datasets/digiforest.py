@@ -67,7 +67,7 @@ class Labels:
         stem_mask = np.logical_and(tree_mask, sub_labels == Labels.SubFrom.STEM.value)
         canopy_mask = np.logical_and(tree_mask, sub_labels == Labels.SubFrom.CANOPY.value)
         remapped_labels[stem_mask] = Labels.To.STEM.value
-        remapped_labels[canopy_mask] = Labels.To.CANOPY.value
+        remapped_labels[canopy_mask] = Labels.To.SHRUB.value
         
         # Tree semantic class doesn't exist anymore. so any remaining tree points, should be none, should be ignored
         stem_and_canopy_mask = np.logical_or(stem_mask, canopy_mask)

@@ -9,7 +9,6 @@
 #include <tbb/parallel_for.h>
 #include <tbb/concurrent_vector.h>
 #include <tbb/parallel_reduce.h>
-#include <tbb/enumerable_thread_specific.h>
 // package
 #include "classes.h"
 // util
@@ -60,7 +59,9 @@ void deskew_frame(util::Cloud& points, const Sophus::SE3f& motion) noexcept {
     name = get_stamp_field<double>(points);
     if(name) deskew_frame_inner<double>(points, *name, motion);
 }
+} // private scope
 
+namespace {
 bool pred_query_to_point(const Belief& data, Semantics point, Semantics query) {
     return query.prediction == point.prediction;
 }
@@ -72,7 +73,9 @@ bool pred_query_to_voxel(const Belief& data, Semantics point, Semantics query) {
 bool pred_none(const Belief& data, Semantics point, Semantics query) {
     return true;
 }
+} // private scope
 
+namespace {
 float linear_velocity(const Eigen::Matrix<float,6,1>& xi, float dt) {
     return xi.tail<3>().norm() / dt;
 }
@@ -134,9 +137,7 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigne
         // append points to map
         PROFILE(update, &registration) {
             Wrapper points_wrapper{points};
-            map_.update(points_wrapper, pose, [this](const Belief& belief, const Semantics& data) {
-                return belief.weight(data) > correspondence_threshold_[data.prediction]; // TODO: Consider a configuration option for this
-            });
+            map_.update(points_wrapper, pose);
         }
         // store new pose
         OdometrySystem::epilogue(pose, seconds, nanoseconds);
@@ -200,13 +201,9 @@ OdometrySystem::CorrespondenceSet OdometrySystem::correspond(const Wrapper& poin
     tbb::parallel_for(tbb::blocked_range<size_t>{0, points.size()}, [&](const tbb::blocked_range<size_t>& range) {
         for(size_t i = range.begin(); i < range.end(); ++i) {
             const auto& [point, point_data] = points[i];
-            const auto& maybe = map_.closest(pred_, point, point_data, correspondence_distance_sq);
+            const auto& maybe = map_.closest(point, point_data, pred_, correspondence_distance_sq);
             if(maybe) {
-                // TODO: It doesn't make sense to require data.prediction to match in the predicate,
-                // then separately filter the correspondences based on the min_weight threshold
-                // this should be unified in a single stage (once I've removed the point_to_point predicate query, which is outdated)
                 const auto& neighbor = *maybe;
-                if(neighbor.weight < correspondence_threshold_[neighbor.data.prediction]) continue;
                 correspondences.emplace_back(point, point_data, neighbor);
             }
         }
@@ -224,7 +221,7 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const Wrapper& points, const Od
     };
 
     using System = std::pair<Eigen::Matrix<float, 6, 6>, Eigen::Matrix<float, 6, 1>>;
-    auto system_sum = [](System a, const System &b) {
+    auto sum = [](System a, const System &b) {
         a.first += b.first;
         a.second += b.second;
         return a;
@@ -235,14 +232,14 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const Wrapper& points, const Od
         tbb::blocked_range<correspondence_iterator>{correspondences.cbegin(), correspondences.cend()},
         System(Eigen::Matrix<float, 6, 6>::Zero(), Eigen::Matrix<float, 6, 1>::Zero()),
         [&](const tbb::blocked_range<correspondence_iterator>& range, System J) -> System {
-            return std::transform_reduce(range.begin(), range.end(), J, system_sum, [&](const Correspondence& correspondence) {
+            return std::transform_reduce(range.begin(), range.end(), J, sum, [&](const Correspondence& correspondence) {
                     const auto& [source, data, target] = correspondence;
                     const auto& [J_r, residual] = compute_jacobian_and_residual(source, target.point);
                     // weight the kernel based on confidence from the segmentation model
                     float w = config_.correspondence.weighting ? target.weight : 1.f;
                     return System(J_r.transpose() * w * J_r, J_r.transpose() * w * residual);
                 });
-        }, system_sum);
+        }, sum);
 
     return JTJ.ldlt().solve(-JTr);
 }

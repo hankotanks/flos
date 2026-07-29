@@ -30,10 +30,8 @@ public:
     // update functions 
     // predicate determines if a point is accepted into the map, with signature:
     // bool(*)(const F::voxel_data_type&, const F::point_data_type&)
-    template<typename Predicate>
-    void update(F& points, const Sophus::SE3f& pose, Predicate&&);
-    template<typename Predicate>
-    void extend(const F& points, Predicate&&);
+    void update(F& points, const Sophus::SE3f& pose);
+    void extend(const F& points);
 public:
     struct Cloud {
         std::vector<Eigen::Vector3f> points;
@@ -54,7 +52,7 @@ public:
     };
     // returns std::nullopt when no correspondence is found
     template<typename Predicate>
-    std::optional<Neighbor> closest(Predicate&& pred, const Eigen::Vector3f& query, typename F::point_data_type data, float max_distance_sq = std::numeric_limits<float>::max()) const;
+    std::optional<Neighbor> closest(const Eigen::Vector3f& query, typename F::point_data_type data, Predicate&&, float max_distance_sq = std::numeric_limits<float>::max()) const;
 private:
     // configuration options
     float max_distance_;
@@ -84,14 +82,13 @@ inline Eigen::Vector3f voxel_to_point(const Eigen::Vector3i& voxel, double voxel
 } // private scope
 
 template<typename F>
-template<typename Predicate>
-void VoxelMap<F>::update(F& points, const Sophus::SE3f& pose, Predicate&& pred) {
+void VoxelMap<F>::update(F& points, const Sophus::SE3f& pose) {
     // transform points by pose
     for(size_t i = 0; i < points.size(); ++i) {
         points[i].first = pose * points[i].first;
     }
     // add points to map
-    VoxelMap::extend(points, pred);
+    VoxelMap::extend(points);
     // remove points outside of a distance threshold to the current pose
     const Eigen::Vector3f& origin = pose.translation();
     const auto max_distance_sq = max_distance_ * max_distance_;
@@ -104,8 +101,7 @@ void VoxelMap<F>::update(F& points, const Sophus::SE3f& pose, Predicate&& pred) 
 }
 
 template<typename F>
-template<typename Predicate>
-void VoxelMap<F>::extend(const F& points, Predicate&& pred) {
+void VoxelMap<F>::extend(const F& points) {
     for(size_t i = 0; i < points.size(); ++i) {
         const auto& [point, data] = points[i];
         const Eigen::Vector3i voxel = point_to_voxel(point, voxel_size_);
@@ -116,7 +112,7 @@ void VoxelMap<F>::extend(const F& points, Predicate&& pred) {
                 std::forward_as_tuple(voxel_capacity_));
             search = it;
         }
-        search.value().add(point, data, voxel_resolution_, pred);
+        search.value().add(point, data, voxel_resolution_);
     }
     // update the VoxelData
     for(auto it = map_.begin(); it != map_.end(); ++it) {
@@ -149,7 +145,7 @@ inline float voxel_lower_bound_distance_sq(const Eigen::Vector3f& query, const E
 
 template<typename F>
 template<typename Predicate>
-std::optional<typename VoxelMap<F>::Neighbor> VoxelMap<F>::closest(Predicate&& pred, const Eigen::Vector3f& query, typename F::point_data_type data, float correspondence_distance_sq) const {
+std::optional<typename VoxelMap<F>::Neighbor> VoxelMap<F>::closest(const Eigen::Vector3f& query, typename F::point_data_type data, Predicate&& pred, float correspondence_distance_sq) const {
     // NOTE: moved inside of the function for namespacing reasons 
     // (since VoxelMap::closest must be included in the header due to templating constraints)
     static const std::array<Eigen::Vector3i, 27> voxel_shifts{
