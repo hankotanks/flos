@@ -7,8 +7,6 @@
 #include <stdexcept>
 // robin_map
 #include <tsl/robin_map.h>
-// util
-#include "util/voxel.h"
 
 using i1 = int8_t;
 using u1 = uint8_t;
@@ -22,6 +20,14 @@ using f8 = double;
 namespace {
 inline std::string fix_frame_id(const std::string &frame_id) {
     return std::regex_replace(frame_id, std::regex("^/"), "");
+}
+
+inline Eigen::Vector3i point_to_voxel(const Eigen::Vector3f& point, double voxel_size) {
+    return {
+        static_cast<int>(std::floor(point.x() / voxel_size)),
+        static_cast<int>(std::floor(point.y() / voxel_size)),
+        static_cast<int>(std::floor(point.z() / voxel_size))
+    };
 }
 } // private scope
 
@@ -124,7 +130,8 @@ Cloud::Cloud(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg) noexcept 
     points_.reserve(point_count);
 
     size_t field_count = msg_it.size();
-    assert(field_count == desc_->size());
+    assert(field_count == desc_.attrs_.size());
+    assert(field_count == desc_.names_.size());
     for(auto& field : fields_) {
         std::visit([point_count](auto& it) { it.reserve(point_count); }, field.data_);
     }
@@ -385,8 +392,8 @@ sensor_msgs::msg::PointCloud2 Cloud::message(const std_msgs::msg::Header& header
         msg_it.emplace_back(msg, datatype, name);
     }
     size_t field_count = msg_it.size();
-    assert(field_count == cloud_desc_->attrs.size());
-    assert(field_count == cloud_desc_->names.size());
+    assert(field_count == desc_.attrs_.size());
+    assert(field_count == desc_.names_.size());
     // populate the message
     for(size_t i = 0; i < Cloud::size(); ++i, ++msg_x, ++msg_y, ++msg_z) {
         const Eigen::Vector3f& point = points_[i];
@@ -460,7 +467,7 @@ template const f8& Cloud::Field::operator[](size_t index) const;
 template<typename T>
 void Cloud::add_field(const std::string& name, const std::vector<T>& scalars) noexcept {
     assert(Cloud::size() == scalars.size());
-    assert(!desc->names_.contains(name));
+    assert(!desc_.names_.contains(name));
     uint8_t datatype;
     if      constexpr (std::is_same_v<T, i1>) datatype = sensor_msgs::msg::PointField::INT8;
     else if constexpr (std::is_same_v<T, u1>) datatype = sensor_msgs::msg::PointField::UINT8;

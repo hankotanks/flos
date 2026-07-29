@@ -1,7 +1,7 @@
 #include "dataloader/bag.h"
 
 // util
-#include "util/rosargs.h"
+#include "util/rosarg.h"
 
 namespace {
 template <typename T>

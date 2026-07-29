@@ -42,7 +42,7 @@ public:
     }
 public:
     template<typename Predicate>
-    void add(Predicate&& pred, float voxel_resolution, const Eigen::Vector3f& point, typename F::point_data_type data) noexcept {
+    void add(const Eigen::Vector3f& point, typename F::point_data_type data, float voxel_resolution, Predicate&& pred) noexcept {
         if(points.size() < points.capacity()) {
             size_t flag = std::numeric_limits<size_t>::max();
             for(size_t j = 0; j < points.size(); ++j) {

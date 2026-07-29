@@ -98,7 +98,7 @@ void param_req(rclcpp::Node* node, const std::string& name, T& value) noexcept {
 }
 
 template<typename T>
-bool param_opt_set(rclcpp::Node* node, const std::string& name, std::set<T>& value) {
+bool param_opt(rclcpp::Node* node, const std::string& name, std::set<T>& value) {
     std::vector<T> keys;
     util::param_opt(node, name, keys);
     if(keys.empty()) return false;
@@ -108,15 +108,15 @@ bool param_opt_set(rclcpp::Node* node, const std::string& name, std::set<T>& val
 }
 
 template<typename T>
-void param_req_set(rclcpp::Node* node, const std::string& name, std::set<T>& value) {
-    if(!param_opt_set(node, name, value)) {
+void param_req(rclcpp::Node* node, const std::string& name, std::set<T>& value) {
+    if(!param_opt(node, name, value)) {
         RCLCPP_ERROR_STREAM_ONCE(node->get_logger(), "missing a required argument: " << name);
         rclcpp::shutdown();
     }
 }
 
 template<typename K, typename V>
-bool param_opt_map(rclcpp::Node* node, const std::string& name, std::map<K, V>& value) {
+bool param_opt(rclcpp::Node* node, const std::string& name, std::map<K, V>& value) {
     std::vector<K> keys;
     param_opt<std::vector<K>>(node, name + "_key", keys);
     std::vector<V> vals;
@@ -131,8 +131,8 @@ bool param_opt_map(rclcpp::Node* node, const std::string& name, std::map<K, V>& 
 }
 
 template<typename K, typename V>
-void param_req_map(rclcpp::Node* node, const std::string& name, std::map<K, V>& value) {
-    if(!param_opt_map(node, name, value)) {
+void param_req(rclcpp::Node* node, const std::string& name, std::map<K, V>& value) {
+    if(!param_opt(node, name, value)) {
         RCLCPP_ERROR_STREAM_ONCE(node->get_logger(), "missing a required argument: " << name);
         rclcpp::shutdown();
     }

@@ -27,11 +27,10 @@ set(COMMON_HEADERS
   util/buffer_node.h
   util/cloud.h
   util/profiler.h
-  util/rosargs.h
+  util/rosarg.h
   util/rosbag.h
   util/stl_vector_eigen.h
-  util/tinyply.h
-  util/voxel.h)
+  util/tinyply.h)
 
 set(COMMON_LIBRARIES
   Eigen3::Eigen
@@ -70,7 +69,7 @@ configure_node(segmentation_node
     ${COMMON_SOURCES}
     ${SEGMENTATION_SOURCES}
     util/cloud.cpp
-    util/rosargs.cpp
+    util/rosarg.cpp
   HEADERS
     ${COMMON_HEADERS}
     ${SEGMENTATION_HEADERS}
@@ -95,7 +94,7 @@ set(ODOMETRY_SOURCES
 set(ODOMETRY_HEADERS
   odometry/system.h
   odometry/wrapper.h
-  odometry/frame.h
+  odometry/voxel_map_frame.h
   odometry/voxel_map.h
   odometry_node_config.h)
 
@@ -117,7 +116,7 @@ configure_node(odometry_node
     ${COMMON_SOURCES}
     ${ODOMETRY_SOURCES}
     util/cloud.cpp
-    util/rosargs.cpp
+    util/rosarg.cpp
   HEADERS
     ${COMMON_HEADERS}
     ${ODOMETRY_HEADERS}
@@ -143,7 +142,7 @@ set(OFFLINE_SOURCES
   dataloader/bag.cpp
   dataloader/wild_scenes.cpp
   util/cloud.cpp
-  util/rosargs.cpp
+  util/rosarg.cpp
   util/rosbag.cpp 
   util/tinyply.cpp)
 

@@ -18,16 +18,16 @@
 #include "dataloader/dataloader.h"
 // util
 #include "util/cloud.h"
-#include "util/rosargs.h"
+#include "util/rosarg.h"
 
 // PARAMETERS
-// incoming_points_topic [REQUIRED for BagDataloader]
 // path_to_data [REQUIRED]
-// visualize
-// visualize_map
 // path_to_result
 // path_to_model
 // frames
+// visualize
+// visualize_map
+// incoming_points_topic [REQUIRED for BagDataloader]
 
 // TOPICS
 // sub: incoming_points_topic [PointCloud2]
@@ -41,10 +41,10 @@ public:
         odometry_config_(this),
         odometry_system_(odometry_config_.config) {
         if(!rclcpp::ok()) return;
-        util::param_opt(this, "visualize", visualize_);
-        util::param_opt(this, "visualize_map", visualize_map_);
         util::param_opt_path(this, "path_to_result", path_to_result_, false, true, true);     
         util::param_opt(this, "frames", msg_count_);
+        util::param_opt(this, "visualize", visualize_);
+        util::param_opt(this, "visualize_map", visualize_map_);
     }
     // delete extraneous constructors
     OfflineNode(const OfflineNode&) = delete;

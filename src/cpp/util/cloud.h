@@ -26,6 +26,14 @@
 namespace py = pybind11;
 #endif // GENERATE_CLOUD_PYBIND_MODULE
 
+template <>
+struct std::hash<Eigen::Vector3i> {
+    std::size_t operator()(const Eigen::Vector3i& voxel) const {
+        const uint32_t *vec = reinterpret_cast<const uint32_t *>(voxel.data());
+        return (vec[0] * 73856093 ^ vec[1] * 19349669 ^ vec[2] * 83492791);
+    }
+};
+
 namespace util {
 class Cloud {
 public:
@@ -85,16 +93,19 @@ public:
     void downsample(float voxel_size);
     // filter the cloud based on a certain field
     template<typename T, typename Predicate>
-    void filter(const std::string& name, Predicate&& pred);
+    void filter(const std::string& name, Predicate&&);
     // filter by distance
     void filter_by_distance(const Eigen::Vector3f& origin, float minima, float maxima);
     // filter by distance and scalar predicate
     // applies the distance filter to all points where the predicate returns truthy
     template<typename T, typename Predicate>
-    void filter_by_distance(const Eigen::Vector3f& origin, float minima, float maxima, const std::string& name, Predicate&& pred);
+    void filter_by_distance(const Eigen::Vector3f& origin, float minima, float maxima, const std::string& name, Predicate&&);
     // sort the field based on a comparator over a field
     template<typename T, typename Comparator> 
-    void sort(const std::string& name, const Comparator& comp);
+    void sort(const std::string& name, Comparator&&);
+    // apply to transform to each element of a field
+    template<typename T, typename Transform>
+    void transform(const std::string& name, Transform&&);
 public:
     // construct a PointCloud2 message from the cloud containing all its scalar fields
     sensor_msgs::msg::PointCloud2 message(const std_msgs::msg::Header& header) const noexcept;
@@ -236,7 +247,7 @@ void reorder(order_iterator order_begin, order_iterator order_end, value_iterato
 }
 
 template<typename T, typename Comparator>
-void Cloud::sort(const std::string& name, const Comparator& comp) {
+void Cloud::sort(const std::string& name, Comparator&& comp) {
     std::span<const T> scalars = Cloud::field<T>(name);
     // build a list of sorted indices
     std::vector<size_t> indices(Cloud::size());
@@ -252,5 +263,13 @@ void Cloud::sort(const std::string& name, const Comparator& comp) {
             reorder(indices.begin(), indices.end(), vec.begin());
         }, field.data_);
     }
+}
+
+template<typename T, typename Transform>
+void Cloud::transform(const std::string& name, Transform&& transform) {
+    std::span<T> scalars = Cloud::field<T>(name);
+    std::transform(scalars.begin(), scalars.end(), scalars.begin(), [transform](const T& scalar) {
+        return transform(scalar);
+    });
 }
 }

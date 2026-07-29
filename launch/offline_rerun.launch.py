@@ -19,12 +19,15 @@ def setup(context, *args, **kwargs):
         LOGGER.error(e.args[0])
         exit(1)
 
+    gdb = launch.substitutions.LaunchConfiguration('gdb').perform(context)
+    gdb = True if gdb is not None and gdb == 'true' else False
+
     node_offline = launch_ros.actions.Node(
         package = PACKAGE_NAME,
         executable = 'rerun_node',
         emulate_tty = True,
         output = 'screen',
-        # prefix=['gdb -ex "set pagination off" -ex run -ex "thread apply all bt full" --args'],
+        prefix = [f'gdb -batch -x {pathlib.Path(__file__).parent / "util" / "debug.gdb"} --args'] if gdb else None,
         parameters = [
             {
                 'use_sim_time': True,
@@ -55,6 +58,7 @@ def setup(context, *args, **kwargs):
 def generate_launch_description():
     return launch.LaunchDescription([
         launch.actions.SetEnvironmentVariable('RMW_IMPLEMENTATION', 'rmw_zenoh_cpp'),
+        launch.actions.DeclareLaunchArgument('gdb', default_value = 'false'),
         *Config.declare_launch_arguments(),
         launch.actions.OpaqueFunction(function = setup)
     ])

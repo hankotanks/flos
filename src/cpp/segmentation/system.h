@@ -12,9 +12,12 @@
 class SegmentationSystem : util::Profiler {
 public:
     struct Config {
-        float voxel_size{1.f};
         float max_distance{50.f};
-        std::set<size_t> ignore{0};
+        float voxel_size{1.f};
+        struct {
+            std::set<size_t> ignore{0};
+            std::map<size_t, size_t> remap;
+        } semantics;
     public:
         friend std::ostream& operator<<(std::ostream& stream, const Config& config);
     };

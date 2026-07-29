@@ -9,35 +9,35 @@ import launch_ros
 class Config:
     class Component(enum.Enum):
         OFFLINE = {
-            'visualize': (bool, False),
-            'visualize_map': (bool, False),
             'path_to_data': ((pathlib.Path, True), True),
             'path_to_result': ((pathlib.Path, False), False),
-            'incoming_points_topic': (str, False), # NOTE: specific to BagDataloader
             'frames': (int, False),
+            'visualize': (bool, False),
+            'visualize_map': (bool, False),
+            'incoming_points_topic': (str, False), # NOTE: specific to BagDataloader
         }
         SEGMENTATION = {
-            'path_to_model': ((pathlib.Path, True), False), 
-            'voxel_size': (float, False), 
             'max_distance': (float, False), 
-            'ignore': (typing.List[int], False),
+            'voxel_size': (float, False), 
+            'semantics_ignore': (typing.List[int], False),
+            'semantics_remap': (typing.Dict[int, int], False),
+            'path_to_model': ((pathlib.Path, True), False), 
         }
         ODOMETRY = {
-            'voxel_size': (float, False), 
             'max_distance': (float, False), 
-            'min_weight': (typing.Dict[int, float], False),
-            'deskew': (bool, False),
-            'confidence_weighting': (bool, False), 
-            'correspondence_restriction': (bool, False), 
-            'correspondence_with_voxel_belief': (bool, False),
-            'constant_velocity': (bool, False),
+            'voxel_size': (float, False), 
             'voxel_capacity': (int, False), 
+            'threshold_initial': (float, False), 
+            'threshold_motion': (float, False), 
+            'deskew': (bool, False),
+            'fixed_dt': (bool, False),
             'max_iterations': (int, False), 
             'max_threads': (int, False), 
-            'threshold_initial': (float, False), 
-            'min_motion': (float, False), 
-            'convergence_criterion': (float, False), 
-            'correspondence_multiplier': (float, False), 
+            'convergence_criterion': (float, False),
+            'correspondence_weighting': (bool, False), 
+            'correspondence_weighting_by_belief': (bool, False),
+            'correspondence_restrict': (bool, False), 
+            'correspondence_threshold': (typing.Dict[int, float], False),
         }
 
     def __init__(self, context):

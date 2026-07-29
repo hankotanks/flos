@@ -18,27 +18,24 @@
 class OdometrySystem: util::Profiler {
 public:
     struct Config { // TODO: flatten this config structure to mirror SegmentationSystem::Config
+        float max_distance{50.f};
+        float voxel_size{1.f}; // NOTE: downsampling approach has changed from kiss-icp
+        size_t voxel_capacity{20};
         struct {
-            float max_distance{50.f};
-            std::map<size_t, float> min_weight;
-            float voxel_size{1.f}; // NOTE: downsampling approach has changed from kiss-icp
-            size_t voxel_capacity{20};
-        } map;
-        struct {
-            float threshold_initial{2.f};
-            float min_motion{0.1f};
+            float initial{2.f};
+            float motion{0.1f};
         } threshold;
+        bool deskew{true};
+        bool fixed_dt{false};
+        size_t max_iterations{500};
+        size_t max_threads{0};
+        float convergence_criterion{0.0001f};
         struct {
-            bool deskew{true};
-            bool confidence_weighting{true};
-            bool correspondence_restriction{true};
-            bool correspondence_with_voxel_belief{true}; // TODO: this is an outdated parameter, since the final system will only use voxel belief. keep for now for future ablation study
-            bool constant_velocity{false};
-            size_t max_iterations{500};
-            size_t max_threads{0};
-            float convergence_criterion{0.0001f};
-            float correspondence_multiplier{3.f};
-        } registration;
+            bool weighting{true}; // weights associations based on the aggreement between the point's class distribution and the voxel's accumulated belief
+            bool weighting_by_belief{true}; // when false, association weights are dependent on the matched point rather than the voxel's accumulated belief
+            bool restrict{true}; // filter correspondences between points with different predicted classes
+            std::map<size_t, float> threshold; // define thresholds for target semantic classes and filter out correspondences with weights lower than...
+        } correspondence;
     public:
         friend std::ostream& operator<<(std::ostream& stream, const Config& config);
     };
@@ -54,26 +51,18 @@ public:
 public:
     // main registration function
     // NOTE: deskews and transforms points by the solution pose
+    const Sophus::SE3f& register_to_map(util::Cloud& points) noexcept; // NOTE: sets fixed_dt to true
     const Sophus::SE3f& register_to_map(util::Cloud& points, unsigned int seconds, unsigned int nanoseconds) noexcept;
     // returns the current local map
+    // NOTE: this is slow
     const VoxelMap<Wrapper>::Cloud& cloud() const noexcept { return map_.cloud(); }
 public:
     struct Statistics {
         size_t iterations{0};
+        float correspondences{0.f};
         struct {
-            size_t initial_count{0};
-            size_t final_count{0};
-            float mean{0.f};
-        } correspondence;
-        struct {
-            struct {
-                float initial{0.f};
-                float solved{0.f};
-            } linear;
-            struct {
-                float initial{0.f};
-                float solved{0.f};
-            } angular;
+            float linear{0.f};
+            float angular{0.f};
         } velocity;
     };
     Statistics statistics;
@@ -99,7 +88,7 @@ private:
     };
 private:
     // get the predicted delta (and handle statistics)
-    void prologue(Sophus::SE3f& delta, unsigned int seconds, unsigned int nanoseconds) noexcept;
+    Sophus::SE3f prologue(unsigned int seconds, unsigned int nanoseconds) noexcept;
     // handle end of frame (saving last_pose and final velocity statistics)
     void epilogue(const Sophus::SE3f& pose, unsigned int seconds, unsigned int nanoseconds) noexcept;
 private:
@@ -114,9 +103,11 @@ private:
 private:
     Config config_;
     // NOTE: see note in segmentation/node.h
-    static constexpr float VOXEL_SIZE_SCALAR{1.f};
-    // lookup table for min_weight
-    std::vector<float> min_weight_;
+    static constexpr float VOXEL_SIZE_SCALAR{1.f}; // TODO: remove when I'm confident it won't change anymore
+    // simplified from the robust kernel, which had no appreciable benefit
+    static constexpr float CORRESPONDENCE_MULTIPLIER{3.f};
+    // lookup table for config_.correspondence.threshold
+    std::vector<float> correspondence_threshold_;
     // previous frame state
     Sophus::SE3f last_pose_;
     Sophus::SE3f last_delta_;

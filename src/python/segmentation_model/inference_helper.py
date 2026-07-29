@@ -10,6 +10,7 @@ class InferenceHelper:
         self.model = PointTransformerV3Lightning.load_from_checkpoint(path_to_model)
         self.model.to("cuda")
         self.model.eval()
+        self.model = torch.compile(self.model)
 
     def infer(self, points):
         np_points = np.asarray(points, dtype = np.float32)

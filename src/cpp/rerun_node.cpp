@@ -8,13 +8,13 @@
 #include "util/cloud.h"
 
 // PARAMETERS
-// incoming_points_topic [REQUIRED for BagDataloader]
 // path_to_data [REQUIRED]
-// visualize
-// visualize_map
 // path_to_result
 // path_to_model
 // frames
+// visualize
+// visualize_map
+// incoming_points_topic [REQUIRED for BagDataloader]
 
 // TOPICS
 // sub: incoming_points_topic [PointCloud2]
@@ -52,13 +52,9 @@ protected:
     virtual void publish_statistics(const std_msgs::msg::Header::_stamp_type& stamp, const OdometrySystem::Statistics& statistics) override {
         RerunNode::set_stamp(stamp);
         rr_.log("statistics/iterations", rerun::Scalar(statistics.iterations));
-        rr_.log("statistics/correspondence/mean", rerun::Scalar(statistics.correspondence.mean));
-        rr_.log("statistics/correspondence/initial_count", rerun::Scalar(statistics.correspondence.initial_count));
-        rr_.log("statistics/correspondence/final_count", rerun::Scalar(statistics.correspondence.final_count));
-        rr_.log("statistics/velocity/linear/initial", rerun::Scalar(statistics.velocity.linear.initial));
-        rr_.log("statistics/velocity/angular/initial", rerun::Scalar(statistics.velocity.angular.initial));
-        rr_.log("statistics/velocity/linear/solved", rerun::Scalar(statistics.velocity.linear.solved));
-        rr_.log("statistics/velocity/angular/solved", rerun::Scalar(statistics.velocity.angular.solved));
+        rr_.log("statistics/correspondences", rerun::Scalar(statistics.correspondences));
+        rr_.log("statistics/velocity/linear", rerun::Scalar(statistics.velocity.linear));
+        rr_.log("statistics/velocity/angular", rerun::Scalar(statistics.velocity.angular));
     }
 
     virtual void publish_progress(const std_msgs::msg::Header::_stamp_type& stamp, float percent, float remaining) override {

@@ -44,7 +44,7 @@ void SegmentationSystem::Model::infer(util::Cloud& cloud) {
             cloud.add_field_from_py_object<uint8_t>("class", result[0]);
             py::list result_confidence = result[1].cast<py::list>();
             for(size_t i = 0; i < result_confidence.size(); ++i) {
-                if(this->config_.ignore.count(i) > 0) continue;
+                if(this->config_.semantics.ignore.count(i) > 0) continue;
                 cloud.add_field_from_py_object<float>(std::to_string(i), result_confidence[i]);
             }
         } catch(const py::cast_error&) {
@@ -53,12 +53,29 @@ void SegmentationSystem::Model::infer(util::Cloud& cloud) {
         PROFILE(postprocessing, &inference) {
             // remove ignored classes
             cloud.filter<uint8_t>("class", [this](const uint8_t& scalar) {
-                return this->config_.ignore.count(scalar) == 0;
+                return this->config_.semantics.ignore.count(scalar) == 0;
             });
             // downsample only if the inference resolution was different from the output resolution
             if(std::abs(SegmentationSystem::VOXEL_SIZE_SCALAR - SegmentationSystem::VOXEL_SIZE_SCALAR_INFERENCE) > 0.01) {
                 double voxel_size = config_.voxel_size * SegmentationSystem::VOXEL_SIZE_SCALAR;
                 cloud.downsample(voxel_size);
+            }
+            // remap semantic classes...
+            if(!config_.semantics.remap.empty()) {
+                cloud.transform<uint8_t>("class", [this](const uint8_t& cls) {
+                    if(this->config_.semantics.remap.contains(cls)) {
+                        return static_cast<uint8_t>(this->config_.semantics.remap[static_cast<size_t>(cls)]);
+                    } else {
+                        return cls;
+                    }
+                });
+                // ...and accumulate their respective probabilities
+                for(const auto& [cls_from, cls_to] : config_.semantics.remap) {
+                    std::span<float> semantics_from = cloud.field<float>(std::to_string(cls_from));
+                    std::span<float> semantics_to = cloud.field<float>(std::to_string(cls_to));
+                    std::transform(semantics_to.begin(), semantics_to.end(), semantics_from.begin(), semantics_to.begin(), std::plus<>{});
+                    std::fill(semantics_from.begin(), semantics_from.end(), 0.0f);
+                }
             }
         }
     }
@@ -71,11 +88,11 @@ void SegmentationSystem::Model::preprocess(util::Cloud& cloud) {
 }
 
 std::ostream& operator<<(std::ostream& stream, const SegmentationSystem::Config& config) {
-    auto format = [&stream](const std::set<size_t>& indices) -> std::string {
+    auto format_ignore = [&stream](const std::set<size_t>& ignore) -> std::string {
         std::ostringstream oss;
         oss << '[';
         bool first = true;
-        for(size_t i : indices) {
+        for(size_t i : ignore) {
             if(!first) oss << ", ";
             first = false; 
             if(i < classes::COUNT) {
@@ -88,8 +105,32 @@ std::ostream& operator<<(std::ostream& stream, const SegmentationSystem::Config&
         return oss.str();
     };
 
+    auto format_remap = [&stream](const std::map<size_t, size_t>& remap) -> std::string {
+        std::ostringstream oss;
+        oss << '[';
+        bool first = true;
+        for(const auto [i, w] : remap) {
+            if(!first) oss << ", ";
+            first = false; 
+            if(i < classes::COUNT) {
+                oss << classes::HINT[i];
+            } else {
+                oss << i;
+            }
+            oss << ": ";
+            if(w < classes::COUNT) {
+                oss << classes::HINT[w];
+            } else {
+                oss << w;
+            }
+        }
+        oss << ']';
+        return oss.str();
+    };
+
     return stream << std::boolalpha << "SegmentationSystem::Config" << std::endl <<
-        "\tvoxel_size: " << config.voxel_size << "," << std::endl << 
         "\tmax_distance: " << config.max_distance << "," << std::endl << 
-        "\tignore: " << format(config.ignore);
+        "\tvoxel_size: " << config.voxel_size << "," << std::endl << 
+        "\tsemantics_ignore: " << format_ignore(config.semantics.ignore) << "," << std::endl <<
+        "\tsemantics_remap: " << format_remap(config.semantics.remap);
 }

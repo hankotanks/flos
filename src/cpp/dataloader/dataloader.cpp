@@ -6,7 +6,7 @@
 #include "dataloader/bag.h"
 #include "dataloader/wild_scenes.h"
 // util
-#include "util/rosargs.h"
+#include "util/rosarg.h"
 
 template<typename T>
 std::unique_ptr<Dataloader> try_loader(rclcpp::Node* node, std::map<std::string, Dataloader::UnsupportedFormat>& errors) {

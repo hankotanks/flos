@@ -9,9 +9,7 @@
 // sophus
 #include <sophus/se3.hpp>
 // package
-#include "odometry/frame.h"
-// util
-#include "util/voxel.h" // DO NOT REMOVE, required for the Eigen::Vector3i hash implementation
+#include "odometry/voxel_map_frame.h"
 
 template<typename F>
 struct VoxelMap {
@@ -33,9 +31,9 @@ public:
     // predicate determines if a point is accepted into the map, with signature:
     // bool(*)(const F::voxel_data_type&, const F::point_data_type&)
     template<typename Predicate>
-    void update(Predicate&& pred, F& points, const Sophus::SE3f& pose);
+    void update(F& points, const Sophus::SE3f& pose, Predicate&&);
     template<typename Predicate>
-    void extend(Predicate&& pred, const F& points);
+    void extend(const F& points, Predicate&&);
 public:
     struct Cloud {
         std::vector<Eigen::Vector3f> points;
@@ -67,21 +65,39 @@ private:
     tsl::robin_map<Eigen::Vector3i, VoxelData<F>> map_;
 };
 
+namespace {
+inline Eigen::Vector3i point_to_voxel(const Eigen::Vector3f& point, double voxel_size) {
+    return {
+        static_cast<int>(std::floor(point.x() / voxel_size)),
+        static_cast<int>(std::floor(point.y() / voxel_size)),
+        static_cast<int>(std::floor(point.z() / voxel_size))
+    };
+}
+
+inline Eigen::Vector3f voxel_to_point(const Eigen::Vector3i& voxel, double voxel_size) {
+    return {
+        (static_cast<float>(voxel.x()) + 0.5f) * static_cast<float>(voxel_size),
+        (static_cast<float>(voxel.y()) + 0.5f) * static_cast<float>(voxel_size),
+        (static_cast<float>(voxel.z()) + 0.5f) * static_cast<float>(voxel_size)
+    };
+}
+} // private scope
+
 template<typename F>
 template<typename Predicate>
-void VoxelMap<F>::update(Predicate&& pred, F& points, const Sophus::SE3f& pose) {
+void VoxelMap<F>::update(F& points, const Sophus::SE3f& pose, Predicate&& pred) {
     // transform points by pose
     for(size_t i = 0; i < points.size(); ++i) {
         points[i].first = pose * points[i].first;
     }
     // add points to map
-    VoxelMap::extend(pred, points);
+    VoxelMap::extend(points, pred);
     // remove points outside of a distance threshold to the current pose
     const Eigen::Vector3f& origin = pose.translation();
     const auto max_distance_sq = max_distance_ * max_distance_;
     for(auto it = map_.begin(); it != map_.end();) {
         const auto& [voxel, inner] = *it;
-        if((util::voxel_to_point(voxel, voxel_size_) - origin).squaredNorm() >= max_distance_sq) {
+        if((voxel_to_point(voxel, voxel_size_) - origin).squaredNorm() >= max_distance_sq) {
             it = map_.erase(it);
         } else ++it;
     }
@@ -89,10 +105,10 @@ void VoxelMap<F>::update(Predicate&& pred, F& points, const Sophus::SE3f& pose) 
 
 template<typename F>
 template<typename Predicate>
-void VoxelMap<F>::extend(Predicate&& pred, const F& points) {
+void VoxelMap<F>::extend(const F& points, Predicate&& pred) {
     for(size_t i = 0; i < points.size(); ++i) {
         const auto& [point, data] = points[i];
-        const Eigen::Vector3i voxel = util::point_to_voxel(point, voxel_size_);
+        const Eigen::Vector3i voxel = point_to_voxel(point, voxel_size_);
         auto search = map_.find(voxel);
         if(search == map_.end()) {
             auto [it, _] = map_.emplace(std::piecewise_construct,
@@ -100,7 +116,7 @@ void VoxelMap<F>::extend(Predicate&& pred, const F& points) {
                 std::forward_as_tuple(voxel_capacity_));
             search = it;
         }
-        search.value().add(pred, voxel_resolution_, point, data);
+        search.value().add(point, data, voxel_resolution_, pred);
     }
     // update the VoxelData
     for(auto it = map_.begin(); it != map_.end(); ++it) {
@@ -125,7 +141,7 @@ const VoxelMap<F>::Cloud& VoxelMap<F>::cloud() const noexcept {
 
 inline float voxel_lower_bound_distance_sq(const Eigen::Vector3f& query, const Eigen::Vector3i& voxel, float voxel_size) {
     const float h = 0.5f * voxel_size;
-    const Eigen::Vector3f center = util::voxel_to_point(voxel, voxel_size);
+    const Eigen::Vector3f center = voxel_to_point(voxel, voxel_size);
     Eigen::Vector3f d = (query - center).cwiseAbs() - Eigen::Vector3f::Constant(h);
     d = d.cwiseMax(Eigen::Vector3f::Zero());
     return d.squaredNorm();
@@ -167,8 +183,8 @@ std::optional<typename VoxelMap<F>::Neighbor> VoxelMap<F>::closest(Predicate&& p
     };
     // find the closest match that respects the provided predicate
     if(map_.empty()) return std::nullopt;
-    Eigen::Vector3i center_voxel = util::point_to_voxel(query, voxel_size_);
-    const Eigen::Vector3f base_origin = util::voxel_to_point(center_voxel, voxel_size_);
+    Eigen::Vector3i center_voxel = point_to_voxel(query, voxel_size_);
+    const Eigen::Vector3f base_origin = voxel_to_point(center_voxel, voxel_size_);
     typename VoxelMap<F>::Neighbor closest;
     closest.distance_sq = std::numeric_limits<float>::max();
     bool closest_found = false;

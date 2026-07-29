@@ -6,21 +6,20 @@
 #include <tf2_ros/transform_broadcaster.hpp>
 
 // PARAMETERS
-// incoming_points_topic [REQUIRED]
-// path_to_bag [REQUIRED]
-// visualize
-// visualize_map
+// path_to_data [REQUIRED]
 // path_to_result
 // path_to_model
 // frames
+// visualize
+// visualize_map
+// incoming_points_topic [REQUIRED for BagDataloader]
 
 // TOPICS
 // sub: incoming_points_topic [PointCloud2]
 // pub: $/progress [Float32MultiArray]
 // pub: $/odometry [Odometry]
 // pub: $/map [PointCloud2]
-// pub: $/map/previous [PointCloud2]
-// pub: $/map/points [PointCloud2]
+// pub: $/scan [PointCloud2]
 // pub: /tf [TF]
 
 class DefaultOfflineNode : public OfflineNode {
@@ -31,7 +30,6 @@ public:
         local_map_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/map", 10);
         tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
         odometry_publisher_ = this->create_publisher<nav_msgs::msg::Odometry>("/" PROJECT_NAME "/odometry", 10);
-        statistics_publisher_ = this->create_publisher<std_msgs::msg::Float32MultiArray>("/" PROJECT_NAME "/statistics", 10);
         progress_publisher = this->create_publisher<std_msgs::msg::Float32MultiArray>("/" PROJECT_NAME "/progress", 10);
     }
 protected:
@@ -103,7 +101,6 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr local_map_publisher_;
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odometry_publisher_;
-    rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr statistics_publisher_;
     rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr progress_publisher;
 private:
     // output frame_id
