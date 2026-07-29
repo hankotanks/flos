@@ -321,6 +321,7 @@ std::ostream& operator<<(std::ostream& stream, const OdometrySystem::Config& con
         "\tconfidence_weighting: " << config.registration.confidence_weighting << "," << std::endl <<
         "\tcorrespondence_restriction: " << config.registration.correspondence_restriction << "," << std::endl <<
         "\tcorrespondence_with_voxel_belief: " << config.registration.correspondence_with_voxel_belief << "," << std::endl <<
+        "\tconstant_velocity: " << config.registration.constant_velocity << "," << std::endl <<
         "\tmax_iterations: " << config.registration.max_iterations << "," << std::endl <<
         "\tmax_threads: " << config.registration.max_threads << "," << std::endl <<
         "\tconvergence_criterion: " << config.registration.convergence_criterion << "," << std::endl <<

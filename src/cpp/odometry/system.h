@@ -33,7 +33,7 @@ public:
             bool confidence_weighting{true};
             bool correspondence_restriction{true};
             bool correspondence_with_voxel_belief{true}; // TODO: this is an outdated parameter, since the final system will only use voxel belief. keep for now for future ablation study
-            bool constant_velocity{true};
+            bool constant_velocity{false};
             size_t max_iterations{500};
             size_t max_threads{0};
             float convergence_criterion{0.0001f};
