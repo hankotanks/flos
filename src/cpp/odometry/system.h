@@ -32,6 +32,7 @@ public:
         float convergence_criterion{0.0001f};
         struct {
             bool weighting{true}; // weights associations based on the aggreement between the point's class distribution and the voxel's accumulated belief
+            // NOTE: a current limitation is that when weighting_by_belief is false, the voxel belief is still used for the weight
             bool weighting_by_belief{true}; // when false, association weights are dependent on the matched point rather than the voxel's accumulated belief
             bool restrict{true}; // filter correspondences between points with different predicted classes
             // TODO: This option is not used in the current system (CONSIDER WHAT TO DO WITH IT)
@@ -68,26 +69,6 @@ public:
     };
     Statistics statistics;
 private:
-    class AdaptiveThreshold {
-    public:
-        explicit AdaptiveThreshold(float max_distance, float initial, float min_motion) : 
-            max_distance_(max_distance), model_sse_(initial * initial), min_motion_(min_motion) { /* STUB */ }
-        AdaptiveThreshold() = delete;
-        AdaptiveThreshold(const AdaptiveThreshold&) = delete;
-        AdaptiveThreshold(AdaptiveThreshold&&) = delete;
-        AdaptiveThreshold& operator=(const AdaptiveThreshold&) = delete;
-        AdaptiveThreshold& operator=(AdaptiveThreshold&&) = delete;
-        ~AdaptiveThreshold() = default;
-    public:
-        inline float compute() const noexcept { return std::sqrt(model_sse_ / static_cast<float>(num_sample_)); }
-        void update(const Sophus::SE3f& deviation) noexcept;
-    private:
-        float max_distance_;
-        float model_sse_;
-        float min_motion_;
-        size_t num_sample_{1};
-    };
-private:
     // get the predicted delta (and handle statistics)
     Sophus::SE3f prologue(unsigned int seconds, unsigned int nanoseconds) noexcept;
     // handle end of frame (saving last_pose and final velocity statistics)
@@ -118,8 +99,30 @@ private:
     // predicate for correspondence filtering
     using Predicate = bool(*)(const Belief&, Semantics, Semantics);
     Predicate pred_;
+    using Weight = float(*)(const VoxelMap<Wrapper>::Neighbor&, Semantics);
+    Weight weight_;
     // voxel map
     VoxelMap<Wrapper> map_;
-    // adaptive threshold
+private:
+    class AdaptiveThreshold {
+    public:
+        explicit AdaptiveThreshold(float max_distance, float threshold_initial, float threshold_motion) : 
+            max_distance_(max_distance), sse_(threshold_initial * threshold_initial), threshold_motion_(threshold_motion) { /* STUB */ }
+        AdaptiveThreshold() = delete;
+        AdaptiveThreshold(const AdaptiveThreshold&) = delete;
+        AdaptiveThreshold(AdaptiveThreshold&&) = delete;
+        AdaptiveThreshold& operator=(const AdaptiveThreshold&) = delete;
+        AdaptiveThreshold& operator=(AdaptiveThreshold&&) = delete;
+        ~AdaptiveThreshold() = default;
+    public:
+        inline float compute() const noexcept { return std::sqrt(sse_ / static_cast<float>(samples_)); }
+        void update(const Sophus::SE3f& deviation) noexcept;
+    private:
+        float max_distance_;
+        float sse_;
+        float threshold_motion_;
+        size_t samples_{1};
+    };
+    // adaptive threshold member
     AdaptiveThreshold threshold_;
 };
