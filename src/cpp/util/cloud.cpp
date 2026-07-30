@@ -226,38 +226,6 @@ template std::span<u4> Cloud::field(const std::string&);
 template std::span<f4> Cloud::field(const std::string&);
 template std::span<f8> Cloud::field(const std::string&);
 
-
-template<typename T>
-std::optional<std::span<const T>> Cloud::field_opt(const std::string& name) const noexcept {
-    if(desc_.names_.count(name) == 0) return std::nullopt;
-    return std::get<std::vector<T>>(fields_[desc_.names_.at(name)].data_);
-}
-
-template std::optional<std::span<const i1>> Cloud::field_opt(const std::string&) const noexcept;
-template std::optional<std::span<const u1>> Cloud::field_opt(const std::string&) const noexcept;
-template std::optional<std::span<const i2>> Cloud::field_opt(const std::string&) const noexcept;
-template std::optional<std::span<const u2>> Cloud::field_opt(const std::string&) const noexcept;
-template std::optional<std::span<const i4>> Cloud::field_opt(const std::string&) const noexcept;
-template std::optional<std::span<const u4>> Cloud::field_opt(const std::string&) const noexcept;
-template std::optional<std::span<const f4>> Cloud::field_opt(const std::string&) const noexcept;
-template std::optional<std::span<const f8>> Cloud::field_opt(const std::string&) const noexcept;
-
-
-template<typename T>
-std::optional<std::span<T>> Cloud::field_opt(const std::string& name) noexcept {
-    if(desc_.names_.count(name) == 0) return std::nullopt;
-    return std::get<std::vector<T>>(fields_[desc_.names_.at(name)].data_);
-}
-
-template std::optional<std::span<i1>> Cloud::field_opt(const std::string&) noexcept;
-template std::optional<std::span<u1>> Cloud::field_opt(const std::string&) noexcept;
-template std::optional<std::span<i2>> Cloud::field_opt(const std::string&) noexcept;
-template std::optional<std::span<u2>> Cloud::field_opt(const std::string&) noexcept;
-template std::optional<std::span<i4>> Cloud::field_opt(const std::string&) noexcept;
-template std::optional<std::span<u4>> Cloud::field_opt(const std::string&) noexcept;
-template std::optional<std::span<f4>> Cloud::field_opt(const std::string&) noexcept;
-template std::optional<std::span<f8>> Cloud::field_opt(const std::string&) noexcept;
-
 #ifdef GENERATE_CLOUD_PYBIND_MODULE
 py::object Cloud::points_as_py_object() const noexcept {
     return py::cast(points_, py::return_value_policy::reference);

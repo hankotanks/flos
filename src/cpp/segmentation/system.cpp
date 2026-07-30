@@ -15,7 +15,7 @@ SegmentationSystem::Model::Model(const SegmentationSystem::Config& config, const
     infer_(helper_.attr("infer")) { /* STUB */ }
 
 void preprocess_inner(const SegmentationSystem::Config& config, util::Cloud& cloud) {
-    double voxel_size = config.voxel_size * SegmentationSystem::VOXEL_SIZE_SCALAR_INFERENCE;
+    double voxel_size = config.voxel_size_inference;
     cloud.downsample(voxel_size);
     double max_distance = config.max_distance * SegmentationSystem::MAX_DISTANCE_SCALAR;
     cloud.filter_by_distance(Eigen::Vector3f::Zero(), 0.f, max_distance);
@@ -44,7 +44,6 @@ void SegmentationSystem::Model::infer(util::Cloud& cloud) {
             cloud.add_field_from_py_object<uint8_t>("class", result[0]);
             py::list result_confidence = result[1].cast<py::list>();
             for(size_t i = 0; i < result_confidence.size(); ++i) {
-                if(this->config_.semantics.ignore.count(i) > 0) continue;
                 cloud.add_field_from_py_object<float>(std::to_string(i), result_confidence[i]);
             }
         } catch(const py::cast_error&) {
@@ -56,7 +55,7 @@ void SegmentationSystem::Model::infer(util::Cloud& cloud) {
                 return this->config_.semantics.ignore.count(scalar) == 0;
             });
             // downsample only if the inference resolution was different from the output resolution
-            if(std::abs(SegmentationSystem::VOXEL_SIZE_SCALAR - SegmentationSystem::VOXEL_SIZE_SCALAR_INFERENCE) > 0.01) {
+            if(std::abs(config_.voxel_size * SegmentationSystem::VOXEL_SIZE_SCALAR - config_.voxel_size_inference) > 0.01f) {
                 double voxel_size = config_.voxel_size * SegmentationSystem::VOXEL_SIZE_SCALAR;
                 cloud.downsample(voxel_size);
             }
@@ -71,10 +70,10 @@ void SegmentationSystem::Model::infer(util::Cloud& cloud) {
                 });
                 // ...and accumulate their respective probabilities
                 for(const auto& [cls_from, cls_to] : config_.semantics.remap) {
-                    std::span<float> semantics_from = cloud.field<float>(std::to_string(cls_from));
-                    std::span<float> semantics_to = cloud.field<float>(std::to_string(cls_to));
-                    std::transform(semantics_to.begin(), semantics_to.end(), semantics_from.begin(), semantics_to.begin(), std::plus<>{});
-                    std::fill(semantics_from.begin(), semantics_from.end(), 0.0f);
+                    std::span<float> from = cloud.field<float>(std::to_string(cls_from));
+                    std::span<float> to = cloud.field<float>(std::to_string(cls_to));
+                    std::transform(to.begin(), to.end(), from.begin(), to.begin(), std::plus<>{});
+                    std::fill(from.begin(), from.end(), 0.f);
                 }
             }
         }
@@ -131,6 +130,7 @@ std::ostream& operator<<(std::ostream& stream, const SegmentationSystem::Config&
     return stream << std::boolalpha << "SegmentationSystem::Config" << std::endl <<
         "\tmax_distance: " << config.max_distance << "," << std::endl << 
         "\tvoxel_size: " << config.voxel_size << "," << std::endl << 
+        "\tvoxel_size_inference: " << config.voxel_size_inference << "," << std::endl << 
         "\tsemantics_ignore: " << format_ignore(config.semantics.ignore) << "," << std::endl <<
         "\tsemantics_remap: " << format_remap(config.semantics.remap);
 }

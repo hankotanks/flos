@@ -6,10 +6,10 @@
 Belief::Belief() { 
     // populate will a flat distribution
     // NOTE: distribution will be populated by the VoxelMap::update, so we don't need to worry about it
-    static constexpr float EVEN_CONFIDENCE = 1.f / static_cast<float>(classes::COUNT);
-    confidence.fill(EVEN_CONFIDENCE);
-    static const float EVEN_BELIEF = std::log(EVEN_CONFIDENCE);
-    belief.fill(EVEN_BELIEF);
+    static constexpr float UNIFORM_CONFIDENCE = 1.f / static_cast<float>(classes::COUNT);
+    confidence.fill(UNIFORM_CONFIDENCE);
+    static const float UNIFORM_BELIEF = std::log(UNIFORM_CONFIDENCE);
+    belief.fill(UNIFORM_BELIEF);
     prediction = std::numeric_limits<size_t>::max();
 }
 
@@ -20,7 +20,7 @@ void Belief::update(const Semantics& data) noexcept {
     }
 }
 
-// TODO: This is NOT final
+#if 0
 float Belief::weight(const Semantics& data) const noexcept {
     float w = 0.f;
     // NOTE: currently, dot product
@@ -28,6 +28,21 @@ float Belief::weight(const Semantics& data) const noexcept {
     for(size_t i = 0; i < classes::COUNT; ++i) w += confidence[i] * data.confidence[i];
     assert(w >= 0.f && w <= 1.f);
     return w;
+}
+#endif
+
+// TODO: This currently uses JSD... not final...
+float Belief::weight(const Semantics& data) const noexcept {
+    float jsd = 0.f;
+    for(size_t i = 0; i < classes::COUNT; ++i) {
+        const float p = confidence[i];
+        const float q = data.confidence[i];
+        const float m = 0.5f * (p + q);
+        if(m == 0.f) continue;
+        if(p > 0.f) jsd += 0.5f * p * std::log2(p / m);
+        if(q > 0.f) jsd += 0.5f * q * std::log2(q / m);
+    }
+    return 1.f - jsd;
 }
 
 void Belief::finish() noexcept {
@@ -46,7 +61,7 @@ void Belief::finish() noexcept {
 
 Wrapper::Wrapper(util::Cloud& points) : points_(points.points()), class_(points.field<uint8_t>("class")) {
     for(size_t i = 0; i < classes::COUNT; ++i) {
-        confidence_[i] = points.field_opt<float>(std::to_string(i));
+        confidence_[i] = points.field<float>(std::to_string(i));
     }
 }
 
@@ -54,8 +69,7 @@ Semantics Wrapper::data(size_t i) const noexcept {
     Semantics data;
     data.prediction = class_[i];
     for(size_t j = 0; j < classes::COUNT; ++j) {
-        auto& field = confidence_[j];
-        data.confidence[j] = field ? (*field)[i] : 0.f;
+        data.confidence[j] = confidence_[j][i];
     }
     return data;
 }

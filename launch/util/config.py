@@ -19,6 +19,7 @@ class Config:
         SEGMENTATION = {
             'max_distance': (float, False), 
             'voxel_size': (float, False), 
+            'voxel_size_inference': (float, False), 
             'semantics_ignore': (typing.List[int], False),
             'semantics_remap': (typing.Dict[int, int], False),
             'path_to_model': ((pathlib.Path, True), False), 

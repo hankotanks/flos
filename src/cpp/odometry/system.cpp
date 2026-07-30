@@ -62,21 +62,26 @@ void deskew_frame(util::Cloud& points, const Sophus::SE3f& motion) noexcept {
 } // private scope
 
 namespace {
-bool pred_point(const Belief& voxel, Semantics point, Semantics query) {
+bool pred_point(const Belief& voxel, const Semantics& point, const Semantics& query) {
+    (void) voxel;
     return query.prediction == point.prediction;
 }
 
-bool pred_voxel(const Belief& voxel, Semantics point, Semantics query) {
+bool pred_voxel(const Belief& voxel, const Semantics& point, const Semantics& query) {
+    (void) point;
     return query.prediction == voxel.prediction;
 }
 
-bool pred_const(const Belief& voxel, Semantics point, Semantics query) {
+bool pred_const(const Belief& voxel, const Semantics& point, const Semantics& query) {
+    (void) voxel;
+    (void) point;
+    (void) query;
     return true;
 }
 } // private scope
 
 namespace {
-float weight_point(const VoxelMap<Wrapper>::Neighbor& neighbor, Semantics query) {
+float weight_point(const VoxelMap<Wrapper>::Neighbor& neighbor, const Semantics& query) {
     float w = 0.f;
     // NOTE: currently, dot product
     // consider KL or Jensen-Shannon
@@ -85,11 +90,14 @@ float weight_point(const VoxelMap<Wrapper>::Neighbor& neighbor, Semantics query)
     return w;
 }
 
-float weight_voxel(const VoxelMap<Wrapper>::Neighbor& neighbor, Semantics query) {
+float weight_voxel(const VoxelMap<Wrapper>::Neighbor& neighbor, const Semantics& query) {
+    (void) query;
     return neighbor.weight;
 }
 
-float weight_const(const VoxelMap<Wrapper>::Neighbor& neighbor, Semantics query) {
+float weight_const(const VoxelMap<Wrapper>::Neighbor& neighbor, const Semantics& query) {
+    (void) neighbor;
+    (void) query;
     return 1.f;
 }
 } // private scope
@@ -216,7 +224,6 @@ OdometrySystem::CorrespondenceSet OdometrySystem::correspond(const Wrapper& poin
             }
         }
     });
-
     return correspondences;
 }
 

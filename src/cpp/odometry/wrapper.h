@@ -42,5 +42,5 @@ private:
 private:
     std::span<Eigen::Vector3f> points_;
     std::span<const uint8_t> class_;
-    std::array<std::optional<std::span<const float>>, classes::COUNT> confidence_;
+    std::array<std::span<const float>, classes::COUNT> confidence_;
 };

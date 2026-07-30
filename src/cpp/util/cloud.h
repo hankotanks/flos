@@ -6,7 +6,6 @@
 #include <span>
 #include <variant>
 #include <vector>
-#include <optional>
 #include <numeric>
 // eigen
 #include <Eigen/Dense>
@@ -66,10 +65,6 @@ public:
     std::span<const T> field(const std::string& name) const;
     template<typename T>
     std::span<T> field(const std::string& name);
-    template<typename T>
-    std::optional<std::span<const T>> field_opt(const std::string& name) const noexcept;
-    template<typename T>
-    std::optional<std::span<T>> field_opt(const std::string& name) noexcept;
     // add a new field to the cloud
     // must provide a number of scalars equal to Cloud::size
     // can throw std::runtime_error if the number of scalars is wrong
