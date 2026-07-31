@@ -135,7 +135,7 @@ private:
             semantics.clear();
             semantics.reserve(local_map.data.size());
             std::transform(local_map.data.begin(), local_map.data.end(), std::back_inserter(semantics), 
-                [](const Semantics& p) { return p.prediction; });
+                [](const OdometrySystem::Semantics& p) { return p.prediction; });
             local_map_->add_field<uint8_t>("class", semantics);
         }
     }

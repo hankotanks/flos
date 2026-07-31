@@ -53,6 +53,8 @@ protected:
         RerunNode::set_stamp(stamp);
         rr_.log("statistics/iterations", rerun::Scalar(statistics.iterations));
         rr_.log("statistics/correspondences", rerun::Scalar(statistics.correspondences));
+        rr_.log("statistics/threshold/min", rerun::Scalar(statistics.threshold.min));
+        rr_.log("statistics/threshold/max", rerun::Scalar(statistics.threshold.max));
         rr_.log("statistics/velocity/linear", rerun::Scalar(statistics.velocity.linear));
         rr_.log("statistics/velocity/angular", rerun::Scalar(statistics.velocity.angular));
     }

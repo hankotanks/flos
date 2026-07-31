@@ -9,10 +9,10 @@
 #include <tbb/parallel_for.h>
 #include <tbb/concurrent_vector.h>
 #include <tbb/parallel_reduce.h>
+#include <tbb/parallel_sort.h>
 // package
 #include "classes.h"
 // util
-#include "odometry/wrapper.h"
 #include "util/cloud.h"
 #include "util/profiler.h"
 
@@ -62,59 +62,60 @@ void deskew_frame(util::Cloud& points, const Sophus::SE3f& motion) noexcept {
 } // private scope
 
 namespace {
-bool pred_point(const Belief& voxel, const Semantics& point, const Semantics& query) {
-    (void) voxel;
-    return query.prediction == point.prediction;
+#if 0
+inline float weight(const std::array<float, classes::COUNT>& fst, const std::array<float, classes::COUNT>& snd) {
+    float jsd = 0.f;
+    for(size_t i = 0; i < classes::COUNT; ++i) {
+        const float p = fst[i];
+        const float q = snd[i];
+        const float m = 0.5f * (p + q);
+        if(m == 0.f) continue;
+        if(p > 0.f) jsd += 0.5f * p * std::log2(p / m);
+        if(q > 0.f) jsd += 0.5f * q * std::log2(q / m);
+    }
+    assert(jsd >= 0.f && jsd <= 1.f);
+    return 1.f - jsd;
 }
-
-bool pred_voxel(const Belief& voxel, const Semantics& point, const Semantics& query) {
-    (void) point;
-    return query.prediction == voxel.prediction;
-}
-
-bool pred_const(const Belief& voxel, const Semantics& point, const Semantics& query) {
-    (void) voxel;
-    (void) point;
-    (void) query;
-    return true;
-}
-} // private scope
-
-namespace {
-float weight_point(const VoxelMap<Wrapper>::Neighbor& neighbor, const Semantics& query) {
+#else
+inline float weight(const std::array<float, classes::COUNT>& fst, const std::array<float, classes::COUNT>& snd) {
     float w = 0.f;
-    // NOTE: currently, dot product
-    // consider KL or Jensen-Shannon
-    for(size_t i = 0; i < classes::COUNT; ++i) w += neighbor.data.confidence[i] * query.confidence[i];
+    for(size_t i = 0; i < classes::COUNT; ++i) w += fst[i] * snd[i];
     assert(w >= 0.f && w <= 1.f);
     return w;
 }
+#endif
 
-float weight_voxel(const VoxelMap<Wrapper>::Neighbor& neighbor, const Semantics& query) {
-    (void) query;
-    return neighbor.weight;
+inline float weight_point(const OdometrySystem::Belief& voxel, const OdometrySystem::Semantics& point, const OdometrySystem::Semantics& query) {
+    (void) voxel;
+    return weight(point.confidence, query.confidence);
 }
 
-float weight_const(const VoxelMap<Wrapper>::Neighbor& neighbor, const Semantics& query) {
-    (void) neighbor;
+inline float weight_voxel(const OdometrySystem::Belief& voxel, const OdometrySystem::Semantics& point, const OdometrySystem::Semantics& query) {
+    (void) point;
+    return weight(voxel.confidence, query.confidence);
+}
+
+inline float weight_const(const OdometrySystem::Belief& voxel, const OdometrySystem::Semantics& point, const OdometrySystem::Semantics& query) {
+    (void) voxel;
+    (void) point;
     (void) query;
     return 1.f;
 }
 } // private scope
 
 namespace {
-float linear_velocity(const Eigen::Matrix<float,6,1>& xi, float dt) {
+inline float linear_velocity(const Eigen::Matrix<float,6,1>& xi, float dt) {
     return xi.tail<3>().norm() / dt;
 }
 
-Eigen::Vector3f angular_wrap(const Eigen::Vector3f& rot) {
+inline Eigen::Vector3f angular_wrap(const Eigen::Vector3f& rot) {
     double angle = rot.norm();
     if(angle < 1e-12) return rot;
     double wrapped = std::fmod(angle + M_PI, 2.0 * M_PI) - M_PI;
     return rot * (wrapped / angle);
 }
 
-float angular_velocity(const Eigen::Matrix<float,6,1>& xi, float dt) {
+inline float angular_velocity(const Eigen::Matrix<float,6,1>& xi, float dt) {
     Eigen::Vector3f omega = angular_wrap(xi.head<3>()) / dt;
     return omega.norm();
 }
@@ -122,9 +123,7 @@ float angular_velocity(const Eigen::Matrix<float,6,1>& xi, float dt) {
 
 OdometrySystem::OdometrySystem(const Config& config) : util::Profiler("OdometrySystem"),
     config_(config),
-    pred_(config.correspondence.restrict ? (config.correspondence.weighting_by_belief ? pred_voxel : pred_point) : pred_const),
-    weight_(config.correspondence.weighting ? (config.correspondence.weighting_by_belief ? weight_voxel : weight_point) : weight_const),
-    map_(config.max_distance, config.voxel_size, config.voxel_capacity),
+    map_(config.max_distance, config.voxel_size, config.voxel_capacity, config.correspondence.weighting ? (config.correspondence.weighting_by_belief ? weight_voxel : weight_point) : weight_const),
     threshold_(config.max_distance, config.threshold.initial, config.threshold.motion) {
     size_t max_threads = config.max_threads > 0 ? \
         config.max_threads : tbb::this_task_arena::max_concurrency();
@@ -173,6 +172,64 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigne
     return last_pose_;
 }
 
+OdometrySystem::Belief::Belief(const OdometrySystem::Weight& weight) : weight_(weight) { 
+    // populate will a flat distribution
+    // NOTE: distribution will be populated by the VoxelMap::update, so we don't need to worry about it
+    static constexpr float UNIFORM_CONFIDENCE = 1.f / static_cast<float>(classes::COUNT);
+    confidence.fill(UNIFORM_CONFIDENCE);
+    static const float UNIFORM_BELIEF = std::log(UNIFORM_CONFIDENCE);
+    belief.fill(UNIFORM_BELIEF);
+    prediction = std::numeric_limits<size_t>::max();
+}
+
+void OdometrySystem::Belief::update(const OdometrySystem::Semantics& data) noexcept {
+    static constexpr float EPS = 1e-6f;
+    for(size_t i = 0; i < classes::COUNT; ++i) {
+        belief[i] += std::log(std::max(data.confidence[i], EPS));
+    }
+}
+
+void OdometrySystem::Belief::finish() noexcept {
+    auto it = std::max_element(belief.begin(), belief.end());
+    // update predicted class of this voxel
+    prediction = std::distance(belief.begin(), it);
+    // renormalize belief so it doesn't keep growing
+    float maxima = *it;
+    for(auto& b : belief) b -= maxima;
+    // compute confidence probabilities for future VoxelMap::closest queries
+    for(size_t i = 0; i < classes::COUNT; ++i) confidence[i] = std::exp(belief[i]);
+    float sum = confidence[0];
+    for(size_t i = 1; i < classes::COUNT; ++i) sum += confidence[i];
+    for(size_t i = 0; i < classes::COUNT; ++i) confidence[i] /= sum;
+}
+
+OdometrySystem::Wrapper::Wrapper(util::Cloud& points) : points_(points.points()), class_(points.field<uint8_t>("class")) {
+    for(size_t i = 0; i < classes::COUNT; ++i) {
+        confidence_[i] = points.field<float>(std::to_string(i));
+    }
+}
+
+OdometrySystem::Semantics OdometrySystem::Wrapper::data(size_t i) const noexcept {
+    Semantics data;
+    data.prediction = class_[i];
+    for(size_t j = 0; j < classes::COUNT; ++j) {
+        data.confidence[j] = confidence_[j][i];
+    }
+    return data;
+}
+
+void OdometrySystem::Wrapper::transform(const Sophus::SE3f& t) const noexcept { 
+    std::for_each(points_.begin(), points_.end(), [&t](Eigen::Vector3f& p) { p = t * p; }); 
+}
+
+std::pair<Eigen::Vector3f&, OdometrySystem::Semantics> OdometrySystem::Wrapper::operator[](size_t i) noexcept { 
+    return std::pair<Eigen::Vector3f&, Semantics>(points_[i], Wrapper::data(i)); 
+}
+
+std::pair<const Eigen::Vector3f&, OdometrySystem::Semantics> OdometrySystem::Wrapper::operator[](size_t i) const noexcept { 
+    return std::pair<const Eigen::Vector3f&, Semantics>(points_[i], Wrapper::data(i)); 
+}
+
 Sophus::SE3f OdometrySystem::prologue(unsigned int seconds, unsigned int nanoseconds) noexcept {
     // reset statistics
     statistics = Statistics{};
@@ -212,18 +269,30 @@ void OdometrySystem::epilogue(const Sophus::SE3f& pose, unsigned int seconds, un
 OdometrySystem::CorrespondenceSet OdometrySystem::correspond(const Wrapper& points, float sigma) const noexcept {
     tbb::concurrent_vector<Correspondence> correspondences;
     correspondences.reserve(points.size());
+    // collect all correspondences
     float correspondence_distance_sq = sigma * sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER * OdometrySystem::CORRESPONDENCE_MULTIPLIER;
     tbb::parallel_for(tbb::blocked_range<size_t>{0, points.size()}, [this, &points, &correspondences, correspondence_distance_sq](const tbb::blocked_range<size_t>& range) {
         for(size_t i = range.begin(); i < range.end(); ++i) {
             const auto& [point, point_data] = points[i];
-            const auto& maybe = this->map_.closest(point, point_data, pred_, correspondence_distance_sq);
+            const auto& maybe = this->map_.closest(point, point_data, correspondence_distance_sq);
             if(maybe) {
                 const auto& neighbor = *maybe;
-                if(this->weight_(neighbor, point_data) < correspondence_threshold_[point_data.prediction]) continue;
+                if(neighbor.data.prediction != point_data.prediction) continue;
+                if(neighbor.weight < this->correspondence_threshold_[point_data.prediction]) continue;
                 correspondences.emplace_back(point, point_data, neighbor);
             }
         }
     });
+    // prune all low-weight correspondences down to a threshold...
+    if(config_.correspondence.target > 0 && config_.correspondence.target < correspondences.size()) {
+        std::nth_element(correspondences.begin(), correspondences.begin() + config_.correspondence.target, correspondences.end(),
+            [](const Correspondence& fst, const Correspondence& snd) {
+                const auto& [fst_point, fst_data, fst_neighbor] = fst;
+                const auto& [snd_point, snd_data, snd_neighbor] = snd;
+                return fst_neighbor.weight > snd_neighbor.weight;
+            });
+        correspondences.resize(config_.correspondence.target);
+    }
     return correspondences;
 }
 
@@ -272,11 +341,14 @@ std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, con
     Sophus::SE3f T_icp{};
     PROFILE(align, this) {
         for(size_t j = 0; j < config_.max_iterations; ++j) {
+            // accumulate iteration count
+            statistics.iterations++;      
+            CorrespondenceSet correspondences; 
             PROFILE(iteration, &align) {
                 // get correspondences
-                CorrespondenceSet correspondences = OdometrySystem::correspond(points, sigma);
+                correspondences = OdometrySystem::correspond(points, sigma);
                 // update statistics
-                statistics.correspondences += static_cast<float>(correspondences.size());
+                statistics.correspondences += static_cast<float>(correspondences.size());    
                 // Equation (11)
                 const Eigen::Matrix<float, 6, 1> dx = OdometrySystem::solve(points, correspondences);
                 const Sophus::SE3f est = Sophus::SE3f::exp(dx);
@@ -286,14 +358,30 @@ std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, con
                 T_icp = est * T_icp;
                 // Termination criteria
                 if(dx.norm() < config_.convergence_criterion) goto termination;
-            }            
-            // accumulate iteration count
-            statistics.iterations++;
+            }
+            {
+                float threshold_min = std::numeric_limits<float>::max();
+                for(auto& correspondence : correspondences) {
+                    const auto& [point, point_data, neighbor] = correspondence;
+                    threshold_min = std::max(threshold_min, neighbor.weight);
+                }
+                statistics.threshold.min += threshold_min;
+            }
+            {
+                float threshold_max = std::numeric_limits<float>::lowest();
+                for(auto& correspondence : correspondences) {
+                    const auto& [point, point_data, neighbor] = correspondence;
+                    threshold_max = std::max(threshold_max, neighbor.weight);
+                }
+                statistics.threshold.max += threshold_max;
+            }
         }
 termination:;
     }
     // get mean correspondences
     statistics.correspondences /= static_cast<float>(statistics.iterations);
+    statistics.threshold.min /= static_cast<float>(statistics.iterations);
+    statistics.threshold.max /= static_cast<float>(statistics.iterations);
     // compute new pose
     Sophus::SE3f pose = T_icp * initial_guess;
     // return transformation and deviation
@@ -345,6 +433,6 @@ std::ostream& operator<<(std::ostream& stream, const OdometrySystem::Config& con
         "\tconvergence_criterion: " << config.convergence_criterion << "," << std::endl <<
         "\tcorrespondence_weighting: " << config.correspondence.weighting << "," << std::endl <<
         "\tcorrespondence_weighting_by_belief: " << config.correspondence.weighting_by_belief << "," << std::endl <<
-        "\tcorrespondence_restrict: " << config.correspondence.restrict << "," << std::endl <<
+        "\tcorrespondence_target: " << config.correspondence.target << "," << std::endl <<
         "\tcorrespondence_threshold: " << format_threshold(config.correspondence.threshold);
 }

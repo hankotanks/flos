@@ -151,7 +151,7 @@ protected:
                         semantics.clear();
                         semantics.reserve(local_map.data.size());
                         std::transform(local_map.data.begin(), local_map.data.end(), std::back_inserter(semantics), 
-                            [](const Semantics& p) { return p.prediction; });
+                            [](const OdometrySystem::Semantics& p) { return p.prediction; });
                         out.add_field<uint8_t>("class", semantics);
                     }
                     local_map_publisher_->publish(std::move(out.message(local_map_header)));

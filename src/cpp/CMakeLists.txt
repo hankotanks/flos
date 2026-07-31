@@ -88,13 +88,10 @@ configure_node(segmentation_node
 #
 
 set(ODOMETRY_SOURCES
-  odometry/system.cpp
-  odometry/wrapper.cpp)
+  odometry/system.cpp)
 
 set(ODOMETRY_HEADERS
   odometry/system.h
-  odometry/wrapper.h
-  odometry/voxel_map_frame.h
   odometry/voxel_map.h
   odometry_node_config.h)
 
