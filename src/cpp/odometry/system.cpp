@@ -274,13 +274,10 @@ OdometrySystem::CorrespondenceSet OdometrySystem::correspond(const Wrapper& poin
     tbb::parallel_for(tbb::blocked_range<size_t>{0, points.size()}, [this, &points, &correspondences, correspondence_distance_sq](const tbb::blocked_range<size_t>& range) {
         for(size_t i = range.begin(); i < range.end(); ++i) {
             const auto& [point, point_data] = points[i];
-            const auto& maybe = this->map_.closest(point, point_data, correspondence_distance_sq);
-            if(maybe) {
-                const auto& neighbor = *maybe;
-                if(neighbor.data.prediction != point_data.prediction) continue;
-                if(neighbor.weight < this->correspondence_threshold_[point_data.prediction]) continue;
-                correspondences.emplace_back(point, point_data, neighbor);
-            }
+            const auto& neighbor = this->map_.closest(point, point_data, [this, &point_data](const VoxelMap<Wrapper>::Neighbor& neighbor) {
+                return neighbor.data.prediction == point_data.prediction && neighbor.weight > this->correspondence_threshold_[point_data.prediction];
+            }, correspondence_distance_sq);
+            if(neighbor) correspondences.emplace_back(point, point_data, *neighbor);
         }
     });
     // prune all low-weight correspondences down to a threshold...
