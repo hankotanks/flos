@@ -318,8 +318,7 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const Wrapper& points, const Od
                     const auto& [source, data, target] = correspondence;
                     const auto& [J_r, residual] = compute_jacobian_and_residual(source, target.point);
                     // weight the kernel based on confidence from the segmentation model
-                    float w = config_.correspondence.weighting ? target.weight : 1.f;
-                    return System(J_r.transpose() * w * J_r, J_r.transpose() * w * residual);
+                    return System(J_r.transpose() * target.weight * J_r, J_r.transpose() * target.weight * residual);
                 });
         }, sum);
 
