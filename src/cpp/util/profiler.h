@@ -16,12 +16,29 @@
 #define PROFILE(name, parent) 
 #endif // PROFILER_DISABLE
 
+#ifndef PROFILER_DISABLE
+#define PROFILER_CONCAT_IMPL(a,b) a##b
+#define PROFILER_CONCAT(a,b) PROFILER_CONCAT_IMPL(a,b)
+#define PROFILE_SKIP(name) \
+    for(bool PROFILER_CONCAT(_once_, __LINE__) = true; \
+        PROFILER_CONCAT(_once_, __LINE__); \
+        PROFILER_CONCAT(_once_, __LINE__) = false) \
+        for(util::Profiler::Skip PROFILER_CONCAT(_skip_, __LINE__){name}; \
+            PROFILER_CONCAT(_once_, __LINE__); \
+            PROFILER_CONCAT(_once_, __LINE__) = false)
+#else
+#define PROFILE_SKIP(name)
+#endif // PROFILER_DISABLE
+
 namespace util {
 #ifndef PROFILER_DISABLE
 class Profiler {
     using clock = std::chrono::steady_clock;
     using duration = std::chrono::duration<double, std::milli>;
     using instant = std::chrono::steady_clock::time_point;
+public:
+    class Skip;
+    friend class Skip;
 public:
     Profiler(const std::string& name) : name_(name), start_(Profiler::clock::now()), 
         parent_or_stats_(std::map<std::string, Statistics>{}) { /* STUB */ }
@@ -34,7 +51,12 @@ public:
     Profiler& operator=(Profiler&&) = delete;
     // finish the timer
     ~Profiler() {
-        double elapsed = Profiler::duration(Profiler::clock::now() - start_).count();
+        if (pause_ > 0) {
+            excluded_ += duration(clock::now() - pause_start_).count();
+            pause_ = 0;
+            if(auto ptr = std::get_if<Profiler*>(&parent_or_stats_)) (*ptr)->resume();
+        }
+        double elapsed = Profiler::duration(Profiler::clock::now() - start_).count() - excluded_;
         std::visit([&](auto&& inner) {
             using T = std::decay_t<decltype(inner)>;
             if constexpr (std::is_same_v<T, Profiler*>) {
@@ -48,6 +70,36 @@ public:
                 }
             } else static_assert(False<T>);
         }, parent_or_stats_);
+    }
+public:
+    class Skip {
+    public:
+        explicit Skip(Profiler& profiler) : profiler_(profiler) { profiler_.pause(); }
+        Skip(const Skip&) = delete;
+        Skip(Skip&&) = delete;
+        Skip& operator=(const Skip&) = delete;
+        Skip& operator=(Skip&&) = delete;
+        ~Skip() { profiler_.resume(); }
+    private:
+        Profiler& profiler_;
+    };
+private:
+    void pause() {
+        if(pause_++ == 0) {
+            pause_start_ = clock::now();
+            if(auto ptr = std::get_if<Profiler*>(&parent_or_stats_)) {
+                (*ptr)->pause();
+            }
+        }
+    }
+    void resume() {
+        if(pause_ == 0) return;
+        if(--pause_ == 0) {
+            excluded_ += duration(clock::now() - pause_start_).count();
+            if(auto ptr = std::get_if<Profiler*>(&parent_or_stats_)) {
+                (*ptr)->resume();
+            }
+        }
     }
 private:
     class Statistics {
@@ -92,10 +144,13 @@ private:
     // C++ shenanigans to prevent static_assert from being optimized out of std::visit calls
     template<typename>
     inline static const constexpr bool False = false;
-    
     std::variant<Profiler*, std::map<std::string, Statistics>> parent_or_stats_;
     std::string name_;
     Profiler::instant start_;
+    // state for tracking excluded time blocks
+    size_t pause_{0};
+    instant pause_start_{};
+    double excluded_{0.0};
 };
 #else
 class Profiler {

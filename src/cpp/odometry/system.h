@@ -113,9 +113,7 @@ public:
     Statistics statistics;
 private:
     // get the predicted delta (and handle statistics)
-    Sophus::SE3f prologue(unsigned int seconds, unsigned int nanoseconds) noexcept;
-    // handle end of frame (saving last_pose and final velocity statistics)
-    void epilogue(const Sophus::SE3f& pose, unsigned int seconds, unsigned int nanoseconds) noexcept;
+    std::pair<Sophus::SE3f, float> predict_delta(unsigned int seconds, unsigned int nanoseconds) noexcept;
 private:
     // find correspondences
     using Correspondence = std::tuple<Eigen::Vector3f, Semantics, VoxelMap<Wrapper>::Neighbor>;
@@ -124,7 +122,7 @@ private:
     // constructs and solves the linear system, returning dx
     Eigen::Matrix<float, 6, 1> solve(const Wrapper& points, const CorrespondenceSet& correspondences) noexcept;
     // returns pose and deviation respectively
-    std::pair<Sophus::SE3f, Sophus::SE3f> align(Wrapper& points, const Sophus::SE3f& delta);
+    std::pair<Sophus::SE3f, Sophus::SE3f> align(Wrapper& points, const Sophus::SE3f& delta, Profiler& profiler);
 private:
     Config config_;
     // simplified from the robust kernel, which had no appreciable benefit

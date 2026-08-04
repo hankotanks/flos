@@ -62,7 +62,7 @@ void deskew_frame(util::Cloud& points, const Sophus::SE3f& motion) noexcept {
 } // private scope
 
 namespace {
-#if 0
+#if 1
 inline float weight(const std::array<float, classes::COUNT>& fst, const std::array<float, classes::COUNT>& snd) {
     float jsd = 0.f;
     for(size_t i = 0; i < classes::COUNT; ++i) {
@@ -74,7 +74,7 @@ inline float weight(const std::array<float, classes::COUNT>& fst, const std::arr
         if(q > 0.f) jsd += 0.5f * q * std::log2(q / m);
     }
     assert(jsd >= 0.f && jsd <= 1.f);
-    return 1.f - jsd;
+    return 1.f - std::sqrt(jsd);
 }
 #else
 inline float weight(const std::array<float, classes::COUNT>& fst, const std::array<float, classes::COUNT>& snd) {
@@ -142,9 +142,12 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points) noexcep
 }
 
 const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigned int seconds, unsigned int nanoseconds) noexcept {
+    // reset statistics
+    statistics = Statistics{};
+    // perform registration
     PROFILE(registration, this) {
         // compute delta
-        Sophus::SE3f delta = OdometrySystem::prologue(seconds, nanoseconds);
+        const auto& [delta, dt] = OdometrySystem::predict_delta(seconds, nanoseconds);
         // deskewing
         if(config_.deskew) {
             PROFILE(deskew, &registration) {
@@ -158,7 +161,14 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigne
         }
         // compute pose w/ ICP
         Wrapper points_kp_wrapper{points_kp};
-        const auto [pose, deviation] = OdometrySystem::align(points_kp_wrapper, delta);
+        const auto [pose, deviation] = OdometrySystem::align(points_kp_wrapper, delta, registration);
+        // normalize statistics
+        PROFILE_SKIP(registration) {
+            // get mean correspondences
+            statistics.correspondences /= static_cast<float>(statistics.iterations);
+            statistics.threshold.min /= static_cast<float>(statistics.iterations);
+            statistics.threshold.max /= static_cast<float>(statistics.iterations);
+        }
         // update AdaptiveThreshold
         threshold_.update(deviation);
         // append points to map
@@ -167,8 +177,18 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigne
             map_.update(points_wrapper, pose);
         }
         // store new pose
-        OdometrySystem::epilogue(pose, seconds, nanoseconds);
+        // update last pose
+        last_delta_ = last_pose_.inverse() * pose;
+        last_pose_ = pose;
+        // if we aren't handling variable dt, theres no need to update stamps or velocity statistics
+        PROFILE_SKIP(registration) {
+            // log final velocity statistics
+            Eigen::Matrix<float, 6, 1> xi = last_delta_.log();
+            statistics.velocity.linear = linear_velocity(xi, dt);
+            statistics.velocity.angular = angular_velocity(xi, dt);
+        }
     }
+    // return const ref to the computed pose, since we store it anyway
     return last_pose_;
 }
 
@@ -230,12 +250,10 @@ std::pair<const Eigen::Vector3f&, OdometrySystem::Semantics> OdometrySystem::Wra
     return std::pair<const Eigen::Vector3f&, Semantics>(points_[i], Wrapper::data(i)); 
 }
 
-Sophus::SE3f OdometrySystem::prologue(unsigned int seconds, unsigned int nanoseconds) noexcept {
-    // reset statistics
-    statistics = Statistics{};
+std::pair<Sophus::SE3f, float> OdometrySystem::predict_delta(unsigned int seconds, unsigned int nanoseconds) noexcept {
     // handling depends on whether we rely on timestamps
     if(config_.fixed_dt) {
-        return last_delta_;
+        return std::make_pair(last_delta_, 1.f);
     } else {
         if(init_seconds_ == std::numeric_limits<unsigned int>::max()) init_seconds_ = seconds;
         float stamp = static_cast<float>(seconds - init_seconds_) + 1e-9 * static_cast<float>(nanoseconds);
@@ -243,26 +261,11 @@ Sophus::SE3f OdometrySystem::prologue(unsigned int seconds, unsigned int nanosec
         float dt_curr = stamp - last_stamp_;
         float scale = 1.f;
         if(dt_prev > 1e-6) scale = static_cast<float>(dt_curr / dt_prev);
-        // compute predicted delta:
-        return Sophus::SE3f::exp(scale * last_delta_.log());
-    }
-}
-
-void OdometrySystem::epilogue(const Sophus::SE3f& pose, unsigned int seconds, unsigned int nanoseconds) noexcept {
-    // update last pose
-    last_delta_ = last_pose_.inverse() * pose;
-    last_pose_ = pose;
-    // if we aren't handling variable dt, theres no need to update stamps or velocity statistics
-    if(!config_.fixed_dt) {
-        float stamp = static_cast<float>(seconds - init_seconds_) + 1e-9 * static_cast<float>(nanoseconds);
-        float dt_curr = stamp - last_stamp_;
-        // update timestamps
+        // update timestamp state
         prev_stamp_ = last_stamp_;
         last_stamp_ = stamp;
-        // log final velocity statistics
-        Eigen::Matrix<float, 6, 1> xi = last_delta_.log();
-        statistics.velocity.linear = linear_velocity(xi, dt_curr);
-        statistics.velocity.angular = angular_velocity(xi, dt_curr);
+        // compute predicted delta:
+        return std::make_pair(Sophus::SE3f::exp(scale * last_delta_.log()), dt_curr);
     }
 }
 
@@ -325,7 +328,7 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const Wrapper& points, const Od
     return JTJ.ldlt().solve(-JTr);
 }
 
-std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, const Sophus::SE3f& delta) {
+std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, const Sophus::SE3f& delta, Profiler& profiler) {
     // determine starting point
     Sophus::SE3f initial_guess = last_pose_ * delta;
     if(map_.empty()) return std::make_pair(initial_guess, Sophus::SE3f{});
@@ -335,16 +338,16 @@ std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, con
     // retrieve fields ahead of time to avoid repeated queries
     // perform ICP
     Sophus::SE3f T_icp{};
-    PROFILE(align, this) {
+    PROFILE(align, &profiler) {
         for(size_t j = 0; j < config_.max_iterations; ++j) {
             // accumulate iteration count
-            statistics.iterations++;      
+            PROFILE_SKIP(align) statistics.iterations++;
             CorrespondenceSet correspondences; 
             PROFILE(iteration, &align) {
                 // get correspondences
                 correspondences = OdometrySystem::correspond(points, sigma);
                 // update statistics
-                statistics.correspondences += static_cast<float>(correspondences.size());    
+                PROFILE_SKIP(iteration) statistics.correspondences += static_cast<float>(correspondences.size());    
                 // Equation (11)
                 const Eigen::Matrix<float, 6, 1> dx = OdometrySystem::solve(points, correspondences);
                 const Sophus::SE3f est = Sophus::SE3f::exp(dx);
@@ -355,29 +358,20 @@ std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, con
                 // Termination criteria
                 if(dx.norm() < config_.convergence_criterion) goto termination;
             }
-            {
+            PROFILE_SKIP(align) {
                 float threshold_min = std::numeric_limits<float>::max();
-                for(auto& correspondence : correspondences) {
-                    const auto& [point, point_data, neighbor] = correspondence;
-                    threshold_min = std::min(threshold_min, neighbor.weight);
-                }
-                statistics.threshold.min += threshold_min;
-            }
-            {
                 float threshold_max = std::numeric_limits<float>::lowest();
                 for(auto& correspondence : correspondences) {
                     const auto& [point, point_data, neighbor] = correspondence;
+                    threshold_min = std::min(threshold_min, neighbor.weight);
                     threshold_max = std::max(threshold_max, neighbor.weight);
                 }
+                statistics.threshold.min += threshold_min;
                 statistics.threshold.max += threshold_max;
             }
         }
 termination:;
     }
-    // get mean correspondences
-    statistics.correspondences /= static_cast<float>(statistics.iterations);
-    statistics.threshold.min /= static_cast<float>(statistics.iterations);
-    statistics.threshold.max /= static_cast<float>(statistics.iterations);
     // compute new pose
     Sophus::SE3f pose = T_icp * initial_guess;
     // return transformation and deviation
