@@ -154,7 +154,7 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigne
         // downsample incoming points to obtain keypoints and the preprocessed frame
         util::Cloud points_kp{points};
         PROFILE(downsample, &registration) {
-            points_kp.downsample(config_.voxel_size * OdometrySystem::VOXEL_SIZE_SCALAR);
+            points_kp.downsample(config_.voxel_size);
         }
         // compute pose w/ ICP
         Wrapper points_kp_wrapper{points_kp};
@@ -359,7 +359,7 @@ std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, con
                 float threshold_min = std::numeric_limits<float>::max();
                 for(auto& correspondence : correspondences) {
                     const auto& [point, point_data, neighbor] = correspondence;
-                    threshold_min = std::max(threshold_min, neighbor.weight);
+                    threshold_min = std::min(threshold_min, neighbor.weight);
                 }
                 statistics.threshold.min += threshold_min;
             }

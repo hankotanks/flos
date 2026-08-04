@@ -127,8 +127,6 @@ private:
     std::pair<Sophus::SE3f, Sophus::SE3f> align(Wrapper& points, const Sophus::SE3f& delta);
 private:
     Config config_;
-    // NOTE: see note in segmentation/node.h
-    static constexpr float VOXEL_SIZE_SCALAR{1.f}; // TODO: remove when I'm confident it won't change anymore
     // simplified from the robust kernel, which had no appreciable benefit
     static constexpr float CORRESPONDENCE_MULTIPLIER{3.f};
     // lookup table for config_.correspondence.threshold
