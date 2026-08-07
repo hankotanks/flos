@@ -62,48 +62,6 @@ void deskew_frame(util::Cloud& points, const Sophus::SE3f& motion) noexcept {
 } // private scope
 
 namespace {
-#if 1
-inline float weight(const std::array<float, classes::COUNT>& fst, const std::array<float, classes::COUNT>& snd) {
-    float jsd = 0.f;
-    for(size_t i = 0; i < classes::COUNT; ++i) {
-        const float p = fst[i];
-        const float q = snd[i];
-        const float m = 0.5f * (p + q);
-        if(m == 0.f) continue;
-        if(p > 0.f) jsd += 0.5f * p * std::log2(p / m);
-        if(q > 0.f) jsd += 0.5f * q * std::log2(q / m);
-    }
-    assert(jsd >= 0.f && jsd <= 1.f);
-    return 1.f - std::sqrt(jsd);
-}
-#else
-inline float weight(const std::array<float, classes::COUNT>& fst, const std::array<float, classes::COUNT>& snd) {
-    float w = 0.f;
-    for(size_t i = 0; i < classes::COUNT; ++i) w += fst[i] * snd[i];
-    assert(w >= 0.f && w <= 1.f);
-    return w;
-}
-#endif
-
-inline float weight_point(const OdometrySystem::Belief& voxel, const OdometrySystem::Semantics& point, const OdometrySystem::Semantics& query) {
-    (void) voxel;
-    return weight(point.confidence, query.confidence);
-}
-
-inline float weight_voxel(const OdometrySystem::Belief& voxel, const OdometrySystem::Semantics& point, const OdometrySystem::Semantics& query) {
-    (void) point;
-    return weight(voxel.confidence, query.confidence);
-}
-
-inline float weight_const(const OdometrySystem::Belief& voxel, const OdometrySystem::Semantics& point, const OdometrySystem::Semantics& query) {
-    (void) voxel;
-    (void) point;
-    (void) query;
-    return 1.f;
-}
-} // private scope
-
-namespace {
 inline float linear_velocity(const Eigen::Matrix<float,6,1>& xi, float dt) {
     return xi.tail<3>().norm() / dt;
 }
@@ -123,17 +81,12 @@ inline float angular_velocity(const Eigen::Matrix<float,6,1>& xi, float dt) {
 
 OdometrySystem::OdometrySystem(const Config& config) : util::Profiler("OdometrySystem"),
     config_(config),
-    map_(config.max_distance, config.voxel_size, config.voxel_capacity, config.correspondence.weighting ? (config.correspondence.weighting_by_belief ? weight_voxel : weight_point) : weight_const),
+    map_(config.max_distance, config.voxel_size, config.voxel_capacity),
     threshold_(config.max_distance, config.threshold.initial, config.threshold.motion) {
     size_t max_threads = config.max_threads > 0 ? \
         config.max_threads : tbb::this_task_arena::max_concurrency();
     volatile static const tbb::global_control _ = tbb::global_control( // NOTE: static storage type is required here
-        tbb::global_control::max_allowed_parallelism, static_cast<size_t>(max_threads));
-    // create lookup table for min_weight
-    correspondence_threshold_.resize(classes::COUNT);
-    for(const auto& [cls, weight] : config_.correspondence.threshold) {
-        correspondence_threshold_[cls] = weight;
-    }   
+        tbb::global_control::max_allowed_parallelism, static_cast<size_t>(max_threads)); 
 }
 
 const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points) noexcept {
@@ -192,7 +145,7 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigne
     return last_pose_;
 }
 
-OdometrySystem::Belief::Belief(const OdometrySystem::Weight& weight) : weight_(weight) { 
+OdometrySystem::Belief::Belief() { 
     // populate will a flat distribution
     // NOTE: distribution will be populated by the VoxelMap::update, so we don't need to worry about it
     static constexpr float UNIFORM_CONFIDENCE = 1.f / static_cast<float>(classes::COUNT);
@@ -222,6 +175,32 @@ void OdometrySystem::Belief::finish() noexcept {
     for(size_t i = 1; i < classes::COUNT; ++i) sum += confidence[i];
     for(size_t i = 0; i < classes::COUNT; ++i) confidence[i] /= sum;
 }
+
+bool OdometrySystem::Belief::accept(const OdometrySystem::Semantics& query) const noexcept {
+    return prediction == query.prediction;
+}
+
+#if 0
+float OdometrySystem::Belief::weight(const OdometrySystem::Semantics& query) const noexcept {
+    float jsd = 0.f;
+    for(size_t i = 0; i < classes::COUNT; ++i) {
+        const float p = confidence[i];
+        const float q = query.confidence[i];
+        const float m = 0.5f * (p + q);
+        if(m == 0.f) continue;
+        if(p > 0.f) jsd += 0.5f * p * std::log2(p / m);
+        if(q > 0.f) jsd += 0.5f * q * std::log2(q / m);
+    }
+    return 1.f - std::sqrt(std::clamp(jsd, 0.f, 1.f));
+}
+#else
+float OdometrySystem::Belief::weight(const OdometrySystem::Semantics& query) const noexcept {
+    float w = 0.f;
+    for(size_t i = 0; i < classes::COUNT; ++i) w += confidence[i] * query.confidence[i];
+    assert(w >= 0.f && w <= 1.f);
+    return w;
+}
+#endif
 
 OdometrySystem::Wrapper::Wrapper(util::Cloud& points) : points_(points.points()), class_(points.field<uint8_t>("class")) {
     for(size_t i = 0; i < classes::COUNT; ++i) {
@@ -277,9 +256,7 @@ OdometrySystem::CorrespondenceSet OdometrySystem::correspond(const Wrapper& poin
     tbb::parallel_for(tbb::blocked_range<size_t>{0, points.size()}, [this, &points, &correspondences, correspondence_distance_sq](const tbb::blocked_range<size_t>& range) {
         for(size_t i = range.begin(); i < range.end(); ++i) {
             const auto& [point, point_data] = points[i];
-            const auto& neighbor = this->map_.closest(point, point_data, [this, &point_data](const VoxelMap<Wrapper>::Neighbor& neighbor) {
-                return neighbor.data.prediction == point_data.prediction && neighbor.weight > this->correspondence_threshold_[point_data.prediction];
-            }, correspondence_distance_sq);
+            const auto& neighbor = this->map_.closest(point, point_data, correspondence_distance_sq);
             if(neighbor) correspondences.emplace_back(point, point_data, *neighbor);
         }
     });
@@ -422,7 +399,5 @@ std::ostream& operator<<(std::ostream& stream, const OdometrySystem::Config& con
         "\tmax_threads: " << config.max_threads << "," << std::endl <<
         "\tconvergence_criterion: " << config.convergence_criterion << "," << std::endl <<
         "\tcorrespondence_weighting: " << config.correspondence.weighting << "," << std::endl <<
-        "\tcorrespondence_weighting_by_belief: " << config.correspondence.weighting_by_belief << "," << std::endl <<
-        "\tcorrespondence_target: " << config.correspondence.target << "," << std::endl <<
-        "\tcorrespondence_threshold: " << format_threshold(config.correspondence.threshold);
+        "\tcorrespondence_target: " << config.correspondence.target;
 }

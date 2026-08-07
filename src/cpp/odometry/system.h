@@ -33,9 +33,7 @@ public:
         struct {
             bool weighting{true}; // weights associations based on the aggreement between the point's class distribution and the voxel's accumulated belief
             // NOTE: a current limitation is that when weighting_by_belief is false, the voxel belief is still used for the weight
-            bool weighting_by_belief{true}; // when false, association weights are dependent on the matched point rather than the voxel's accumulated belief
             size_t target{0};
-            std::map<size_t, float> threshold; // define thresholds for target semantic classes and filter out correspondences with weights lower than...
         } correspondence;
     public:
         friend std::ostream& operator<<(std::ostream& stream, const Config& config);
@@ -61,25 +59,22 @@ public:
         std::array<float, classes::COUNT> confidence;
         explicit Semantics() = default;
     };
-    struct Belief;
-    using Weight = float(*)(const Belief&, const Semantics&, const Semantics&);
     // forward declaration
     struct Wrapper;
     // voxel belief
-    struct Belief: public VoxelData<Wrapper, Semantics, Weight> {
-        Belief(const Weight&);
+    struct Belief: public VoxelData<Wrapper, Semantics> {
+        explicit Belief();
         virtual void update(const Semantics& data) noexcept override final;
-        virtual float weight(const Semantics& closest, const Semantics& query) const noexcept override final { return weight_(*this, closest, query); }
         virtual void finish() noexcept override final;
+        virtual bool accept(const Semantics& data) const noexcept override final;
+        virtual float weight(const Semantics& query) const noexcept override final;
     public:
         size_t prediction;
         std::array<float, classes::COUNT> belief; 
         std::array<float, classes::COUNT> confidence;
-    private:
-        Weight weight_;
     };
     // util::Cloud wrapper for fast access of fields
-    struct Wrapper : public Frame<Wrapper, Semantics, Belief, Weight> {
+    struct Wrapper : public Frame<Wrapper, Semantics, Belief> {
         friend Belief;
         Wrapper(util::Cloud& points);
         virtual inline size_t size() const noexcept override final { return points_.size(); };
@@ -127,8 +122,6 @@ private:
     Config config_;
     // simplified from the robust kernel, which had no appreciable benefit
     static constexpr float CORRESPONDENCE_MULTIPLIER{3.f};
-    // lookup table for config_.correspondence.threshold
-    std::vector<float> correspondence_threshold_;
     // previous frame state
     Sophus::SE3f last_pose_;
     Sophus::SE3f last_delta_;

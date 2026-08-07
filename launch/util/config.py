@@ -36,9 +36,7 @@ class Config:
             'max_threads': (int, False), 
             'convergence_criterion': (float, False),
             'correspondence_weighting': (bool, False), 
-            'correspondence_weighting_by_belief': (bool, False),
             'correspondence_target': (int, False),
-            'correspondence_threshold': (typing.Dict[int, float], False),
         }
 
     def __init__(self, context):

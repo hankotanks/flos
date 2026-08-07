@@ -23,9 +23,7 @@ struct OdometryNodeConfig {
         util::param_opt(node, "convergence_criterion", config.convergence_criterion);
         // correspondence
         util::param_opt(node, "correspondence_weighting", config.correspondence.weighting);
-        util::param_opt(node, "correspondence_weighting_by_belief", config.correspondence.weighting_by_belief);
         util::param_opt(node, "correspondence_target", config.correspondence.target);
-        util::param_opt(node, "correspondence_threshold", config.correspondence.threshold);
         // log parameters
         RCLCPP_INFO_STREAM(node->get_logger(), config);
     }
