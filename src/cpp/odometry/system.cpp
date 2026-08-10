@@ -324,8 +324,35 @@ std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, con
             experimental.pose_refined = T_bev * initial_guess;
             experimental.T_bev_projected = T_bev_projected;
             experimental.T_bev = T_bev;
-            points.transform(T_bev);
-            initial_guess = T_bev * initial_guess;
+            Sophus::SE3f predicted_left =
+                last_pose_ * delta * last_pose_.inverse();
+
+            Sophus::SE3f bev_left = T_bev;
+
+            const auto predicted_xi = predicted_left.log();
+            const auto correction_xi = T_bev.log();
+
+            const float predicted_translation = predicted_xi.head<3>().norm();
+
+            const float correction_translation = correction_xi.head<3>().norm();
+
+            const float predicted_rotation = predicted_xi.tail<3>().norm();
+
+            const float correction_rotation = correction_xi.tail<3>().norm();
+
+            const bool bad_translation = correction_translation > predicted_translation;
+
+            const bool bad_rotation = correction_rotation > predicted_rotation;
+
+            if(!bad_rotation && !bad_translation) {
+                points.transform(T_bev);
+                initial_guess = T_bev * initial_guess;
+                experimental.accepted = true;
+            } else {
+                experimental.accepted = false;
+            }
+        } else {
+            experimental.accepted = false;
         }
     }
     // compute adaptive threshold

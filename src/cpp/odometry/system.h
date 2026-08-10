@@ -18,9 +18,9 @@
 
 class OdometrySystem: util::Profiler {
 public:
-    struct Config { // TODO: flatten this config structure to mirror SegmentationSystem::Config
+    struct Config {
         float max_distance{50.f};
-        float max_distance_fit{15.f};
+        float max_distance_fit{25.f};
         float voxel_size{1.f}; // NOTE: downsampling approach has changed from kiss-icp
         size_t voxel_capacity{20};
         struct {
@@ -149,6 +149,7 @@ public:
         Sophus::SE3f T_bev;
         std::vector<Eigen::Vector3f> stem_initial;
         std::vector<Eigen::Vector3f> stem_refined;
+        bool accepted{true};
     };
     Experimental experimental;
     std::pair<Eigen::Vector3f, Eigen::Matrix3f> fit_ground_plane(const Eigen::Vector3f& origin) noexcept;

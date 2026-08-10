@@ -201,7 +201,7 @@ BEV::BEV(const Eigen::Vector3f& centroid, const Eigen::Matrix3f& ground, const s
     Eigen::Vector3f t1 = ground.col(1);
     Eigen::Vector3f t2 = ground.col(2);
     for(size_t i = 0; i < points.size(); ++i) {
-        if(semantics[i] != 3 || points[i].squaredNorm() > max_distance_sq) continue;
+        if(semantics[i] != 3) continue;
         Eigen::Vector3f local = points[i] - centroid;
         Eigen::Vector2f local_proj{t1.dot(local), t2.dot(local)};
         if(local_proj.squaredNorm() > max_distance_sq) continue;
@@ -210,6 +210,7 @@ BEV::BEV(const Eigen::Vector3f& centroid, const Eigen::Matrix3f& ground, const s
     centroids = dbscan2d::cluster_centroids(projection, voxel_size, voxel_capacity / 2);
 }
 
+#if 0
 Sophus::SE2f BEV::align(const BEV& target, float cell_size) {
     if(centroids.empty() || target.centroids.empty()) return Sophus::SE2f();
 
@@ -376,6 +377,251 @@ Sophus::SE2f BEV::align(const BEV& target, float cell_size) {
 
     return T;
 }
+#else
+Sophus::SE2f BEV::align(const BEV& target, float cell_size) {
+    if (centroids.empty() || target.centroids.empty())
+        return Sophus::SE2f();
+
+    const float max_d2 = cell_size * cell_size * 4.f;
+
+    struct Cell {
+        int x, y;
+
+        bool operator==(const Cell& o) const {
+            return x == o.x && y == o.y;
+        }
+    };
+
+    struct Hash {
+        std::size_t operator()(const Cell& c) const {
+            return std::hash<int>{}(c.x) ^
+                   (std::hash<int>{}(c.y) << 1);
+        }
+    };
+
+    auto cell = [cell_size](const Eigen::Vector2f& p) {
+        return Cell{
+            static_cast<int>(std::floor(p.x() / cell_size)),
+            static_cast<int>(std::floor(p.y() / cell_size))
+        };
+    };
+
+    // ------------------------------------------------------------
+    // Target spatial grid.
+    // ------------------------------------------------------------
+
+    std::unordered_map<Cell, std::vector<std::size_t>, Hash> target_grid;
+
+    for (std::size_t j = 0; j < target.centroids.size(); ++j)
+        target_grid[cell(target.centroids[j])].push_back(j);
+
+    Sophus::SE2f T;
+
+    for (int iter = 0; iter < 500; ++iter) {
+        std::vector<Eigen::Vector2f> src_corr;
+        std::vector<Eigen::Vector2f> tgt_corr;
+
+        src_corr.reserve(centroids.size());
+        tgt_corr.reserve(centroids.size());
+
+        // ------------------------------------------------------------
+        // Transform source points using current estimate.
+        // ------------------------------------------------------------
+
+        std::vector<Eigen::Vector2f> transformed_src(
+            centroids.size());
+
+        for (std::size_t i = 0; i < centroids.size(); ++i)
+            transformed_src[i] = T * centroids[i];
+
+        // ------------------------------------------------------------
+        // Find best target for every source.
+        //
+        // source_best[i] = target index, or npos if none is close enough.
+        // ------------------------------------------------------------
+
+        const std::size_t npos = std::numeric_limits<std::size_t>::max();
+
+        std::vector<std::size_t> source_best(
+            centroids.size(), npos);
+
+        std::vector<float> source_best_d2(
+            centroids.size(), std::numeric_limits<float>::max());
+
+        for (std::size_t i = 0; i < transformed_src.size(); ++i) {
+            const Eigen::Vector2f& p = transformed_src[i];
+            const Cell c = cell(p);
+
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    const Cell nc{c.x + dx, c.y + dy};
+
+                    const auto it = target_grid.find(nc);
+                    if (it == target_grid.end())
+                        continue;
+
+                    for (const std::size_t j : it->second) {
+                        const float d2 =
+                            (p - target.centroids[j]).squaredNorm();
+
+                        if (d2 < max_d2 &&
+                            d2 < source_best_d2[i]) {
+                            source_best_d2[i] = d2;
+                            source_best[i] = j;
+                        }
+                    }
+                }
+            }
+        }
+
+        // ------------------------------------------------------------
+        // Build a spatial grid of the TRANSFORMED source points.
+        //
+        // This allows us to perform the reverse query:
+        // for every target point, find its nearest source point.
+        // ------------------------------------------------------------
+
+        std::unordered_map<Cell, std::vector<std::size_t>, Hash>
+            source_grid;
+
+        for (std::size_t i = 0; i < transformed_src.size(); ++i)
+            source_grid[cell(transformed_src[i])].push_back(i);
+
+        // ------------------------------------------------------------
+        // Find best source for every target.
+        //
+        // target_best[j] = source index, or npos if none is close enough.
+        // ------------------------------------------------------------
+
+        std::vector<std::size_t> target_best(
+            target.centroids.size(), npos);
+
+        std::vector<float> target_best_d2(
+            target.centroids.size(),
+            std::numeric_limits<float>::max());
+
+        for (std::size_t j = 0; j < target.centroids.size(); ++j) {
+            const Eigen::Vector2f& q = target.centroids[j];
+            const Cell c = cell(q);
+
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    const Cell nc{c.x + dx, c.y + dy};
+
+                    const auto it = source_grid.find(nc);
+                    if (it == source_grid.end())
+                        continue;
+
+                    for (const std::size_t i : it->second) {
+                        const float d2 =
+                            (transformed_src[i] - q).squaredNorm();
+
+                        if (d2 < max_d2 &&
+                            d2 < target_best_d2[j]) {
+                            target_best_d2[j] = d2;
+                            target_best[j] = i;
+                        }
+                    }
+                }
+            }
+        }
+
+        // ------------------------------------------------------------
+        // Mutual nearest-neighbor correspondences.
+        //
+        // Accept (i,j) only if:
+        //
+        //     best target of i == j
+        //     best source of j == i
+        // ------------------------------------------------------------
+
+        for (std::size_t i = 0; i < centroids.size(); ++i) {
+            const std::size_t j = source_best[i];
+
+            if (j == npos)
+                continue;
+
+            if (target_best[j] != i)
+                continue;
+
+            src_corr.push_back(transformed_src[i]);
+            tgt_corr.push_back(target.centroids[j]);
+        }
+
+        // ------------------------------------------------------------
+        // Need at least two correspondences to estimate SE(2).
+        //
+        // With fewer than two, do not attempt the SVD.
+        // Return the estimate accumulated so far.
+        // ------------------------------------------------------------
+
+        if (src_corr.size() < 2)
+            break;
+
+        // ------------------------------------------------------------
+        // Estimate dT:
+        //
+        //     tgt_corr ~= dT * src_corr
+        // ------------------------------------------------------------
+
+        Eigen::Vector2f src_mean = Eigen::Vector2f::Zero();
+        Eigen::Vector2f tgt_mean = Eigen::Vector2f::Zero();
+
+        for (std::size_t i = 0; i < src_corr.size(); ++i) {
+            src_mean += src_corr[i];
+            tgt_mean += tgt_corr[i];
+        }
+
+        src_mean /= static_cast<float>(src_corr.size());
+        tgt_mean /= static_cast<float>(tgt_corr.size());
+
+        Eigen::Matrix2f H = Eigen::Matrix2f::Zero();
+
+        for (std::size_t i = 0; i < src_corr.size(); ++i) {
+            H +=
+                (src_corr[i] - src_mean) *
+                (tgt_corr[i] - tgt_mean).transpose();
+        }
+
+        Eigen::JacobiSVD<Eigen::Matrix2f> svd(
+            H,
+            Eigen::ComputeFullU | Eigen::ComputeFullV);
+
+        Eigen::Matrix2f U = svd.matrixU();
+        Eigen::Matrix2f V = svd.matrixV();
+
+        Eigen::Matrix2f R = V * U.transpose();
+
+        if (R.determinant() < 0.0f) {
+            V.col(1) *= -1.0f;
+            R = V * U.transpose();
+        }
+
+        const Eigen::Vector2f t =
+            tgt_mean - R * src_mean;
+
+        const float theta =
+            std::atan2(R(1, 0), R(0, 0));
+
+        const Sophus::SE2f dT(
+            Sophus::SO2f(theta),
+            t);
+
+        T = dT * T;
+
+        // ------------------------------------------------------------
+        // Convergence.
+        // ------------------------------------------------------------
+
+        if (dT.translation().norm() < 1e-4f &&
+            std::abs(dT.so2().log()) < 1e-4f) {
+            break;
+        }
+    }
+
+    return T;
+}
+#endif
 
 void BEV::transform(const Sophus::SE2f& T) {
     std::for_each(projection.begin(), projection.end(), [&T](Eigen::Vector2f& p) { p = T * p; });

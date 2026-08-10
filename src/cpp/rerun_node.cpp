@@ -147,6 +147,7 @@ protected:
             rr_.log("bev/2/R", rerun::Scalar(experimental.T_bev_projected.so2().log()));
             rr_.log("bev/3/t", rerun::Scalar(experimental.T_bev.translation().norm()));
             rr_.log("bev/3/R", rerun::Scalar(experimental.T_bev.so3().log().norm()));
+            rr_.log("bev/accepted", rerun::Scalar(experimental.accepted ? 1.f : 0.f));
         }
     }
 private:
