@@ -37,6 +37,24 @@ struct Frame {
     virtual std::pair<const Eigen::Vector3f&, point_data_type> operator[](size_t) const noexcept = 0;
 };
 
+namespace {
+inline Eigen::Vector3i point_to_voxel(const Eigen::Vector3f& point, double voxel_size) {
+    return {
+        static_cast<int>(std::floor(point.x() / voxel_size)),
+        static_cast<int>(std::floor(point.y() / voxel_size)),
+        static_cast<int>(std::floor(point.z() / voxel_size))
+    };
+}
+
+inline Eigen::Vector3f voxel_to_point(const Eigen::Vector3i& voxel, double voxel_size) {
+    return {
+        (static_cast<float>(voxel.x()) + 0.5f) * static_cast<float>(voxel_size),
+        (static_cast<float>(voxel.y()) + 0.5f) * static_cast<float>(voxel_size),
+        (static_cast<float>(voxel.z()) + 0.5f) * static_cast<float>(voxel_size)
+    };
+}
+} // private scope
+
 template<typename F>
 struct VoxelMap {
     static_assert(std::is_default_constructible_v<typename F::voxel_data_type>);
@@ -53,6 +71,8 @@ public:
     VoxelMap& operator=(VoxelMap&&) = delete;
     ~VoxelMap() = default;
 public:
+    inline Eigen::Vector3i point_to_voxel(const Eigen::Vector3f& point) const noexcept { return ::point_to_voxel(point, voxel_size_); }
+    inline Eigen::Vector3f voxel_to_point(const Eigen::Vector3i& voxel) const noexcept { return ::voxel_to_point(voxel, voxel_size_); }
     inline void clear() { map_.clear(); }
     inline bool empty() const { return map_.empty(); }
     // update functions 
@@ -60,6 +80,9 @@ public:
     // bool(*)(const F::voxel_data_type&, const F::point_data_type&)
     void update(F& points, const Sophus::SE3f& pose);
     void extend(const F& points);
+public:
+    template<typename UnaryFunc>
+    void for_each_in_radius(const Eigen::Vector3f& origin, float radius, UnaryFunc&& f) const noexcept;
 public:
     struct Cloud {
         std::vector<Eigen::Vector3f> points;
@@ -116,24 +139,6 @@ private:
     tsl::robin_map<Eigen::Vector3i, Voxel> map_;
 };
 
-namespace {
-inline Eigen::Vector3i point_to_voxel(const Eigen::Vector3f& point, double voxel_size) {
-    return {
-        static_cast<int>(std::floor(point.x() / voxel_size)),
-        static_cast<int>(std::floor(point.y() / voxel_size)),
-        static_cast<int>(std::floor(point.z() / voxel_size))
-    };
-}
-
-inline Eigen::Vector3f voxel_to_point(const Eigen::Vector3i& voxel, double voxel_size) {
-    return {
-        (static_cast<float>(voxel.x()) + 0.5f) * static_cast<float>(voxel_size),
-        (static_cast<float>(voxel.y()) + 0.5f) * static_cast<float>(voxel_size),
-        (static_cast<float>(voxel.z()) + 0.5f) * static_cast<float>(voxel_size)
-    };
-}
-} // private scope
-
 template<typename F>
 void VoxelMap<F>::update(F& points, const Sophus::SE3f& pose) {
     // transform points by pose
@@ -147,7 +152,7 @@ void VoxelMap<F>::update(F& points, const Sophus::SE3f& pose) {
     const auto max_distance_sq = max_distance_ * max_distance_;
     for(auto it = map_.begin(); it != map_.end();) {
         const auto& [voxel, inner] = *it;
-        if((voxel_to_point(voxel, voxel_size_) - origin).squaredNorm() >= max_distance_sq) {
+        if((VoxelMap<F>::voxel_to_point(voxel) - origin).squaredNorm() >= max_distance_sq) {
             it = map_.erase(it);
         } else ++it;
     }
@@ -157,7 +162,7 @@ template<typename F>
 void VoxelMap<F>::extend(const F& points) {
     for(size_t i = 0; i < points.size(); ++i) {
         const auto& [point, data] = points[i];
-        const Eigen::Vector3i voxel = point_to_voxel(point, voxel_size_);
+        const Eigen::Vector3i voxel = VoxelMap<F>::point_to_voxel(point);
         auto search = map_.find(voxel);
         if(search == map_.end()) {
             auto [it, _] = map_.emplace(std::piecewise_construct,
@@ -170,6 +175,28 @@ void VoxelMap<F>::extend(const F& points) {
     // update the VoxelData
     for(auto it = map_.begin(); it != map_.end(); ++it) {
         it.value().data.finish();
+    }
+}
+
+template<typename F>
+template<typename UnaryFunc>
+void VoxelMap<F>::for_each_in_radius(const Eigen::Vector3f& origin, float radius, UnaryFunc&& f) const noexcept {
+    float radius_sq = radius * radius;
+    const Eigen::Vector3i voxel_min = VoxelMap<F>::point_to_voxel(origin - Eigen::Vector3f{radius, radius, radius});
+    const Eigen::Vector3i voxel_max = VoxelMap<F>::point_to_voxel(origin + Eigen::Vector3f{radius, radius, radius});
+    for(int x = voxel_min.x(); x <= voxel_max.x(); ++x) {
+        for(int y = voxel_min.y(); y <= voxel_max.y(); ++y) {
+            for(int z = voxel_min.z(); z <= voxel_max.z(); ++z) {
+                const Eigen::Vector3i query{x, y, z};
+                auto it = map_.find(query);
+                if(it == map_.end()) continue;
+                if((VoxelMap<F>::voxel_to_point(query) - origin).squaredNorm() > radius_sq) continue;
+                const Voxel& voxel = it.value();
+                for(size_t i = 0; i < voxel.points.size(); ++i) {
+                    f(voxel.points[i], voxel.point_data[i]);
+                }
+            }
+        }
     }
 }
 
@@ -231,7 +258,7 @@ std::optional<typename VoxelMap<F>::Neighbor> VoxelMap<F>::closest(const Eigen::
     };
     // find the closest match that respects the provided predicate
     if(map_.empty()) return std::nullopt;
-    Eigen::Vector3i key_center = point_to_voxel(query, voxel_size_);
+    Eigen::Vector3i key_center = VoxelMap<F>::point_to_voxel(query);
     typename VoxelMap<F>::Neighbor neighbor;
     neighbor.distance_sq = std::numeric_limits<float>::max();
     const Voxel* voxel{nullptr};

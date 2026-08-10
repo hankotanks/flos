@@ -84,6 +84,7 @@ public:
                     this->publish_local_map(header.stamp, *local_map_);
                 }
                 this->publish_pose(header.stamp, header.frame_id, pose);
+                this->publish_experimental(header.stamp, pose, odometry_system_.experimental);
             }
             this->publish_statistics(header.stamp, odometry_system_.statistics);
             const auto [percent, remaining] = OfflineNode::compute_progress();
@@ -94,6 +95,7 @@ protected:
     virtual void publish_scan(const std_msgs::msg::Header::_stamp_type& stamp, const util::Cloud& cloud) { /* STUB */ };
     virtual void publish_local_map(const std_msgs::msg::Header::_stamp_type& stamp, const util::Cloud& cloud) { /* STUB */ };
     virtual void publish_pose(const std_msgs::msg::Header::_stamp_type& stamp, const std_msgs::msg::Header::_frame_id_type& frame_id, const Sophus::SE3f& pose) { /* STUB */ };
+    virtual void publish_experimental(const std_msgs::msg::Header::_stamp_type& stamp, const Sophus::SE3f& pose, const OdometrySystem::Experimental& experimental) { /* STUB */ };
     virtual void publish_statistics(const std_msgs::msg::Header::_stamp_type& stamp, const OdometrySystem::Statistics& statistics) { /* STUB */ };
     virtual void publish_progress(const std_msgs::msg::Header::_stamp_type& stamp, float percent, float remaining) { /* STUB */ }
 private:

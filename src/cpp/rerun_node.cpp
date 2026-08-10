@@ -5,6 +5,7 @@
 // package
 #include "offline_node.h"
 // util
+#include "rerun/archetypes/line_strips3d.hpp"
 #include "util/cloud.h"
 
 // PARAMETERS
@@ -63,6 +64,90 @@ protected:
         RerunNode::set_stamp(stamp);
         rr_.log("progress/percent", rerun::Scalar(percent));
         rr_.log("progress/remaining", rerun::Scalar(remaining));
+    }
+
+    virtual void publish_experimental(const std_msgs::msg::Header::_stamp_type& stamp, const Sophus::SE3f& pose, const OdometrySystem::Experimental& experimental) override {
+        // ground plane in 3d
+        float s = 10.f;
+        Eigen::Vector3f normal = experimental.plane.col(0);
+        Eigen::Vector3f t1 = experimental.plane.col(1);
+        Eigen::Vector3f t2 = experimental.plane.col(2);
+        Eigen::Vector3f p0 = (experimental.centroid + s * t1 + s * t2);
+        Eigen::Vector3f p1 = (experimental.centroid + s * t1 - s * t2);
+        Eigen::Vector3f p2 = (experimental.centroid - s * t1 - s * t2);
+        Eigen::Vector3f p3 = (experimental.centroid - s * t1 + s * t2);
+        RerunNode::set_stamp(stamp);
+        rerun::LineStrip3D plane{{
+            {p0.x(), p0.y(), p0.z()},
+            {p1.x(), p1.y(), p1.z()},
+            {p2.x(), p2.y(), p2.z()},
+            {p3.x(), p3.y(), p3.z()},
+            {p0.x(), p0.y(), p0.z()},
+        }};
+        rr_.log("scan/ground", rerun::LineStrips3D(plane));
+        // projected points
+        {
+            std::vector<rerun::Vec2D> points;
+            for(const auto& p : experimental.bev_prev.projection) {
+                points.emplace_back(p.x(), p.y());
+            }
+            rr_.log("scan/projection/prev", rerun::Points2D(points));
+        }
+        {
+            std::vector<rerun::Vec2D> points;
+            for(const auto& p : experimental.bev_prev.centroids) {
+                points.emplace_back(p.x(), p.y());
+            }
+            rr_.log("scan/projection/prev/centroids", rerun::Points2D(points));
+        }
+        {
+            std::vector<rerun::Vec2D> points;
+            for(const auto& p : experimental.bev_curr.projection) {
+                points.emplace_back(p.x(), p.y());
+            }
+            rr_.log("scan/projection/curr", rerun::Points2D(points));
+        }
+        {
+            std::vector<rerun::Vec2D> points;
+            for(const auto& p : experimental.bev_curr.centroids) {
+                points.emplace_back(p.x(), p.y());
+            }
+            rr_.log("scan/projection/curr/centroids", rerun::Points2D(points));
+        }
+        {
+            std::vector<rerun::Vec2D> points;
+            for(const auto& p : experimental.bev_curr_post.projection) {
+                points.emplace_back(p.x(), p.y());
+            }
+            rr_.log("scan/projection/curr_align", rerun::Points2D(points));
+        }
+        {
+            std::vector<rerun::Vec2D> points;
+            for(const auto& p : experimental.bev_curr_post.centroids) {
+                points.emplace_back(p.x(), p.y());
+            }
+            rr_.log("scan/projection/curr_align/centroids", rerun::Points2D(points));
+        }
+        {
+            const auto& t = experimental.pose_initial.translation();
+            // TODO: I would prefer this be a LineStrips3D
+            rr_.log("trajectory/initial", rerun::Points3D().with_positions({
+                rerun::Position3D(t.x(), t.y(), t.z())
+            }).with_radii(RerunNode::DEFAULT_POINT_RADIUS * 3.f));
+        }
+        {
+            const auto& t = experimental.pose_refined.translation();
+            // TODO: I would prefer this be a LineStrips3D
+            rr_.log("trajectory/refined", rerun::Points3D().with_positions({
+                rerun::Position3D(t.x(), t.y(), t.z())
+            }).with_radii(RerunNode::DEFAULT_POINT_RADIUS * 3.f));
+        }
+        {
+            rr_.log("bev/2/t", rerun::Scalar(experimental.T_bev_projected.translation().norm()));
+            rr_.log("bev/2/R", rerun::Scalar(experimental.T_bev_projected.so2().log()));
+            rr_.log("bev/3/t", rerun::Scalar(experimental.T_bev.translation().norm()));
+            rr_.log("bev/3/R", rerun::Scalar(experimental.T_bev.so3().log().norm()));
+        }
     }
 private:
     void publish_points(const util::Cloud& cloud, const std::string& topic, std::optional<rerun::Color> single_color = std::nullopt, float radius_scalar = 1.f) {

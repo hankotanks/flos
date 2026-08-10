@@ -1,6 +1,7 @@
 #include "odometry/system.h"
 
 // system
+#include <Eigen/src/Eigenvalues/SelfAdjointEigenSolver.h>
 #include <algorithm>
 #include <limits>
 #include <optional>
@@ -11,6 +12,7 @@
 #include <tbb/parallel_reduce.h>
 #include <tbb/parallel_sort.h>
 // package
+#include "odometry/bev.h"
 #include "classes.h"
 // util
 #include "util/cloud.h"
@@ -310,6 +312,22 @@ std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, con
     Sophus::SE3f initial_guess = last_pose_ * delta;
     if(map_.empty()) return std::make_pair(initial_guess, Sophus::SE3f{});
     points.transform(initial_guess);
+    {
+        experimental.pose_initial = initial_guess;
+        experimental.bev_prev = std::move(experimental.bev_prev_next);
+        experimental.bev_curr = points.project(experimental.centroid, experimental.plane, config_.max_distance_fit, config_.voxel_size, config_.voxel_capacity);
+        if(experimental.bev_curr.centroids.size() > 0 && experimental.bev_prev.centroids.size() > 0) {
+            Sophus::SE2f T_bev_projected = experimental.bev_curr.align(experimental.bev_prev, config_.voxel_size);
+            experimental.bev_curr_post = experimental.bev_curr;
+            experimental.bev_curr_post.transform(T_bev_projected);
+            Sophus::SE3f T_bev = OdometrySystem::lift(T_bev_projected, experimental.centroid, experimental.plane);
+            experimental.pose_refined = T_bev * initial_guess;
+            experimental.T_bev_projected = T_bev_projected;
+            experimental.T_bev = T_bev;
+            points.transform(T_bev);
+            initial_guess = T_bev * initial_guess;
+        }
+    }
     // compute adaptive threshold
     float sigma = threshold_.compute();
     // retrieve fields ahead of time to avoid repeated queries
@@ -351,8 +369,54 @@ termination:;
     }
     // compute new pose
     Sophus::SE3f pose = T_icp * initial_guess;
+    PROFILE(experiment, &profiler) {
+        const auto [centroid, plane] = OdometrySystem::fit_ground_plane(pose.translation());
+        experimental.centroid = centroid;
+        experimental.plane = plane;
+        experimental.bev_prev_next = points.project(experimental.centroid, experimental.plane, config_.max_distance_fit, config_.voxel_size, config_.voxel_capacity);
+    }
     // return transformation and deviation
     return std::make_pair(pose, initial_guess.inverse() * pose);
+}
+
+std::pair<Eigen::Vector3f, Eigen::Matrix3f> OdometrySystem::fit_ground_plane(const Eigen::Vector3f& origin) noexcept {
+    // centroid
+    Eigen::Vector3f centroid = Eigen::Vector3f::Zero();
+    size_t count{0};
+    map_.for_each_in_radius(origin, config_.max_distance_fit, [&centroid, &count](const Eigen::Vector3f& point, const OdometrySystem::Semantics& semantics) {
+        if(semantics.prediction != 1) return;
+        centroid += point;
+        count++;
+    });
+    centroid /= static_cast<float>(count);
+    // covariance
+    Eigen::Matrix3f S = Eigen::Matrix3f::Zero();
+    map_.for_each_in_radius(origin, config_.max_distance_fit, [&centroid, &S, &count](const Eigen::Vector3f& point, const OdometrySystem::Semantics& semantics) {
+        if(semantics.prediction != 1) return;
+        const Eigen::Vector3f d = point - centroid;
+        S += d * d.transpose();
+    });
+    S /= static_cast<float>(count);
+    // solve
+    Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> solver{S};
+    Eigen::Matrix3f plane = solver.eigenvectors();
+    if(plane.col(1).cross(plane.col(2)).dot(plane.col(0)) < 0.f) plane.col(2) *= -1.f;
+    return std::make_pair(centroid, plane);
+}
+
+Sophus::SE3f OdometrySystem::lift(const Sophus::SE2f& dT, const Eigen::Vector3f& centroid, const Eigen::Matrix3f& plane) {
+    Eigen::Matrix3f R_plane = Eigen::Matrix3f::Identity();
+    R_plane.block<2, 2>(1, 1) = dT.so2().matrix();
+
+    const Eigen::Matrix3f R3 =
+        plane * R_plane * plane.transpose();
+
+    const Eigen::Vector3f t3 =
+        centroid
+        + plane.block<3, 2>(0, 1) * dT.translation()
+        - R3 * centroid;
+
+    return Sophus::SE3f{R3, t3};
 }
 
 void OdometrySystem::AdaptiveThreshold::update(const Sophus::SE3f& deviation) noexcept {
