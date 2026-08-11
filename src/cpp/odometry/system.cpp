@@ -1,7 +1,6 @@
 #include "odometry/system.h"
 
 // system
-#include <Eigen/src/Eigenvalues/SelfAdjointEigenSolver.h>
 #include <algorithm>
 #include <limits>
 #include <optional>
@@ -231,30 +230,30 @@ std::pair<const Eigen::Vector3f&, OdometrySystem::Semantics> OdometrySystem::Wra
     return std::pair<const Eigen::Vector3f&, Semantics>(points_[i], Wrapper::data(i)); 
 }
 
-std::pair<Sophus::SE3f, float> OdometrySystem::predict_delta(unsigned int seconds, unsigned int nanoseconds) noexcept {
+std::pair<Sophus::SE3f, double> OdometrySystem::predict_delta(unsigned int seconds, unsigned int nanoseconds) noexcept {
     // handling depends on whether we rely on timestamps
     if(config_.fixed_dt) {
         return std::make_pair(last_delta_, 1.f);
     } else {
         if(init_seconds_ == std::numeric_limits<unsigned int>::max()) init_seconds_ = seconds;
-        float stamp = static_cast<float>(seconds - init_seconds_) + 1e-9 * static_cast<float>(nanoseconds);
-        float dt_prev = last_stamp_ - prev_stamp_;
-        float dt_curr = stamp - last_stamp_;
-        float scale = 1.f;
-        if(dt_prev > 1e-6) scale = static_cast<float>(dt_curr / dt_prev);
+        double stamp = static_cast<double>(seconds - init_seconds_) + 1e-9 * static_cast<double>(nanoseconds);
+        double dt_prev = last_stamp_ - prev_stamp_;
+        double dt_curr = stamp - last_stamp_;
+        double scale = 1.0;
+        if(dt_prev > 1e-6) scale = static_cast<double>(dt_curr / dt_prev);
         // update timestamp state
         prev_stamp_ = last_stamp_;
         last_stamp_ = stamp;
         // compute predicted delta:
-        return std::make_pair(Sophus::SE3f::exp(scale * last_delta_.log()), dt_curr);
+        return std::make_pair(Sophus::SE3d::exp(scale * last_delta_.cast<double>().log()).cast<float>(), dt_curr);
     }
 }
 
-OdometrySystem::CorrespondenceSet OdometrySystem::correspond(const Wrapper& points, float sigma) const noexcept {
+OdometrySystem::CorrespondenceSet OdometrySystem::correspond(const Wrapper& points, float correspondence_distance) const noexcept {
     tbb::concurrent_vector<Correspondence> correspondences;
     correspondences.reserve(points.size());
     // collect all correspondences
-    float correspondence_distance_sq = sigma * sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER * OdometrySystem::CORRESPONDENCE_MULTIPLIER;
+    float correspondence_distance_sq = correspondence_distance * correspondence_distance;
     tbb::parallel_for(tbb::blocked_range<size_t>{0, points.size()}, [this, &points, &correspondences, correspondence_distance_sq](const tbb::blocked_range<size_t>& range) {
         for(size_t i = range.begin(); i < range.end(); ++i) {
             const auto& [point, point_data] = points[i];
@@ -275,7 +274,7 @@ OdometrySystem::CorrespondenceSet OdometrySystem::correspond(const Wrapper& poin
     return correspondences;
 }
 
-Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const Wrapper& points, const OdometrySystem::CorrespondenceSet& correspondences) noexcept {
+std::pair<Eigen::Matrix<float, 6, 1>, float> OdometrySystem::solve(const Wrapper& points, const OdometrySystem::CorrespondenceSet& correspondences) noexcept {
     auto compute_jacobian_and_residual = [](const Eigen::Vector3f& source, const Eigen::Vector3f& target) {
         const Eigen::Vector3f residual = source - target;
         Eigen::Matrix<float, 3, 6> J_r;
@@ -284,101 +283,108 @@ Eigen::Matrix<float, 6, 1> OdometrySystem::solve(const Wrapper& points, const Od
         return std::make_tuple(J_r, residual);
     };
 
-    using System = std::pair<Eigen::Matrix<float, 6, 6>, Eigen::Matrix<float, 6, 1>>;
+    using System = std::tuple<Eigen::Matrix<float, 6, 6>, Eigen::Matrix<float, 6, 1>, float>;
     auto sum = [](System a, const System &b) {
-        a.first += b.first;
-        a.second += b.second;
+        auto& [a_H, a_b, a_chi] = a;
+        const auto& [b_H, b_b, b_chi] = b;
+        a_H += b_H;
+        a_b += b_b;
+        a_chi += b_chi;
         return a;
     };
 
     using correspondence_iterator = tbb::concurrent_vector<Correspondence>::const_iterator;
-    const auto &[JTJ, JTr] = tbb::parallel_reduce(
+    const auto &[JTJ, JTr, chi] = tbb::parallel_reduce(
         tbb::blocked_range<correspondence_iterator>{correspondences.cbegin(), correspondences.cend()},
-        System(Eigen::Matrix<float, 6, 6>::Zero(), Eigen::Matrix<float, 6, 1>::Zero()),
+        System(Eigen::Matrix<float, 6, 6>::Zero(), Eigen::Matrix<float, 6, 1>::Zero(), 0.f),
         [&](const tbb::blocked_range<correspondence_iterator>& range, System J) -> System {
             return std::transform_reduce(range.begin(), range.end(), J, sum, [&](const Correspondence& correspondence) {
                     const auto& [source, data, target] = correspondence;
                     const auto& [J_r, residual] = compute_jacobian_and_residual(source, target.point);
                     // weight the kernel based on confidence from the segmentation model
-                    return System(J_r.transpose() * target.weight * J_r, J_r.transpose() * target.weight * residual);
+                    return System(J_r.transpose() * target.weight * J_r, J_r.transpose() * target.weight * residual, residual.squaredNorm());
                 });
         }, sum);
 
-    return JTJ.ldlt().solve(-JTr);
+    return std::make_pair(JTJ.ldlt().solve(-JTr), chi);
 }
 
 std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, const Sophus::SE3f& delta, Profiler& profiler) {
     // determine starting point
     Sophus::SE3f initial_guess = last_pose_ * delta;
     if(map_.empty()) return std::make_pair(initial_guess, Sophus::SE3f{});
+    // compute adaptive threshold
+    float sigma = threshold_.compute();
+    float chi = -1.f;
     points.transform(initial_guess);
     {
         experimental.pose_initial = initial_guess;
         experimental.bev_prev = std::move(experimental.bev_prev_next);
-        experimental.bev_curr = points.project(experimental.centroid, experimental.plane, config_.max_distance_fit, config_.voxel_size, config_.voxel_capacity);
+        experimental.bev_curr = points.project(experimental.centroid, experimental.plane, config_.max_distance, config_.voxel_size, config_.voxel_capacity);
+        experimental.accepted = false;
         if(experimental.bev_curr.centroids.size() > 0 && experimental.bev_prev.centroids.size() > 0) {
-            Sophus::SE2f T_bev_projected = experimental.bev_curr.align(experimental.bev_prev, config_.voxel_size);
-            experimental.bev_curr_post = experimental.bev_curr;
-            experimental.bev_curr_post.transform(T_bev_projected);
-            Sophus::SE3f T_bev = OdometrySystem::lift(T_bev_projected, experimental.centroid, experimental.plane);
-            experimental.pose_refined = T_bev * initial_guess;
-            experimental.T_bev_projected = T_bev_projected;
-            experimental.T_bev = T_bev;
-            Sophus::SE3f predicted_left =
-                last_pose_ * delta * last_pose_.inverse();
-
-            Sophus::SE3f bev_left = T_bev;
-
-            const auto predicted_xi = predicted_left.log();
-            const auto correction_xi = T_bev.log();
-
-            const float predicted_translation = predicted_xi.head<3>().norm();
-
-            const float correction_translation = correction_xi.head<3>().norm();
-
-            const float predicted_rotation = predicted_xi.tail<3>().norm();
-
-            const float correction_rotation = correction_xi.tail<3>().norm();
-
-            const bool bad_translation = correction_translation > predicted_translation;
-
-            const bool bad_rotation = correction_rotation > predicted_rotation;
-
-            if(!bad_rotation && !bad_translation) {
+            if(std::optional<Sophus::SE2f> T_bev_projected = experimental.bev_curr.align(experimental.bev_prev, config_.max_iterations, config_.convergence_criterion, sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER)) {
+                experimental.bev_curr_post = experimental.bev_curr;
+                experimental.bev_curr_post.transform(*T_bev_projected);
+                Sophus::SE3f T_bev = OdometrySystem::lift(*T_bev_projected, experimental.centroid, experimental.plane);
+                experimental.pose_refined = T_bev * initial_guess;
+                experimental.T_bev_projected = *T_bev_projected;
+                experimental.T_bev = T_bev;
+                CorrespondenceSet correspondences_initial = OdometrySystem::correspond(points, sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER);
+                const auto [dx_initial, chi_initial] = OdometrySystem::solve(points, correspondences_initial);
                 points.transform(T_bev);
-                initial_guess = T_bev * initial_guess;
-                experimental.accepted = true;
-            } else {
-                experimental.accepted = false;
+                CorrespondenceSet correspondences_refined = OdometrySystem::correspond(points, sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER);
+                const auto [dx_refined, chi_refined] = OdometrySystem::solve(points, correspondences_refined);
+                if(chi_refined > chi_initial) {
+                    points.transform(T_bev.inverse());
+                } else {
+                    initial_guess = T_bev * initial_guess;
+                    experimental.accepted = true;
+                }
+                /*
+                Sophus::SE3f predicted_left = last_pose_ * delta * last_pose_.inverse();
+                Sophus::SE3f bev_left = T_bev;
+                const auto predicted_xi = predicted_left.log();
+                const auto correction_xi = T_bev.log();
+                const float predicted_translation = predicted_xi.head<3>().norm();
+                const float correction_translation = correction_xi.head<3>().norm();
+                const float predicted_rotation = predicted_xi.tail<3>().norm();
+                const float correction_rotation = correction_xi.tail<3>().norm();
+                const bool bad_translation = correction_translation > predicted_translation;
+                const bool bad_rotation = correction_rotation > predicted_rotation;
+                if(!bad_rotation && !bad_translation) {
+                    points.transform(T_bev);
+                    initial_guess = T_bev * initial_guess;
+                    experimental.accepted = true;
+                }
+                */
             }
-        } else {
-            experimental.accepted = false;
         }
     }
-    // compute adaptive threshold
-    float sigma = threshold_.compute();
+    experimental.correspondence_distance = sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER;
     // retrieve fields ahead of time to avoid repeated queries
     // perform ICP
     Sophus::SE3f T_icp{};
     PROFILE(align, &profiler) {
-        for(size_t j = 0; j < config_.max_iterations; ++j) {
+        for(size_t i = 0; i < config_.max_iterations; ++i) {
             // accumulate iteration count
             PROFILE_SKIP(align) statistics.iterations++;
             CorrespondenceSet correspondences; 
             PROFILE(iteration, &align) {
                 // get correspondences
-                correspondences = OdometrySystem::correspond(points, sigma);
+                correspondences = OdometrySystem::correspond(points, sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER);
                 // update statistics
                 PROFILE_SKIP(iteration) statistics.correspondences += static_cast<float>(correspondences.size());    
                 // Equation (11)
-                const Eigen::Matrix<float, 6, 1> dx = OdometrySystem::solve(points, correspondences);
+                const auto [dx, chi_i] = OdometrySystem::solve(points, correspondences);
                 const Sophus::SE3f est = Sophus::SE3f::exp(dx);
                 // Equation (12)
                 points.transform(est);
                 // Update iterations
                 T_icp = est * T_icp;
-                // Termination criteria
-                if(dx.norm() < config_.convergence_criterion) goto termination;
+                // chi-based termination criteria
+                if(chi > 0.f && std::abs(chi - chi_i) <= config_.convergence_criterion * chi) goto termination;
+                chi = chi_i;
             }
             PROFILE_SKIP(align) {
                 float threshold_min = std::numeric_limits<float>::max();
@@ -400,7 +406,7 @@ termination:;
         const auto [centroid, plane] = OdometrySystem::fit_ground_plane(pose.translation());
         experimental.centroid = centroid;
         experimental.plane = plane;
-        experimental.bev_prev_next = points.project(experimental.centroid, experimental.plane, config_.max_distance_fit, config_.voxel_size, config_.voxel_capacity);
+        experimental.bev_prev_next = points.project(experimental.centroid, experimental.plane, config_.max_distance, config_.voxel_size, config_.voxel_capacity);
     }
     // return transformation and deviation
     return std::make_pair(pose, initial_guess.inverse() * pose);

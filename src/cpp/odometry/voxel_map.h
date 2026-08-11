@@ -258,12 +258,12 @@ std::optional<typename VoxelMap<F>::Neighbor> VoxelMap<F>::closest(const Eigen::
     };
     // find the closest match that respects the provided predicate
     if(map_.empty()) return std::nullopt;
-    Eigen::Vector3i key_center = VoxelMap<F>::point_to_voxel(query);
+    Eigen::Vector3i key = VoxelMap<F>::point_to_voxel(query);
     typename VoxelMap<F>::Neighbor neighbor;
     neighbor.distance_sq = std::numeric_limits<float>::max();
     const Voxel* voxel{nullptr};
     for(const auto& offset : offsets) {
-        const Eigen::Vector3i key_offset = key_center + offset;
+        const Eigen::Vector3i key_offset = key + offset;
         float lb_distance_sq = voxel_lower_bound_distance_sq(query, key_offset, voxel_size_);
         if(lb_distance_sq >= neighbor.distance_sq) continue;
         auto search = map_.find(key_offset);

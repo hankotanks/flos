@@ -20,7 +20,7 @@ class OdometrySystem: util::Profiler {
 public:
     struct Config {
         float max_distance{50.f};
-        float max_distance_fit{25.f};
+        float max_distance_fit{10.f}; // TODO: add full parameter support
         float voxel_size{1.f}; // NOTE: downsampling approach has changed from kiss-icp
         size_t voxel_capacity{20};
         struct {
@@ -112,14 +112,14 @@ public:
     Statistics statistics;
 private:
     // get the predicted delta (and handle statistics)
-    std::pair<Sophus::SE3f, float> predict_delta(unsigned int seconds, unsigned int nanoseconds) noexcept;
+    std::pair<Sophus::SE3f, double> predict_delta(unsigned int seconds, unsigned int nanoseconds) noexcept;
 private:
     // find correspondences
     using Correspondence = std::tuple<Eigen::Vector3f, Semantics, VoxelMap<Wrapper>::Neighbor>;
     using CorrespondenceSet = tbb::concurrent_vector<Correspondence>;
-    CorrespondenceSet correspond(const Wrapper& points, float sigma) const noexcept;
-    // constructs and solves the linear system, returning dx
-    Eigen::Matrix<float, 6, 1> solve(const Wrapper& points, const CorrespondenceSet& correspondences) noexcept;
+    CorrespondenceSet correspond(const Wrapper& points, float correspondence_distance) const noexcept;
+    // constructs and solves the linear system, returning dx and chi
+    std::pair<Eigen::Matrix<float, 6, 1>, float> solve(const Wrapper& points, const CorrespondenceSet& correspondences) noexcept;
     // returns pose and deviation respectively
     std::pair<Sophus::SE3f, Sophus::SE3f> align(Wrapper& points, const Sophus::SE3f& delta, Profiler& profiler);
 private:
@@ -130,8 +130,8 @@ private:
     Sophus::SE3f last_pose_;
     Sophus::SE3f last_delta_;
     unsigned int init_seconds_{std::numeric_limits<unsigned int>::max()};
-    float last_stamp_{0.f};
-    float prev_stamp_{0.f};
+    double last_stamp_{0.0};
+    double prev_stamp_{0.0};
     // voxel map
     VoxelMap<Wrapper> map_;
 public:
@@ -150,6 +150,7 @@ public:
         std::vector<Eigen::Vector3f> stem_initial;
         std::vector<Eigen::Vector3f> stem_refined;
         bool accepted{true};
+        float correspondence_distance{0.f};
     };
     Experimental experimental;
     std::pair<Eigen::Vector3f, Eigen::Matrix3f> fit_ground_plane(const Eigen::Vector3f& origin) noexcept;

@@ -88,7 +88,7 @@ protected:
         // projected points
         {
             std::vector<rerun::Vec2D> points;
-            for(const auto& p : experimental.bev_prev.projection) {
+            for(const auto& p : experimental.bev_prev.projection_) {
                 points.emplace_back(p.x(), p.y());
             }
             rr_.log("scan/projection/prev", rerun::Points2D(points));
@@ -102,7 +102,7 @@ protected:
         }
         {
             std::vector<rerun::Vec2D> points;
-            for(const auto& p : experimental.bev_curr.projection) {
+            for(const auto& p : experimental.bev_curr.projection_) {
                 points.emplace_back(p.x(), p.y());
             }
             rr_.log("scan/projection/curr", rerun::Points2D(points));
@@ -116,7 +116,7 @@ protected:
         }
         {
             std::vector<rerun::Vec2D> points;
-            for(const auto& p : experimental.bev_curr_post.projection) {
+            for(const auto& p : experimental.bev_curr_post.projection_) {
                 points.emplace_back(p.x(), p.y());
             }
             rr_.log("scan/projection/curr_align", rerun::Points2D(points));
@@ -148,6 +148,7 @@ protected:
             rr_.log("bev/3/t", rerun::Scalar(experimental.T_bev.translation().norm()));
             rr_.log("bev/3/R", rerun::Scalar(experimental.T_bev.so3().log().norm()));
             rr_.log("bev/accepted", rerun::Scalar(experimental.accepted ? 1.f : 0.f));
+            rr_.log("correspondence_distance", rerun::Scalar(experimental.correspondence_distance));
         }
     }
 private:

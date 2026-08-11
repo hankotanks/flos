@@ -7,6 +7,16 @@
 // sophus
 #include <sophus/se3.hpp>
 #include <sophus/se2.hpp>
+// robin_map
+#include <tsl/robin_map.h>
+
+template<>
+struct std::hash<Eigen::Vector2i> {
+    size_t operator()(const Eigen::Vector2i& voxel) const {
+        const uint32_t *vec = reinterpret_cast<const uint32_t *>(voxel.data());
+        return (vec[0] * 73856093 ^ vec[1] * 83492791);
+    }
+};
 
 struct BEV {
 public:
@@ -18,9 +28,16 @@ public:
     BEV& operator=(BEV&&) = default;
     ~BEV() = default;
 public:
-    Sophus::SE2f align(const BEV& other, float cell_size);
+    std::optional<Sophus::SE2f> align(const BEV& target, size_t max_iterations, float convergence_criterion, float correspondence_distance);
     void transform(const Sophus::SE2f& T);
+private:
+    void compute_centroids(float eps, size_t min_pts);
+    void correspondences(const BEV& target, std::vector<size_t>& indices, float correspondence_distance_sq) const;
 public:
-    std::vector<Eigen::Vector2f> projection;
     std::vector<Eigen::Vector2f> centroids;
+public:
+    std::vector<Eigen::Vector2f> projection_;
+private:
+    tsl::robin_map<Eigen::Vector2i, std::vector<size_t>> index_;
+    float voxel_size_;
 };
