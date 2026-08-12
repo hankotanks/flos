@@ -83,7 +83,8 @@ inline float angular_velocity(const Eigen::Matrix<float,6,1>& xi, float dt) {
 OdometrySystem::OdometrySystem(const Config& config) : util::Profiler("OdometrySystem"),
     config_(config),
     map_(config.max_distance, config.voxel_size, config.voxel_capacity),
-    threshold_(config.max_distance, config.threshold.initial, config.threshold.motion) {
+    threshold_(config.max_distance, config.threshold.initial, config.threshold.motion),
+    experimental(config.max_distance, config.voxel_size, config.voxel_capacity) {
     size_t max_threads = config.max_threads > 0 ? \
         config.max_threads : tbb::this_task_arena::max_concurrency();
     volatile static const tbb::global_control _ = tbb::global_control( // NOTE: static storage type is required here
@@ -257,7 +258,7 @@ OdometrySystem::CorrespondenceSet OdometrySystem::correspond(const Wrapper& poin
     tbb::parallel_for(tbb::blocked_range<size_t>{0, points.size()}, [this, &points, &correspondences, correspondence_distance_sq](const tbb::blocked_range<size_t>& range) {
         for(size_t i = range.begin(); i < range.end(); ++i) {
             const auto& [point, point_data] = points[i];
-            const auto& neighbor = this->map_.closest(point, point_data, correspondence_distance_sq);
+            const auto neighbor = this->map_.closest(point, point_data, correspondence_distance_sq);
             if(neighbor) correspondences.emplace_back(point, point_data, *neighbor);
         }
     });
@@ -319,11 +320,10 @@ std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, con
     points.transform(initial_guess);
     {
         experimental.bev_prev = std::move(experimental.bev_prev_next);
-        experimental.bev_curr = points.project(experimental.centroid, experimental.plane, config_.voxel_size, config_.voxel_capacity);
+        experimental.bev_curr = points.project(experimental.centroid, experimental.plane, config_.max_distance, config_.voxel_size, config_.voxel_capacity);
         experimental.accepted = false;
+        experimental.bev_curr_post = experimental.bev_curr;
         if(std::optional<Sophus::SE2f> T_bev_projected = experimental.bev_curr.align(experimental.bev_prev, config_.max_iterations, config_.convergence_criterion, sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER)) {
-            experimental.bev_curr_post = experimental.bev_curr;
-            experimental.bev_curr_post.transform(*T_bev_projected);
             Sophus::SE3f T_bev = OdometrySystem::lift(*T_bev_projected, experimental.centroid, experimental.plane);
             CorrespondenceSet correspondences_initial = OdometrySystem::correspond(points, sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER);
             const auto [dx_initial, chi_initial] = OdometrySystem::solve(points, correspondences_initial);
@@ -382,7 +382,7 @@ termination:;
         const auto [centroid, plane] = OdometrySystem::fit_ground_plane(pose.translation());
         experimental.centroid = centroid;
         experimental.plane = plane;
-        experimental.bev_prev_next = points.project(experimental.centroid, experimental.plane, config_.voxel_size, config_.voxel_capacity);
+        experimental.bev_prev_next = points.project(experimental.centroid, experimental.plane, config_.max_distance, config_.voxel_size, config_.voxel_capacity);
     }
     // return transformation and deviation
     return std::make_pair(pose, initial_guess.inverse() * pose);

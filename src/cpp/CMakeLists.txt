@@ -26,6 +26,7 @@ set(COMMON_HEADERS
   classes.h
   util/buffer_node.h
   util/cloud.h
+  util/cloud.tpp
   util/profiler.h
   util/rosarg.h
   util/rosbag.h
@@ -95,6 +96,7 @@ set(ODOMETRY_HEADERS
   odometry/system.h
   odometry/bev.h
   odometry/voxel_map.h
+  odometry/voxel_map.tpp
   odometry_node_config.h)
 
 set(ODOMETRY_LIBRARIES

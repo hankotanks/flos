@@ -89,7 +89,7 @@ protected:
         // projected points
         if(experimental.accepted) {
             std::vector<rerun::Vec2D> points;
-            for(const auto& p : experimental.bev_prev.points_projected) {
+            for(const auto& [p, temp] : experimental.bev_prev.projection.points()) {
                 points.emplace_back(p.x(), p.y());
             }
             rr_.log("scan/projection/prev", rerun::Points2D(points));
@@ -98,7 +98,7 @@ protected:
         }
         if(experimental.accepted) {
             std::vector<rerun::Vec2D> points;
-            for(const auto& p : experimental.bev_curr.points_projected) {
+            for(const auto& [p, temp] : experimental.bev_curr_post.projection.points()) {
                 points.emplace_back(p.x(), p.y());
             }
             rr_.log("scan/projection/curr", rerun::Points2D(points));
@@ -107,7 +107,7 @@ protected:
         }
         if(experimental.accepted) {
             std::vector<rerun::Vec2D> points;
-            for(const auto& p : experimental.bev_curr_post.points_projected) {
+            for(const auto& [p, temp] : experimental.bev_curr.projection.points()) {
                 points.emplace_back(p.x(), p.y());
             }
             rr_.log("scan/projection/curr_align", rerun::Points2D(points));

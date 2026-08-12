@@ -64,7 +64,7 @@ public:
     // forward declaration
     struct Wrapper;
     // voxel belief
-    struct Belief: public VoxelData<Wrapper, Semantics> {
+    struct Belief: public VoxelDataBase<Wrapper, Semantics> {
         explicit Belief();
         virtual void update(const Semantics& data) noexcept override final;
         virtual void finish() noexcept override final;
@@ -76,7 +76,7 @@ public:
         std::array<float, classes::COUNT> confidence;
     };
     // util::Cloud wrapper for fast access of fields
-    struct Wrapper : public Frame<Wrapper, Semantics, Belief> {
+    struct Wrapper : public Frame<Wrapper, 3, Semantics, Belief> {
         friend Belief;
         Wrapper(util::Cloud& points);
         virtual inline size_t size() const noexcept override final { return points_.size(); };
@@ -84,7 +84,7 @@ public:
         virtual std::pair<Eigen::Vector3f&, Semantics> operator[](size_t i) noexcept override final;
         virtual std::pair<const Eigen::Vector3f&, Semantics> operator[](size_t i) const noexcept override final;
     public:
-        inline BEV project(const Eigen::Vector3f& centroid, const Eigen::Matrix3f& ground, float voxel_size, size_t voxel_capacity) { return BEV{centroid, ground, points_, class_, voxel_size, voxel_capacity}; }
+        inline BEV project(const Eigen::Vector3f& centroid, const Eigen::Matrix3f& ground, float max_distance, float voxel_size, size_t voxel_capacity) { return BEV{centroid, ground, points_, class_, max_distance, voxel_size, voxel_capacity}; }
     private:
         Semantics data(size_t i) const noexcept;
     private:
@@ -95,7 +95,7 @@ public:
 public:
     // returns the current local map
     // NOTE: this is slow
-    const VoxelMap<Wrapper>::Cloud& cloud() const noexcept { return map_.cloud(); }
+    const VoxelMap<Wrapper, 3>::Cloud& cloud() const noexcept { return map_.cloud(); }
 public:
     struct Statistics {
         size_t iterations{0};
@@ -115,7 +115,7 @@ private:
     std::pair<Sophus::SE3f, double> predict_delta(unsigned int seconds, unsigned int nanoseconds) noexcept;
 private:
     // find correspondences
-    using Correspondence = std::tuple<Eigen::Vector3f, Semantics, VoxelMap<Wrapper>::Neighbor>;
+    using Correspondence = std::tuple<Eigen::Vector3f, Semantics, VoxelMap<Wrapper, 3>::Neighbor>;
     using CorrespondenceSet = tbb::concurrent_vector<Correspondence>;
     CorrespondenceSet correspond(const Wrapper& points, float correspondence_distance) const noexcept;
     // constructs and solves the linear system, returning dx and chi
@@ -133,7 +133,7 @@ private:
     double last_stamp_{0.0};
     double prev_stamp_{0.0};
     // voxel map
-    VoxelMap<Wrapper> map_;
+    VoxelMap<Wrapper, 3> map_;
 public:
     // EXPERIMENTAL STATE
     struct Experimental {
@@ -144,6 +144,11 @@ public:
         BEV bev_curr_post;
         BEV bev_prev_next;
         bool accepted{true};
+        Experimental(float max_distance, float voxel_size, size_t voxel_capacity) :
+            bev_prev(max_distance, voxel_size, voxel_capacity),
+            bev_curr(max_distance, voxel_size, voxel_capacity),
+            bev_curr_post(max_distance, voxel_size, voxel_capacity),
+            bev_prev_next(max_distance, voxel_size, voxel_capacity) { /* STUB */ }
     };
     Experimental experimental;
     std::pair<Eigen::Vector3f, Eigen::Matrix3f> fit_ground_plane(const Eigen::Vector3f& origin) noexcept;
