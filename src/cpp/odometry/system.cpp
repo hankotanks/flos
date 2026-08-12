@@ -320,7 +320,7 @@ std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, con
     {
         experimental.pose_initial = initial_guess;
         experimental.bev_prev = std::move(experimental.bev_prev_next);
-        experimental.bev_curr = points.project(experimental.centroid, experimental.plane, config_.max_distance, config_.voxel_size, config_.voxel_capacity);
+        experimental.bev_curr = points.project(experimental.centroid, experimental.plane, config_.voxel_size, config_.voxel_capacity);
         experimental.accepted = false;
         if(experimental.bev_curr.centroids.size() > 0 && experimental.bev_prev.centroids.size() > 0) {
             if(std::optional<Sophus::SE2f> T_bev_projected = experimental.bev_curr.align(experimental.bev_prev, config_.max_iterations, config_.convergence_criterion, sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER)) {
@@ -341,23 +341,6 @@ std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, con
                     initial_guess = T_bev * initial_guess;
                     experimental.accepted = true;
                 }
-                /*
-                Sophus::SE3f predicted_left = last_pose_ * delta * last_pose_.inverse();
-                Sophus::SE3f bev_left = T_bev;
-                const auto predicted_xi = predicted_left.log();
-                const auto correction_xi = T_bev.log();
-                const float predicted_translation = predicted_xi.head<3>().norm();
-                const float correction_translation = correction_xi.head<3>().norm();
-                const float predicted_rotation = predicted_xi.tail<3>().norm();
-                const float correction_rotation = correction_xi.tail<3>().norm();
-                const bool bad_translation = correction_translation > predicted_translation;
-                const bool bad_rotation = correction_rotation > predicted_rotation;
-                if(!bad_rotation && !bad_translation) {
-                    points.transform(T_bev);
-                    initial_guess = T_bev * initial_guess;
-                    experimental.accepted = true;
-                }
-                */
             }
         }
     }
@@ -406,7 +389,7 @@ termination:;
         const auto [centroid, plane] = OdometrySystem::fit_ground_plane(pose.translation());
         experimental.centroid = centroid;
         experimental.plane = plane;
-        experimental.bev_prev_next = points.project(experimental.centroid, experimental.plane, config_.max_distance, config_.voxel_size, config_.voxel_capacity);
+        experimental.bev_prev_next = points.project(experimental.centroid, experimental.plane, config_.voxel_size, config_.voxel_capacity);
     }
     // return transformation and deviation
     return std::make_pair(pose, initial_guess.inverse() * pose);

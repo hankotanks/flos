@@ -21,7 +21,7 @@ struct std::hash<Eigen::Vector2i> {
 struct BEV {
 public:
     explicit BEV() = default;
-    explicit BEV(const Eigen::Vector3f& centroid, const Eigen::Matrix3f& ground, const std::span<const Eigen::Vector3f>& points, const std::span<const uint8_t>& semantics, float max_distance, float voxel_size, size_t voxel_capacity);
+    explicit BEV(const Eigen::Vector3f& centroid, const Eigen::Matrix3f& ground, const std::span<const Eigen::Vector3f>& points, const std::span<const uint8_t>& semantics, float voxel_size, size_t voxel_capacity);
     BEV(const BEV&) = default;
     BEV(BEV&&) = default;
     BEV& operator=(const BEV&) = default;
@@ -33,6 +33,7 @@ public:
 private:
     void compute_centroids(float eps, size_t min_pts);
     void correspondences(const BEV& target, std::vector<size_t>& indices, float correspondence_distance_sq) const;
+    void correspondences_full(const BEV& target, std::vector<size_t>& indices, float correspondence_distance_sq) const;
 public:
     std::vector<Eigen::Vector2f> centroids;
 public:

@@ -84,7 +84,7 @@ public:
         virtual std::pair<Eigen::Vector3f&, Semantics> operator[](size_t i) noexcept override final;
         virtual std::pair<const Eigen::Vector3f&, Semantics> operator[](size_t i) const noexcept override final;
     public:
-        inline BEV project(const Eigen::Vector3f& centroid, const Eigen::Matrix3f& ground, float max_distance, float voxel_size, size_t voxel_capacity) { return BEV{centroid, ground, points_, class_, max_distance, voxel_size, voxel_capacity}; }
+        inline BEV project(const Eigen::Vector3f& centroid, const Eigen::Matrix3f& ground, float voxel_size, size_t voxel_capacity) { return BEV{centroid, ground, points_, class_, voxel_size, voxel_capacity}; }
     private:
         Semantics data(size_t i) const noexcept;
     private:
