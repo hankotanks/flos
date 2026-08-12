@@ -66,7 +66,7 @@ std::optional<Sophus::SE2f> BEV::align(const BEV& target, size_t max_iterations,
         const Sophus::SO2f R{std::atan2(cross, dot)};
         const Sophus::SE2f est{R, target_mean - R * source_mean};
         // shift centroids
-        projection.transform(est);
+        projection.apply(est);
         // accumulate transform
         T = est * T;
         // termination criterion
@@ -74,8 +74,4 @@ std::optional<Sophus::SE2f> BEV::align(const BEV& target, size_t max_iterations,
         chi = chi_i;
     }
     return T;
-}
-
-void BEV::transform(const Sophus::SE2f& T) {
-    projection.transform(T);
 }

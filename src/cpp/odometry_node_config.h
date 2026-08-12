@@ -10,6 +10,7 @@ struct OdometryNodeConfig {
     OdometrySystem::Config config;
     OdometryNodeConfig(rclcpp::Node* node) {
         util::param_opt(node, "max_distance", config.max_distance);
+        util::param_opt(node, "max_distance_ground", config.max_distance_ground);
         util::param_opt(node, "voxel_size", config.voxel_size);
         util::param_opt(node, "voxel_capacity", config.voxel_capacity);
         // threshold

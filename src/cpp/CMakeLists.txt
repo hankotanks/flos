@@ -95,6 +95,8 @@ set(ODOMETRY_SOURCES
 set(ODOMETRY_HEADERS
   odometry/system.h
   odometry/bev.h
+  odometry/ground_plane.h
+  odometry/ground_plane.tpp
   odometry/voxel_map.h
   odometry/voxel_map.tpp
   odometry_node_config.h)

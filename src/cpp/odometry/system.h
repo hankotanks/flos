@@ -10,6 +10,7 @@
 #include <tbb/task_arena.h>
 // package
 #include "odometry/bev.h"
+#include "odometry/ground_plane.h"
 #include "odometry/voxel_map.h"
 #include "classes.h"
 // util
@@ -20,7 +21,7 @@ class OdometrySystem: util::Profiler {
 public:
     struct Config {
         float max_distance{50.f};
-        float max_distance_fit{10.f}; // TODO: add full parameter support
+        float max_distance_ground{10.f}; // TODO: add full parameter support
         float voxel_size{1.f}; // NOTE: downsampling approach has changed from kiss-icp
         size_t voxel_capacity{20};
         struct {
@@ -84,7 +85,8 @@ public:
         virtual std::pair<Eigen::Vector3f&, Semantics> operator[](size_t i) noexcept override final;
         virtual std::pair<const Eigen::Vector3f&, Semantics> operator[](size_t i) const noexcept override final;
     public:
-        inline BEV project(const Eigen::Vector3f& centroid, const Eigen::Matrix3f& ground, float max_distance, float voxel_size, size_t voxel_capacity) { return BEV{centroid, ground, points_, class_, max_distance, voxel_size, voxel_capacity}; }
+        // TODO: this signature is subject to change
+        inline void project(BEV& projection, const GroundPlane<Wrapper>& ground) const;
     private:
         Semantics data(size_t i) const noexcept;
     private:
@@ -137,22 +139,17 @@ private:
 public:
     // EXPERIMENTAL STATE
     struct Experimental {
-        Eigen::Vector3f centroid;
-        Eigen::Matrix3f plane;
+        GroundPlane<Wrapper> ground;
         BEV bev_prev;
         BEV bev_curr;
-        BEV bev_curr_post;
         BEV bev_prev_next;
         bool accepted{true};
         Experimental(float max_distance, float voxel_size, size_t voxel_capacity) :
             bev_prev(max_distance, voxel_size, voxel_capacity),
             bev_curr(max_distance, voxel_size, voxel_capacity),
-            bev_curr_post(max_distance, voxel_size, voxel_capacity),
             bev_prev_next(max_distance, voxel_size, voxel_capacity) { /* STUB */ }
     };
     Experimental experimental;
-    std::pair<Eigen::Vector3f, Eigen::Matrix3f> fit_ground_plane(const Eigen::Vector3f& origin) noexcept;
-    Sophus::SE3f lift(const Sophus::SE2f& se2, const Eigen::Vector3f& centroid, const Eigen::Matrix3f& plane);
 private:
     class AdaptiveThreshold {
     public:

@@ -26,6 +26,7 @@ class Config:
         }
         ODOMETRY = {
             'max_distance': (float, False), 
+            'max_distance_ground': (float, False), 
             'voxel_size': (float, False), 
             'voxel_capacity': (int, False), 
             'threshold_initial': (float, False), 

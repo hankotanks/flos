@@ -69,13 +69,12 @@ protected:
     virtual void publish_experimental(const std_msgs::msg::Header::_stamp_type& stamp, const Sophus::SE3f& pose, const OdometrySystem::Experimental& experimental) override {
         // ground plane in 3d
         float s = 10.f;
-        Eigen::Vector3f normal = experimental.plane.col(0);
-        Eigen::Vector3f t1 = experimental.plane.col(1);
-        Eigen::Vector3f t2 = experimental.plane.col(2);
-        Eigen::Vector3f p0 = (experimental.centroid + s * t1 + s * t2);
-        Eigen::Vector3f p1 = (experimental.centroid + s * t1 - s * t2);
-        Eigen::Vector3f p2 = (experimental.centroid - s * t1 - s * t2);
-        Eigen::Vector3f p3 = (experimental.centroid - s * t1 + s * t2);
+        Eigen::Vector3f t1 = experimental.ground.t1;
+        Eigen::Vector3f t2 = experimental.ground.t2;
+        Eigen::Vector3f p0 = (experimental.ground.centroid + s * t1 + s * t2);
+        Eigen::Vector3f p1 = (experimental.ground.centroid + s * t1 - s * t2);
+        Eigen::Vector3f p2 = (experimental.ground.centroid - s * t1 - s * t2);
+        Eigen::Vector3f p3 = (experimental.ground.centroid - s * t1 + s * t2);
         RerunNode::set_stamp(stamp);
         rerun::LineStrip3D plane{{
             {p0.x(), p0.y(), p0.z()},
@@ -88,31 +87,16 @@ protected:
         rr_.log("bev/accepted", rerun::Scalar(experimental.accepted ? 1.f : 0.f));
         // projected points
         if(experimental.accepted) {
-            std::vector<rerun::Vec2D> points;
-            for(const auto& [p, temp] : experimental.bev_prev.projection.points()) {
-                points.emplace_back(p.x(), p.y());
-            }
+            std::vector<rerun::Vec2D> points = experimental.bev_prev.projection.transform([](const Eigen::Vector2f& point, const unsigned char&) {
+                return rerun::Vec2D{point.x(), point.y()};
+            });
             rr_.log("scan/projection/prev", rerun::Points2D(points));
-        } else {
-            rr_.log("scan/projection/prev", rerun::Points2D());
         }
         if(experimental.accepted) {
-            std::vector<rerun::Vec2D> points;
-            for(const auto& [p, temp] : experimental.bev_curr_post.projection.points()) {
-                points.emplace_back(p.x(), p.y());
-            }
+            std::vector<rerun::Vec2D> points = experimental.bev_curr.projection.transform([](const Eigen::Vector2f& point, const unsigned char&) {
+                return rerun::Vec2D{point.x(), point.y()};
+            });
             rr_.log("scan/projection/curr", rerun::Points2D(points));
-        } else {
-            rr_.log("scan/projection/curr", rerun::Points2D());
-        }
-        if(experimental.accepted) {
-            std::vector<rerun::Vec2D> points;
-            for(const auto& [p, temp] : experimental.bev_curr.projection.points()) {
-                points.emplace_back(p.x(), p.y());
-            }
-            rr_.log("scan/projection/curr_align", rerun::Points2D(points));
-        } else {
-            rr_.log("scan/projection/curr_align", rerun::Points2D());
         }
     }
 private:

@@ -16,14 +16,15 @@ struct BEV {
 public:
     explicit BEV(float max_distance, float voxel_size, size_t voxel_capacity) : projection(max_distance, voxel_size, voxel_capacity) { /* STUB */ }
     explicit BEV(const Eigen::Vector3f& centroid, const Eigen::Matrix3f& ground, const std::span<const Eigen::Vector3f>& points, const std::span<const uint8_t>& semantics, float max_distance, float voxel_size, size_t voxel_capacity);
-    BEV(const BEV&) = default;
+    BEV(const BEV&) = delete;
     BEV(BEV&&) = default;
-    BEV& operator=(const BEV&) = default;
+    BEV& operator=(const BEV&) = delete;
     BEV& operator=(BEV&&) = default;
     ~BEV() = default;
 public:
+    inline void clear() noexcept { projection.clear(); }
+public:
     std::optional<Sophus::SE2f> align(const BEV& target, size_t max_iterations, float convergence_criterion, float correspondence_distance);
-    void transform(const Sophus::SE2f& T);
 private:
     using Correspondence = std::tuple<Eigen::Vector2f, Eigen::Vector2f, float>;
     void correspond(const BEV& target, std::vector<Correspondence>& correspondences, float correspondence_distance_sq) const;

@@ -2,12 +2,10 @@
 
 // system
 #include <limits>
-#include <oneapi/tbb/parallel_for_each.h>
 #include <optional>
 // eigen
 #include <Eigen/Dense>
 // tsl
-#include <ranges>
 #include <tsl/robin_map.h>
 // sophus
 #include <sophus/se2.hpp>
@@ -63,9 +61,9 @@ struct VoxelMap {
         voxel_size_(voxel_size), 
         voxel_resolution_(voxel_size * voxel_size / static_cast<float>(voxel_capacity)), 
         voxel_capacity_(voxel_capacity) { /* STUB */ }
-    VoxelMap(const VoxelMap&) = default;
+    VoxelMap(const VoxelMap&) = delete;
     VoxelMap(VoxelMap&&) = default;
-    VoxelMap& operator=(const VoxelMap&) = default;
+    VoxelMap& operator=(const VoxelMap&) = delete;
     VoxelMap& operator=(VoxelMap&&) = default;
     ~VoxelMap() = default;
 public:
@@ -76,22 +74,27 @@ public:
     inline void clear() noexcept { map_.clear(); }
     inline bool empty() const noexcept { return map_.empty(); }
 public:
-    using Pose = std::conditional_t<D == 2, Sophus::SE2f, Sophus::SE3f>;
+    using Transform = std::conditional_t<D == 2, Sophus::SE2f, Sophus::SE3f>;
     // update transforms points by pose, extends the map with them, then prunes by max_distance
-    void update(F& points, const Pose& pose);
+    void update(F& points, const Transform& pose);
     // extend just adds (a) point(s) to the map directly
     void extend(const F& points);
     void extend(const Eigen::Vector<float, D>& point, typename F::point_data_t data);
     // NOTE: this will not protect you if point does not fall into the given voxel
     void extend(const Eigen::Vector<int, D>& voxel, const Eigen::Vector<float, D>& point, typename F::point_data_t data);
     // transform all points in the map
-    void transform(const Pose& T);
+    void apply(const Transform& T);
 public:
     // 'algorithms' (parallelized wherever possible)
     template<typename Fn>
     void for_each(Fn&& f) const noexcept;
     template<typename Fn>
-    void for_each_in_radius(const Eigen::Vector<float, D>& origin, float radius, Fn&& f) const noexcept;
+    void for_each_within_radius(const Eigen::Vector<float, D>& origin, float radius, Fn&& f) const noexcept;
+    template<typename Fn, typename Acc>
+    requires requires(Acc a, const Acc& b) { a += b; }
+    Acc reduce_within_radius(const Eigen::Vector<float, D>& origin, float radius, Acc init, Fn&& f) const noexcept;
+    template<typename Fn>
+    auto transform(Fn&& f) const;
 public:
     struct Cloud {
         std::vector<Eigen::Vector<float, D>> points;
@@ -111,13 +114,20 @@ public:
 private:
     // internal voxel representation
     struct Voxel {
+        friend class VoxelMap<F, D>;
+    public:
+        Voxel(size_t voxel_capacity);
+        Voxel(const Voxel&) = delete;
+        Voxel(Voxel&&) = default;
+        Voxel& operator=(const Voxel&) = delete;
+        Voxel& operator=(Voxel&&) = default;
+        ~Voxel() = default;
+    private:
+        void add(const Eigen::Vector<float, D>& point, typename F::point_data_t data, float voxel_resolution) noexcept;
+    private:
         std::vector<Eigen::Vector<float, D>> points;
         std::vector<typename F::point_data_t> point_data;
         typename F::voxel_data_t data;
-    public:
-        Voxel(size_t voxel_capacity);
-    public:
-        void add(const Eigen::Vector<float, D>& point, typename F::point_data_t data, float voxel_resolution) noexcept;
     };
     // get lower bound distance for pruning the search space in VoxelMap::closest
     inline float lower_bound_distance_sq(const Eigen::Vector<float, D>& query, const Eigen::Vector<int, D>& voxel) const noexcept;
@@ -129,15 +139,6 @@ private:
     size_t voxel_capacity_;
     // underlying map structure
     tsl::robin_map<Eigen::Vector<int, D>, Voxel> map_;
-public:
-    auto points() const {
-        return map_ | std::ranges::views::transform([](const auto& entry) {
-            const Voxel& voxel = entry.second;
-            return std::views::iota(size_t{0}, voxel.points.size()) | std::views::transform([&voxel](size_t i) {
-                return std::pair<const Eigen::Vector<float, D>&, const typename F::point_data_t&>{voxel.points[i], voxel.point_data[i]};
-            });
-        }) | std::views::join;
-    }
 };
 
 #include "odometry/voxel_map.tpp" // IWYU pragma: keep
