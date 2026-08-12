@@ -143,14 +143,7 @@ public:
         BEV bev_curr;
         BEV bev_curr_post;
         BEV bev_prev_next;
-        Sophus::SE3f pose_initial;
-        Sophus::SE3f pose_refined;
-        Sophus::SE2f T_bev_projected;
-        Sophus::SE3f T_bev;
-        std::vector<Eigen::Vector3f> stem_initial;
-        std::vector<Eigen::Vector3f> stem_refined;
         bool accepted{true};
-        float correspondence_distance{0.f};
     };
     Experimental experimental;
     std::pair<Eigen::Vector3f, Eigen::Matrix3f> fit_ground_plane(const Eigen::Vector3f& origin) noexcept;

@@ -89,7 +89,7 @@ protected:
         // projected points
         if(experimental.accepted) {
             std::vector<rerun::Vec2D> points;
-            for(const auto& p : experimental.bev_prev.projection_) {
+            for(const auto& p : experimental.bev_prev.points_projected) {
                 points.emplace_back(p.x(), p.y());
             }
             rr_.log("scan/projection/prev", rerun::Points2D(points));
@@ -98,16 +98,7 @@ protected:
         }
         if(experimental.accepted) {
             std::vector<rerun::Vec2D> points;
-            for(const auto& p : experimental.bev_prev.centroids) {
-                points.emplace_back(p.x(), p.y());
-            }
-            rr_.log("scan/projection/prev/centroids", rerun::Points2D(points));
-        } else {
-            rr_.log("scan/projection/prev/centroids", rerun::Points2D());
-        }
-        if(experimental.accepted) {
-            std::vector<rerun::Vec2D> points;
-            for(const auto& p : experimental.bev_curr.projection_) {
+            for(const auto& p : experimental.bev_curr.points_projected) {
                 points.emplace_back(p.x(), p.y());
             }
             rr_.log("scan/projection/curr", rerun::Points2D(points));
@@ -116,51 +107,12 @@ protected:
         }
         if(experimental.accepted) {
             std::vector<rerun::Vec2D> points;
-            for(const auto& p : experimental.bev_curr.centroids) {
-                points.emplace_back(p.x(), p.y());
-            }
-            rr_.log("scan/projection/curr/centroids", rerun::Points2D(points));
-        } else {
-            rr_.log("scan/projection/curr/centroids", rerun::Points2D());
-        }
-        if(experimental.accepted) {
-            std::vector<rerun::Vec2D> points;
-            for(const auto& p : experimental.bev_curr_post.projection_) {
+            for(const auto& p : experimental.bev_curr_post.points_projected) {
                 points.emplace_back(p.x(), p.y());
             }
             rr_.log("scan/projection/curr_align", rerun::Points2D(points));
         } else {
             rr_.log("scan/projection/curr_align", rerun::Points2D());
-        }
-        if(experimental.accepted) {
-            std::vector<rerun::Vec2D> points;
-            for(const auto& p : experimental.bev_curr_post.centroids) {
-                points.emplace_back(p.x(), p.y());
-            }
-            rr_.log("scan/projection/curr_align/centroids", rerun::Points2D(points));
-        } else {
-            rr_.log("scan/projection/curr_align/centroids", rerun::Points2D());
-        }
-        if(experimental.accepted) {
-            const auto& t = experimental.pose_initial.translation();
-            // TODO: I would prefer this be a LineStrips3D
-            rr_.log("trajectory/initial", rerun::Points3D().with_positions({
-                rerun::Position3D(t.x(), t.y(), t.z())
-            }).with_radii(RerunNode::DEFAULT_POINT_RADIUS * 3.f));
-        }
-        if(experimental.accepted) {
-            const auto& t = experimental.pose_refined.translation();
-            // TODO: I would prefer this be a LineStrips3D
-            rr_.log("trajectory/refined", rerun::Points3D().with_positions({
-                rerun::Position3D(t.x(), t.y(), t.z())
-            }).with_radii(RerunNode::DEFAULT_POINT_RADIUS * 3.f));
-        }
-        if(experimental.accepted) {
-            rr_.log("bev/2/t", rerun::Scalar(experimental.T_bev_projected.translation().norm()));
-            rr_.log("bev/2/R", rerun::Scalar(experimental.T_bev_projected.so2().log()));
-            rr_.log("bev/3/t", rerun::Scalar(experimental.T_bev.translation().norm()));
-            rr_.log("bev/3/R", rerun::Scalar(experimental.T_bev.so3().log().norm()));
-            rr_.log("correspondence_distance", rerun::Scalar(experimental.correspondence_distance));
         }
     }
 private:

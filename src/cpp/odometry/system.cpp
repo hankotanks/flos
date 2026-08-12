@@ -318,33 +318,26 @@ std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, con
     float chi = -1.f;
     points.transform(initial_guess);
     {
-        experimental.pose_initial = initial_guess;
         experimental.bev_prev = std::move(experimental.bev_prev_next);
         experimental.bev_curr = points.project(experimental.centroid, experimental.plane, config_.voxel_size, config_.voxel_capacity);
         experimental.accepted = false;
-        if(experimental.bev_curr.centroids.size() > 0 && experimental.bev_prev.centroids.size() > 0) {
-            if(std::optional<Sophus::SE2f> T_bev_projected = experimental.bev_curr.align(experimental.bev_prev, config_.max_iterations, config_.convergence_criterion, sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER)) {
-                experimental.bev_curr_post = experimental.bev_curr;
-                experimental.bev_curr_post.transform(*T_bev_projected);
-                Sophus::SE3f T_bev = OdometrySystem::lift(*T_bev_projected, experimental.centroid, experimental.plane);
-                experimental.pose_refined = T_bev * initial_guess;
-                experimental.T_bev_projected = *T_bev_projected;
-                experimental.T_bev = T_bev;
-                CorrespondenceSet correspondences_initial = OdometrySystem::correspond(points, sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER);
-                const auto [dx_initial, chi_initial] = OdometrySystem::solve(points, correspondences_initial);
-                points.transform(T_bev);
-                CorrespondenceSet correspondences_refined = OdometrySystem::correspond(points, sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER);
-                const auto [dx_refined, chi_refined] = OdometrySystem::solve(points, correspondences_refined);
-                if(chi_refined > chi_initial) {
-                    points.transform(T_bev.inverse());
-                } else {
-                    initial_guess = T_bev * initial_guess;
-                    experimental.accepted = true;
-                }
+        if(std::optional<Sophus::SE2f> T_bev_projected = experimental.bev_curr.align(experimental.bev_prev, config_.max_iterations, config_.convergence_criterion, sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER)) {
+            experimental.bev_curr_post = experimental.bev_curr;
+            experimental.bev_curr_post.transform(*T_bev_projected);
+            Sophus::SE3f T_bev = OdometrySystem::lift(*T_bev_projected, experimental.centroid, experimental.plane);
+            CorrespondenceSet correspondences_initial = OdometrySystem::correspond(points, sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER);
+            const auto [dx_initial, chi_initial] = OdometrySystem::solve(points, correspondences_initial);
+            points.transform(T_bev);
+            CorrespondenceSet correspondences_refined = OdometrySystem::correspond(points, sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER);
+            const auto [dx_refined, chi_refined] = OdometrySystem::solve(points, correspondences_refined);
+            if(chi_refined > chi_initial) {
+                points.transform(T_bev.inverse());
+            } else {
+                initial_guess = T_bev * initial_guess;
+                experimental.accepted = true;
             }
         }
     }
-    experimental.correspondence_distance = sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER;
     // retrieve fields ahead of time to avoid repeated queries
     // perform ICP
     Sophus::SE3f T_icp{};

@@ -1,6 +1,7 @@
 #pragma once
 
 // system
+#include <set>
 #include <span>
 // eigen
 #include <Eigen/Core>
@@ -31,14 +32,10 @@ public:
     std::optional<Sophus::SE2f> align(const BEV& target, size_t max_iterations, float convergence_criterion, float correspondence_distance);
     void transform(const Sophus::SE2f& T);
 private:
-    void compute_centroids(float eps, size_t min_pts);
     void correspondences(const BEV& target, std::vector<size_t>& indices, float correspondence_distance_sq) const;
-    void correspondences_full(const BEV& target, std::vector<size_t>& indices, float correspondence_distance_sq) const;
 public:
-    std::vector<Eigen::Vector2f> centroids;
-public:
-    std::vector<Eigen::Vector2f> projection_;
+    std::vector<Eigen::Vector2f> points_projected;
 private:
-    tsl::robin_map<Eigen::Vector2i, std::vector<size_t>> index_;
+    tsl::robin_map<Eigen::Vector2i, std::set<size_t>> index_;
     float voxel_size_;
 };
