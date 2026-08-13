@@ -291,30 +291,31 @@ std::pair<Eigen::Matrix<float, 6, 1>, float> OdometrySystem::solve(const Wrapper
         return std::make_tuple(J_r, residual);
     };
 
-    using System = std::tuple<Eigen::Matrix<float, 6, 6>, Eigen::Matrix<float, 6, 1>, float>;
+    using System = std::tuple<Eigen::Matrix<float, 6, 6>, Eigen::Matrix<float, 6, 1>, float, float>;
     auto sum = [](System a, const System &b) {
-        auto& [a_H, a_b, a_chi] = a;
-        const auto& [b_H, b_b, b_chi] = b;
+        auto& [a_H, a_b, a_chi, a_w] = a;
+        const auto& [b_H, b_b, b_chi, b_w] = b;
         a_H += b_H;
         a_b += b_b;
         a_chi += b_chi;
+        a_w += b_w;
         return a;
     };
 
     using correspondence_iterator = tbb::concurrent_vector<Correspondence>::const_iterator;
-    const auto &[JTJ, JTr, chi] = tbb::parallel_reduce(
+    const auto &[JTJ, JTr, chi, w] = tbb::parallel_reduce(
         tbb::blocked_range<correspondence_iterator>{correspondences.cbegin(), correspondences.cend()},
-        System(Eigen::Matrix<float, 6, 6>::Zero(), Eigen::Matrix<float, 6, 1>::Zero(), 0.f),
+        System(Eigen::Matrix<float, 6, 6>::Zero(), Eigen::Matrix<float, 6, 1>::Zero(), 0.f, 0.f),
         [&](const tbb::blocked_range<correspondence_iterator>& range, System J) -> System {
             return std::transform_reduce(range.begin(), range.end(), J, sum, [&](const Correspondence& correspondence) {
                     const auto& [source, data, target] = correspondence;
                     const auto& [J_r, residual] = compute_jacobian_and_residual(source, target.point);
                     // weight the kernel based on confidence from the segmentation model
-                    return System(J_r.transpose() * target.weight * J_r, J_r.transpose() * target.weight * residual, residual.squaredNorm());
+                    return System(J_r.transpose() * target.weight * J_r, J_r.transpose() * target.weight * residual, target.weight * residual.squaredNorm(), target.weight);
                 });
         }, sum);
 
-    return std::make_pair(JTJ.ldlt().solve(-JTr), chi);
+    return std::make_pair(JTJ.ldlt().solve(-JTr), w > 0.f ? chi / w : 0.f);
 }
 
 std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, const Sophus::SE3f& delta, Profiler& profiler) {
@@ -325,7 +326,7 @@ std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, con
     float sigma = threshold_.compute();
     float chi = -1.f;
     points.transform(initial_guess);
-    {
+    if(0) {
         experimental.bev_curr.clear();
         points.project(experimental.bev_curr, experimental.ground);
         if(std::optional<Sophus::SE2f> T_bev_projected = align_projection(experimental.bev_curr, experimental.bev_prev, config_.max_iterations, config_.convergence_criterion, sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER)) {

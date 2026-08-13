@@ -279,7 +279,6 @@ requires(DefaultFrameType<D, F>) {
     return std::nullopt;
 }
 
-
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
 template<typename T>
