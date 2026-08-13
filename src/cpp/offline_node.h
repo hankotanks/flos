@@ -79,12 +79,12 @@ public:
             // publications
             if(visualize_) {
                 this->publish_scan(header.stamp, cloud);
-                if(visualize_map_) {
-                    OfflineNode::update_local_map();
-                    this->publish_local_map(header.stamp, *local_map_);
-                }
+                // TODO: removed visualize_map, it needs to be added back
                 this->publish_pose(header.stamp, header.frame_id, pose);
-                this->publish_experimental(header.stamp, pose, odometry_system_.experimental);
+                if(projection_previous_) {
+                    this->publish_experimental(header.stamp, *projection_previous_, odometry_system_.experimental.bev_curr);
+                }
+                projection_previous_.emplace(odometry_system_.experimental.bev_prev);
             }
             this->publish_statistics(header.stamp, odometry_system_.statistics);
             const auto [percent, remaining] = OfflineNode::compute_progress();
@@ -95,7 +95,7 @@ protected:
     virtual void publish_scan(const std_msgs::msg::Header::_stamp_type& stamp, const util::Cloud& cloud) { /* STUB */ };
     virtual void publish_local_map(const std_msgs::msg::Header::_stamp_type& stamp, const util::Cloud& cloud) { /* STUB */ };
     virtual void publish_pose(const std_msgs::msg::Header::_stamp_type& stamp, const std_msgs::msg::Header::_frame_id_type& frame_id, const Sophus::SE3f& pose) { /* STUB */ };
-    virtual void publish_experimental(const std_msgs::msg::Header::_stamp_type& stamp, const Sophus::SE3f& pose, const OdometrySystem::Experimental& experimental) { /* STUB */ };
+    virtual void publish_experimental(const std_msgs::msg::Header::_stamp_type& stamp, const VoxelMap<2>& previous, const VoxelMap<2>& current) { /* STUB */ };
     virtual void publish_statistics(const std_msgs::msg::Header::_stamp_type& stamp, const OdometrySystem::Statistics& statistics) { /* STUB */ };
     virtual void publish_progress(const std_msgs::msg::Header::_stamp_type& stamp, float percent, float remaining) { /* STUB */ }
 private:
@@ -128,19 +128,6 @@ private:
         }
         RCLCPP_INFO(this->get_logger(), "saved %s [%lu poses]", path_to_result_.c_str(), poses_.size());
     }
-
-    void update_local_map() {
-        const auto& local_map = odometry_system_.cloud();
-        local_map_ = std::make_unique<util::Cloud>(local_map.points);
-        { // TODO: lots of copying going on here, should be improved
-            static std::vector<uint8_t> semantics;
-            semantics.clear();
-            semantics.reserve(local_map.data.size());
-            std::transform(local_map.data.begin(), local_map.data.end(), std::back_inserter(semantics), 
-                [](const OdometrySystem::Semantics& p) { return p.prediction; });
-            local_map_->add_field<uint8_t>("class", semantics);
-        }
-    }
 protected:
     bool visualize_{true};
     bool visualize_map_{true};
@@ -155,11 +142,11 @@ private:
     // odometry
     OdometryNodeConfig odometry_config_;
     OdometrySystem odometry_system_;
+    // buffer projection to show alignment
+    std::optional<VoxelMap<2>> projection_previous_;
     // progress
     size_t msg_count_{0};
     size_t msg_processed_{0};
-    // local map
-    std::unique_ptr<util::Cloud> local_map_{nullptr};
     // pose data
     std::vector<std::pair<std_msgs::msg::Header, Sophus::SE3f>> poses_;
 };

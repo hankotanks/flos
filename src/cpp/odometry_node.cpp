@@ -139,6 +139,7 @@ protected:
                 // localized points publication
                 outgoing_points_publisher_->publish(std::move(cloud.message(header)));
                 // local map publication
+#if 0
                 auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(steady_clock::now() - local_map_last_publication);
                 if(elapsed.count() >= OdometryNode::LOCAL_MAP_RATE * 1000) {
                     std_msgs::msg::Header local_map_header;
@@ -157,6 +158,7 @@ protected:
                     local_map_publisher_->publish(std::move(out.message(local_map_header)));
                     local_map_last_publication = steady_clock::now();
                 }
+#endif
             }
         }
     }

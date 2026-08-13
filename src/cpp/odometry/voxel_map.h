@@ -6,6 +6,7 @@
 // eigen
 #include <Eigen/Dense>
 // tsl
+#include <span>
 #include <tsl/robin_map.h>
 // sophus
 #include <sophus/se2.hpp>
@@ -45,6 +46,19 @@ struct Frame {
     virtual std::pair<const Eigen::Vector<float, D>&, point_data_t> operator[](size_t) const noexcept = 0;
 };
 
+template<size_t D, typename F>
+concept FrameType = requires {
+    typename F::point_data_t;
+    typename F::voxel_data_t;
+    requires std::is_base_of_v<Frame<F, D, typename F::point_data_t, typename F::voxel_data_t>, F>;
+};
+
+template<size_t D, typename F>
+concept DefaultFrameType = std::is_same_v<F, std::span<const Eigen::Vector<float, D>>>;
+
+template<size_t D, typename F>
+concept ValidVoxelMap = (D >= 2 && D <= 3) && (DefaultFrameType<D, F> || FrameType<D, F>);
+
 template<>
 struct std::hash<Eigen::Vector2i> {
     size_t operator()(const Eigen::Vector2i& voxel) const {
@@ -53,17 +67,17 @@ struct std::hash<Eigen::Vector2i> {
     }
 };
 
-template<size_t D, typename F>
-requires(D >= 2 && D <= 3 && std::is_base_of_v<Frame<F, D, typename F::point_data_t, typename F::voxel_data_t>, F>)
+template<size_t D, typename F = std::span<const Eigen::Vector<float, D>>>
+requires(ValidVoxelMap<D, F>)
 struct VoxelMap {
     explicit VoxelMap(float max_distance, float voxel_size, size_t voxel_capacity) : 
         max_distance_(max_distance), 
         voxel_size_(voxel_size), 
         voxel_resolution_(voxel_size * voxel_size / static_cast<float>(voxel_capacity)), 
         voxel_capacity_(voxel_capacity) { /* STUB */ }
-    VoxelMap(const VoxelMap&) = delete;
+    VoxelMap(const VoxelMap&) = default;
     VoxelMap(VoxelMap&&) = default;
-    VoxelMap& operator=(const VoxelMap&) = delete;
+    VoxelMap& operator=(const VoxelMap&) = delete; // NOTE: copy assignment is explicitly deleted to avoid unintended allocations
     VoxelMap& operator=(VoxelMap&&) = default;
     ~VoxelMap() = default;
 public:
@@ -75,15 +89,18 @@ public:
     inline bool empty() const noexcept { return map_.empty(); }
 public:
     using Transform = std::conditional_t<D == 2, Sophus::SE2f, Sophus::SE3f>;
+    // transform all points in the map
+    void apply(const Transform& T)
+        requires(DefaultFrameType<D, F>);
     // update transforms points by pose, extends the map with them, then prunes by max_distance
     void update(F& points, const Transform& pose);
     // extend just adds (a) point(s) to the map directly
     void extend(const F& points);
-    void extend(const Eigen::Vector<float, D>& point, typename F::point_data_t data);
+    void extend(const Eigen::Vector<float, D>& point)
+        requires(DefaultFrameType<D, F>);
     // NOTE: this will not protect you if point does not fall into the given voxel
-    void extend(const Eigen::Vector<int, D>& voxel, const Eigen::Vector<float, D>& point, typename F::point_data_t data);
-    // transform all points in the map
-    void apply(const Transform& T);
+    void extend(const Eigen::Vector<int, D>& voxel, const Eigen::Vector<float, D>& point)
+        requires(DefaultFrameType<D, F>);
 public:
     // 'algorithms' (parallelized wherever possible)
     template<typename Fn>
@@ -96,38 +113,52 @@ public:
     template<typename Fn>
     auto transform(Fn&& f) const;
 public:
-    struct Cloud {
-        std::vector<Eigen::Vector<float, D>> points;
-        std::vector<typename F::point_data_t> data;
-    };
-    // get all points in the voxel map (currently for debugging)
-    const Cloud& cloud() const noexcept;
-public:
-    struct Neighbor {
-        Eigen::Vector<float, D> point;
-        typename F::point_data_t data;
+    template<size_t _D, typename _F>
+    struct NeighborInner { /* STUB */ };
+    template<size_t _D, typename _F>
+    requires(!DefaultFrameType<_D, _F>)
+    struct NeighborInner<_D, _F> {
+        typename _F::point_data_t data;
         float weight;
+    };
+    struct Neighbor : NeighborInner<D, F> {
+        Eigen::Vector<float, D> point;
         float distance_sq{std::numeric_limits<float>::max()};
     };
     // returns std::nullopt when no correspondence is found
-    std::optional<Neighbor> closest(const Eigen::Vector<float, D>& query, typename F::point_data_t data, float correspondence_distance_sq = std::numeric_limits<float>::max()) const;
+    std::optional<Neighbor> closest(const Eigen::Vector<float, D>& query, float correspondence_distance_sq = std::numeric_limits<float>::max()) const
+        requires(DefaultFrameType<D, F>);
+    template<typename T = F>
+    std::optional<Neighbor> closest(const Eigen::Vector<float, D>& query, typename T::point_data_t data, float correspondence_distance_sq = std::numeric_limits<float>::max()) const
+        requires(!DefaultFrameType<D, F>);
 private:
+    template<size_t _D, typename _F>
+    struct VoxelInner { /* STUB */ };
+    template<size_t _D, typename _F>
+    requires(!DefaultFrameType<_D, _F>)
+    struct VoxelInner<_D, _F> {
+        friend class VoxelMap<D, F>;
+        std::vector<typename _F::point_data_t> point_data;
+        typename _F::voxel_data_t data;
+    };
     // internal voxel representation
-    struct Voxel {
+    struct Voxel : VoxelInner<D, F> {
         friend class VoxelMap<D, F>;
     public:
         Voxel(size_t voxel_capacity);
-        Voxel(const Voxel&) = delete;
+        Voxel(const Voxel&) = default;
         Voxel(Voxel&&) = default;
-        Voxel& operator=(const Voxel&) = delete;
+        Voxel& operator=(const Voxel&) = delete; // NOTE: see voxel_map.h:77
         Voxel& operator=(Voxel&&) = default;
         ~Voxel() = default;
     private:
-        void add(const Eigen::Vector<float, D>& point, typename F::point_data_t data, float voxel_resolution) noexcept;
+        void add(const Eigen::Vector<float, D>& point, float voxel_resolution) noexcept
+            requires(DefaultFrameType<D, F>);
+        template<typename T = F>
+        void add(const Eigen::Vector<float, D>& point, typename T::point_data_t data, float voxel_resolution) noexcept
+            requires(!DefaultFrameType<D, F>);
     private:
         std::vector<Eigen::Vector<float, D>> points;
-        std::vector<typename F::point_data_t> point_data;
-        typename F::voxel_data_t data;
     };
     // get lower bound distance for pruning the search space in VoxelMap::closest
     inline float lower_bound_distance_sq(const Eigen::Vector<float, D>& query, const Eigen::Vector<int, D>& voxel) const noexcept;

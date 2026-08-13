@@ -210,10 +210,10 @@ OdometrySystem::Wrapper::Wrapper(util::Cloud& points) : points_(points.points())
     }
 }
 
-inline void OdometrySystem::Wrapper::project(BEV& projection, const GroundPlane<Wrapper>& ground) const { 
+inline void OdometrySystem::Wrapper::project(VoxelMap<2>& projection, const GroundPlane<Wrapper>& ground) const { 
     for(size_t i = 0; i < points_.size(); ++i) {
         if(class_[i] != 3) continue;
-        projection.projection.extend(ground.project(points_[i]), 0);
+        projection.extend(ground.project(points_[i]));
     }
 }
 
@@ -326,11 +326,9 @@ std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, con
     float chi = -1.f;
     points.transform(initial_guess);
     {
-        experimental.bev_prev = std::move(experimental.bev_prev_next);
         experimental.bev_curr.clear();
         points.project(experimental.bev_curr, experimental.ground);
-        experimental.accepted = false;
-        if(std::optional<Sophus::SE2f> T_bev_projected = experimental.bev_curr.align(experimental.bev_prev, config_.max_iterations, config_.convergence_criterion, sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER)) {
+        if(std::optional<Sophus::SE2f> T_bev_projected = align_projection(experimental.bev_curr, experimental.bev_prev, config_.max_iterations, config_.convergence_criterion, sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER)) {
             Sophus::SE3f T_bev = experimental.ground.lift(*T_bev_projected);
             CorrespondenceSet correspondences_initial = OdometrySystem::correspond(points, sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER);
             const auto [dx_initial, chi_initial] = OdometrySystem::solve(points, correspondences_initial);
@@ -341,7 +339,6 @@ std::pair<Sophus::SE3f, Sophus::SE3f> OdometrySystem::align(Wrapper& points, con
                 points.transform(T_bev.inverse());
             } else {
                 initial_guess = T_bev * initial_guess;
-                experimental.accepted = true;
             }
         }
     }
@@ -388,8 +385,8 @@ termination:;
     PROFILE(experiment, &profiler) {
         experimental.ground = GroundPlane<Wrapper>(map_, pose.translation(), config_.max_distance_ground, 
             [](const Semantics& data) { return data.prediction == 1; });
-        experimental.bev_prev_next.clear();
-        points.project(experimental.bev_prev_next, experimental.ground);
+        experimental.bev_prev.clear();
+        points.project(experimental.bev_prev, experimental.ground);
     }
     // return transformation and deviation
     return std::make_pair(pose, initial_guess.inverse() * pose);

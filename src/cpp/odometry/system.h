@@ -86,7 +86,7 @@ public:
         virtual std::pair<const Eigen::Vector3f&, Semantics> operator[](size_t i) const noexcept override final;
     public:
         // TODO: this signature is subject to change
-        inline void project(BEV& projection, const GroundPlane<Wrapper>& ground) const;
+        inline void project(VoxelMap<2>& projection, const GroundPlane<Wrapper>& ground) const;
     private:
         Semantics data(size_t i) const noexcept;
     private:
@@ -94,10 +94,6 @@ public:
         std::span<const uint8_t> class_;
         std::array<std::span<const float>, classes::COUNT> confidence_;
     };
-public:
-    // returns the current local map
-    // NOTE: this is slow
-    const VoxelMap<3, Wrapper>::Cloud& cloud() const noexcept { return map_.cloud(); }
 public:
     struct Statistics {
         size_t iterations{0};
@@ -140,14 +136,11 @@ public:
     // EXPERIMENTAL STATE
     struct Experimental {
         GroundPlane<Wrapper> ground;
-        BEV bev_prev;
-        BEV bev_curr;
-        BEV bev_prev_next;
-        bool accepted{true};
+        VoxelMap<2> bev_prev;
+        VoxelMap<2> bev_curr;
         Experimental(float max_distance, float voxel_size, size_t voxel_capacity) :
             bev_prev(max_distance, voxel_size, voxel_capacity),
-            bev_curr(max_distance, voxel_size, voxel_capacity),
-            bev_prev_next(max_distance, voxel_size, voxel_capacity) { /* STUB */ }
+            bev_curr(max_distance, voxel_size, voxel_capacity) { /* STUB */ }
     };
     Experimental experimental;
 private:

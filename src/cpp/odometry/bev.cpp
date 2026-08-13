@@ -6,21 +6,11 @@
 #include <tbb/parallel_for_each.h>
 #include <tbb/enumerable_thread_specific.h>
 
-BEV::BEV(const Eigen::Vector3f& centroid, const Eigen::Matrix3f& ground, const std::span<const Eigen::Vector3f>& points, const std::span<const uint8_t>& semantics, float max_distance, float voxel_size, size_t voxel_capacity) : projection(max_distance, voxel_size, voxel_capacity) {
-    Eigen::Vector3f t1 = ground.col(1);
-    Eigen::Vector3f t2 = ground.col(2);
-    for(size_t i = 0; i < points.size(); ++i) {
-        if(semantics[i] != 3) continue;
-        Eigen::Vector3f local = points[i] - centroid;
-        projection.extend({t1.dot(local), t2.dot(local)}, 0);
-    }
-}
-
-void BEV::correspond(const BEV& target, std::vector<BEV::Correspondence>& correspondences, float correspondence_distance_sq) const {
+void correspond(const VoxelMap<2>& source, const VoxelMap<2>& target, std::vector<std::tuple<Eigen::Vector2f, Eigen::Vector2f, float>>& correspondences, float correspondence_distance_sq) {
     correspondences.clear();
-    tbb::enumerable_thread_specific<std::vector<Correspondence>> local;
-    projection.for_each([&](const Eigen::Vector2f& query, const uint8_t& data) {
-        auto neighbor = target.projection.closest(query, data, correspondence_distance_sq);
+    tbb::enumerable_thread_specific<std::vector<std::tuple<Eigen::Vector2f, Eigen::Vector2f, float>>> local;
+    source.for_each([&](const Eigen::Vector2f& query) {
+        auto neighbor = target.closest(query, correspondence_distance_sq);
         if(neighbor) local.local().emplace_back(query, neighbor->point, neighbor->distance_sq);
     });
     for(auto& v : local) {
@@ -28,8 +18,8 @@ void BEV::correspond(const BEV& target, std::vector<BEV::Correspondence>& corres
     }
 }
 
-std::optional<Sophus::SE2f> BEV::align(const BEV& target, size_t max_iterations, float convergence_criterion, float correspondence_distance) {
-    if(projection.empty() || target.projection.empty()) return std::nullopt;
+std::optional<Sophus::SE2f> align_projection(VoxelMap<2>& source, const VoxelMap<2>& target, size_t max_iterations, float convergence_criterion, float correspondence_distance) {
+    if(source.empty() || target.empty()) return std::nullopt;
     float chi = -1.f;
     float correspondence_distance_sq = correspondence_distance * correspondence_distance;
     // preallocate correspondence vector
@@ -38,13 +28,13 @@ std::optional<Sophus::SE2f> BEV::align(const BEV& target, size_t max_iterations,
     Sophus::SE2f T{};
     for(size_t iter = 0; iter < max_iterations; ++iter) {
         // build bidirectional correspondences
-        target.correspond(*this, correspondences, correspondence_distance_sq);
+        correspond(source, target, correspondences, correspondence_distance_sq);
         if(correspondences.size() < 3) return std::nullopt;
         // ensure symmetry and construct means
         Eigen::Vector2f source_mean = Eigen::Vector2f::Zero();
         Eigen::Vector2f target_mean = Eigen::Vector2f::Zero();
         float chi_i = 0.f;
-        for(const auto& [target_point, source_point, distance_sq] : correspondences) {
+        for(const auto& [source_point, target_point, distance_sq] : correspondences) {
             source_mean += source_point;
             target_mean += target_point;
             chi_i += distance_sq;
@@ -56,7 +46,7 @@ std::optional<Sophus::SE2f> BEV::align(const BEV& target, size_t max_iterations,
         // compute optimal rotation directly
         float dot = 0.f;
         float cross = 0.f;
-        for(const auto& [target_point, source_point, distance_sq] : correspondences) {
+        for(const auto& [source_point, target_point, distance_sq] : correspondences) {
             const Eigen::Vector2f source_norm = source_point - source_mean;
             const Eigen::Vector2f target_norm = target_point - target_mean;
             dot += source_norm.dot(target_norm);
@@ -66,7 +56,7 @@ std::optional<Sophus::SE2f> BEV::align(const BEV& target, size_t max_iterations,
         const Sophus::SO2f R{std::atan2(cross, dot)};
         const Sophus::SE2f est{R, target_mean - R * source_mean};
         // shift centroids
-        projection.apply(est);
+        source.apply(est);
         // accumulate transform
         T = est * T;
         // termination criterion
