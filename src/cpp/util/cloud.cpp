@@ -17,6 +17,14 @@ using u4 = uint32_t;
 using f4 = float;
 using f8 = double;
 
+template<>
+struct std::hash<Eigen::Vector3i> {
+    size_t operator()(const Eigen::Vector3i& voxel) const {
+        const uint32_t *vec = reinterpret_cast<const uint32_t *>(voxel.data());
+        return (vec[0] * 73856093 ^ vec[1] * 19349669 ^ vec[2] * 83492791);
+    }
+};
+
 namespace {
 inline std::string fix_frame_id(const std::string &frame_id) {
     return std::regex_replace(frame_id, std::regex("^/"), "");

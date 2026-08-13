@@ -6,6 +6,22 @@
 #include <tbb/parallel_for_each.h>
 #include <tbb/enumerable_thread_specific.h>
 
+template<>
+struct std::hash<Eigen::Vector2i> {
+    size_t operator()(const Eigen::Vector2i& voxel) const {
+        const uint32_t *vec = reinterpret_cast<const uint32_t *>(voxel.data());
+        return (vec[0] * 73856093 ^ vec[1] * 83492791);
+    }
+};
+
+template<>
+struct std::hash<Eigen::Vector3i> {
+    size_t operator()(const Eigen::Vector3i& voxel) const {
+        const uint32_t *vec = reinterpret_cast<const uint32_t *>(voxel.data());
+        return (vec[0] * 73856093 ^ vec[1] * 19349669 ^ vec[2] * 83492791);
+    }
+};
+
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
 inline Eigen::Vector<int, D> VoxelMap<D, F>::point_to_voxel(const Eigen::Vector<float, D>& point) const noexcept { 
@@ -15,7 +31,7 @@ inline Eigen::Vector<int, D> VoxelMap<D, F>::point_to_voxel(const Eigen::Vector<
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
 inline Eigen::Vector<float, D> VoxelMap<D, F>::voxel_to_point(const Eigen::Vector<int, D>& voxel) const noexcept { 
-    return voxel.template cast<float>().array() + 0.5f; 
+    return (voxel.template cast<float>().array() + 0.5f) * voxel_size_; 
 }
 
 template<size_t D, typename F>

@@ -38,7 +38,6 @@ struct VoxelDataBase {
 template<typename Derived, size_t D, typename PointData, typename VoxelData>
 requires(D >= 2 && D <= 3 && std::is_default_constructible_v<VoxelData> && std::is_base_of_v<VoxelDataBase<Derived, PointData>, VoxelData>)
 struct Frame {
-    using derived_t = Derived;
     using point_data_t = PointData;
     using voxel_data_t = VoxelData;
     virtual size_t size() const noexcept = 0;
@@ -46,6 +45,7 @@ struct Frame {
     virtual std::pair<const Eigen::Vector<float, D>&, point_data_t> operator[](size_t) const noexcept = 0;
 };
 
+// if F is provided to VoxelMap, it must be derived from Frame
 template<size_t D, typename F>
 concept FrameType = requires {
     typename F::point_data_t;
@@ -53,19 +53,13 @@ concept FrameType = requires {
     requires std::is_base_of_v<Frame<F, D, typename F::point_data_t, typename F::voxel_data_t>, F>;
 };
 
+// otherwise, the default FrameType is used
 template<size_t D, typename F>
 concept DefaultFrameType = std::is_same_v<F, std::span<const Eigen::Vector<float, D>>>;
 
+// indicates that the VoxelMap is well-defined given its template arguments
 template<size_t D, typename F>
 concept ValidVoxelMap = (D >= 2 && D <= 3) && (DefaultFrameType<D, F> || FrameType<D, F>);
-
-template<>
-struct std::hash<Eigen::Vector2i> {
-    size_t operator()(const Eigen::Vector2i& voxel) const {
-        const uint32_t *vec = reinterpret_cast<const uint32_t *>(voxel.data());
-        return (vec[0] * 73856093 ^ vec[1] * 83492791);
-    }
-};
 
 template<size_t D, typename F = std::span<const Eigen::Vector<float, D>>>
 requires(ValidVoxelMap<D, F>)
@@ -91,16 +85,16 @@ public:
     using Transform = std::conditional_t<D == 2, Sophus::SE2f, Sophus::SE3f>;
     // transform all points in the map
     void apply(const Transform& T)
-        requires(DefaultFrameType<D, F>);
+    requires(DefaultFrameType<D, F>);
     // update transforms points by pose, extends the map with them, then prunes by max_distance
     void update(F& points, const Transform& pose);
     // extend just adds (a) point(s) to the map directly
     void extend(const F& points);
     void extend(const Eigen::Vector<float, D>& point)
-        requires(DefaultFrameType<D, F>);
+    requires(DefaultFrameType<D, F>);
     // NOTE: this will not protect you if point does not fall into the given voxel
     void extend(const Eigen::Vector<int, D>& voxel, const Eigen::Vector<float, D>& point)
-        requires(DefaultFrameType<D, F>);
+    requires(DefaultFrameType<D, F>);
 public:
     // 'algorithms' (parallelized wherever possible)
     template<typename Fn>
@@ -127,10 +121,10 @@ public:
     };
     // returns std::nullopt when no correspondence is found
     std::optional<Neighbor> closest(const Eigen::Vector<float, D>& query, float correspondence_distance_sq = std::numeric_limits<float>::max()) const
-        requires(DefaultFrameType<D, F>);
+    requires(DefaultFrameType<D, F>);
     template<typename T = F>
     std::optional<Neighbor> closest(const Eigen::Vector<float, D>& query, typename T::point_data_t data, float correspondence_distance_sq = std::numeric_limits<float>::max()) const
-        requires(!DefaultFrameType<D, F>);
+    requires(!DefaultFrameType<D, F>);
 private:
     template<size_t _D, typename _F>
     struct VoxelInner { /* STUB */ };
@@ -153,10 +147,10 @@ private:
         ~Voxel() = default;
     private:
         void add(const Eigen::Vector<float, D>& point, float voxel_resolution) noexcept
-            requires(DefaultFrameType<D, F>);
+        requires(DefaultFrameType<D, F>);
         template<typename T = F>
         void add(const Eigen::Vector<float, D>& point, typename T::point_data_t data, float voxel_resolution) noexcept
-            requires(!DefaultFrameType<D, F>);
+        requires(!DefaultFrameType<D, F>);
     private:
         std::vector<Eigen::Vector<float, D>> points;
     };

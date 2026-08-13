@@ -24,14 +24,6 @@
 namespace py = pybind11;
 #endif // GENERATE_CLOUD_PYBIND_MODULE
 
-template<>
-struct std::hash<Eigen::Vector3i> {
-    size_t operator()(const Eigen::Vector3i& voxel) const {
-        const uint32_t *vec = reinterpret_cast<const uint32_t *>(voxel.data());
-        return (vec[0] * 73856093 ^ vec[1] * 19349669 ^ vec[2] * 83492791);
-    }
-};
-
 namespace util {
 class Cloud {
 public:
