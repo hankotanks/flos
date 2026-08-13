@@ -106,6 +106,8 @@ public:
     Acc reduce_within_radius(const Eigen::Vector<float, D>& origin, float radius, Acc init, Fn&& f) const noexcept;
     template<typename Fn>
     auto transform(Fn&& f) const;
+    template<typename Fn>
+    auto transform_filter(Fn&& f) const;
 public:
     template<size_t _D, typename _F>
     struct NeighborInner { /* STUB */ };

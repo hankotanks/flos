@@ -34,6 +34,8 @@ inline Eigen::Vector<float, D> VoxelMap<D, F>::voxel_to_point(const Eigen::Vecto
     return (voxel.template cast<float>().array() + 0.5f) * voxel_size_; 
 }
 
+// TODO: when moving points out of a voxel, it's important to check if it's now empty
+// if it is, it should be removed from the map
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
 void VoxelMap<D, F>::apply(const Transform& T) 
@@ -230,6 +232,45 @@ auto VoxelMap<D, F>::transform(Fn&& f) const {
         tbb::enumerable_thread_specific<std::vector<To>> result_pool;
         VoxelMap<D, F>::for_each([&f, &result_pool](const Eigen::Vector<float, D>& point) {
             result_pool.local().emplace_back(std::invoke(f, point));
+        });
+        size_t count = 0;
+        for(const auto& result_i : result_pool) count += result_i.size();
+        std::vector<To> result;
+        result.reserve(count);
+        for(auto& result_i : result_pool) {
+            result.insert(result.end(), std::make_move_iterator(result_i.begin()), std::make_move_iterator(result_i.end()));
+        }
+        return result;
+    }
+}
+
+template<size_t D, typename F>
+requires(ValidVoxelMap<D, F>)
+template<typename Fn>
+auto VoxelMap<D, F>::transform_filter(Fn&& f) const {
+    if constexpr (!DefaultFrameType<D, F>) {
+        using Optional = std::invoke_result_t<Fn, const Eigen::Vector<float, D>&, const typename F::point_data_t&>;
+        using To = typename std::remove_cvref_t<Optional>::value_type;
+        tbb::enumerable_thread_specific<std::vector<To>> result_pool;
+        VoxelMap<D, F>::for_each([&f, &result_pool](const Eigen::Vector<float, D>& point, const F::point_data_t& data) {
+            auto ret = std::invoke(f, point, data);
+            if(ret) result_pool.local().emplace_back(*ret);
+        });
+        size_t count = 0;
+        for(const auto& result_i : result_pool) count += result_i.size();
+        std::vector<To> result;
+        result.reserve(count);
+        for(auto& result_i : result_pool) {
+            result.insert(result.end(), std::make_move_iterator(result_i.begin()), std::make_move_iterator(result_i.end()));
+        }
+        return result;
+    } else {
+        using Optional = std::invoke_result_t<Fn, const Eigen::Vector<float, D>&>;
+        using To = typename std::remove_cvref_t<Optional>::value_type;
+        tbb::enumerable_thread_specific<std::vector<To>> result_pool;
+        VoxelMap<D, F>::for_each([&f, &result_pool](const Eigen::Vector<float, D>& point) {
+            auto ret = std::invoke(f, point);
+            if(ret) result_pool.local().emplace_back(*ret);
         });
         size_t count = 0;
         for(const auto& result_i : result_pool) count += result_i.size();
