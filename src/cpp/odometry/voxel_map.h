@@ -53,7 +53,7 @@ struct std::hash<Eigen::Vector2i> {
     }
 };
 
-template<typename F, size_t D>
+template<size_t D, typename F>
 requires(D >= 2 && D <= 3 && std::is_base_of_v<Frame<F, D, typename F::point_data_t, typename F::voxel_data_t>, F>)
 struct VoxelMap {
     explicit VoxelMap(float max_distance, float voxel_size, size_t voxel_capacity) : 
@@ -114,7 +114,7 @@ public:
 private:
     // internal voxel representation
     struct Voxel {
-        friend class VoxelMap<F, D>;
+        friend class VoxelMap<D, F>;
     public:
         Voxel(size_t voxel_capacity);
         Voxel(const Voxel&) = delete;

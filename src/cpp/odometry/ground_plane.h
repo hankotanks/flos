@@ -7,7 +7,7 @@ template<typename F>
 class GroundPlane {
 public:
     template<typename Predicate>
-    explicit GroundPlane(const VoxelMap<F, 3>& map, const Eigen::Vector3f& origin, float max_distance, Predicate&&);
+    explicit GroundPlane(const VoxelMap<3, F>& map, const Eigen::Vector3f& origin, float max_distance, Predicate&&);
     explicit GroundPlane() = default;
 public:
     Eigen::Vector2f project(const Eigen::Vector3f& point) const noexcept;

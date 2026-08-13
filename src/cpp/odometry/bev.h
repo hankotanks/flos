@@ -37,5 +37,5 @@ public:
     public:
         std::vector<Eigen::Vector2f> points;
     };
-    VoxelMap<Wrapper, 2> projection;
+    VoxelMap<2, Wrapper> projection;
 };

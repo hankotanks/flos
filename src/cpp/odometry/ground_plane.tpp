@@ -4,7 +4,7 @@
 
 template<typename F>
 template<typename Predicate>
-GroundPlane<F>::GroundPlane(const VoxelMap<F, 3>& map, const Eigen::Vector3f& origin, float max_distance, Predicate&& pred) {
+GroundPlane<F>::GroundPlane(const VoxelMap<3, F>& map, const Eigen::Vector3f& origin, float max_distance, Predicate&& pred) {
     // centroid
     struct Acc {
         Eigen::Vector3f centroid = Eigen::Vector3f::Zero();

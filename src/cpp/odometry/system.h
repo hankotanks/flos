@@ -97,7 +97,7 @@ public:
 public:
     // returns the current local map
     // NOTE: this is slow
-    const VoxelMap<Wrapper, 3>::Cloud& cloud() const noexcept { return map_.cloud(); }
+    const VoxelMap<3, Wrapper>::Cloud& cloud() const noexcept { return map_.cloud(); }
 public:
     struct Statistics {
         size_t iterations{0};
@@ -117,7 +117,7 @@ private:
     std::pair<Sophus::SE3f, double> predict_delta(unsigned int seconds, unsigned int nanoseconds) noexcept;
 private:
     // find correspondences
-    using Correspondence = std::tuple<Eigen::Vector3f, Semantics, VoxelMap<Wrapper, 3>::Neighbor>;
+    using Correspondence = std::tuple<Eigen::Vector3f, Semantics, VoxelMap<3, Wrapper>::Neighbor>;
     using CorrespondenceSet = tbb::concurrent_vector<Correspondence>;
     CorrespondenceSet correspond(const Wrapper& points, float correspondence_distance) const noexcept;
     // constructs and solves the linear system, returning dx and chi
@@ -135,7 +135,7 @@ private:
     double last_stamp_{0.0};
     double prev_stamp_{0.0};
     // voxel map
-    VoxelMap<Wrapper, 3> map_;
+    VoxelMap<3, Wrapper> map_;
 public:
     // EXPERIMENTAL STATE
     struct Experimental {
