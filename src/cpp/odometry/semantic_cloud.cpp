@@ -63,13 +63,6 @@ SemanticCloud::SemanticCloud(util::Cloud& points) : points_(points.points()), cl
     }
 }
 
-void SemanticCloud::project(VoxelMap<2>& projection, const GroundPlane<SemanticCloud>& ground) const {
-    for(size_t i = 0; i < points_.size(); ++i) {
-        if(class_[i] != 3) continue;
-        projection.extend(ground.project(points_[i]));
-    }
-}
-
 Semantics SemanticCloud::data(size_t i) const noexcept {
     Semantics data;
     data.prediction = class_[i];

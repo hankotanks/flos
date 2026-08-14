@@ -81,23 +81,23 @@ public:
                 this->publish_scan(header.stamp, cloud);
                 // TODO: removed visualize_map, it needs to be added back
                 this->publish_pose(header.stamp, header.frame_id, pose);
-                if(projection_previous_) {
-                    this->publish_experimental(header.stamp, *projection_previous_, odometry_system_.experimental.bev_curr);
-                }
-                projection_previous_.emplace(odometry_system_.experimental.bev_prev);
+                if(projection_prev_) this->publish_projection(header.stamp, *projection_prev_, odometry_system_.projection_.prev);
+                projection_prev_.emplace(odometry_system_.projection_.prev);
             }
-            this->publish_statistics(header.stamp, odometry_system_.statistics);
+            this->publish_statistics(header.stamp, odometry_system_.statistics_);
             const auto [percent, remaining] = OfflineNode::compute_progress();
             this->publish_progress(header.stamp, percent, remaining);
         }
     }
+public:
+    using Stamp = std_msgs::msg::Header::_stamp_type;
 protected:
-    virtual void publish_scan(const std_msgs::msg::Header::_stamp_type& stamp, const util::Cloud& cloud) { /* STUB */ };
-    virtual void publish_local_map(const std_msgs::msg::Header::_stamp_type& stamp, const util::Cloud& cloud) { /* STUB */ };
-    virtual void publish_pose(const std_msgs::msg::Header::_stamp_type& stamp, const std_msgs::msg::Header::_frame_id_type& frame_id, const Sophus::SE3f& pose) { /* STUB */ };
-    virtual void publish_experimental(const std_msgs::msg::Header::_stamp_type& stamp, const VoxelMap<2>& previous, const VoxelMap<2>& current) { /* STUB */ };
-    virtual void publish_statistics(const std_msgs::msg::Header::_stamp_type& stamp, const OdometrySystem::Statistics& statistics) { /* STUB */ };
-    virtual void publish_progress(const std_msgs::msg::Header::_stamp_type& stamp, float percent, float remaining) { /* STUB */ }
+    virtual void publish_scan(const Stamp& stamp, const util::Cloud& cloud) { /* STUB */ };
+    virtual void publish_local_map(const Stamp& stamp, const util::Cloud& cloud) { /* STUB */ };
+    virtual void publish_pose(const Stamp& stamp, const std_msgs::msg::Header::_frame_id_type& frame_id, const Sophus::SE3f& pose) { /* STUB */ };
+    virtual void publish_projection(const Stamp& stamp, const VoxelMap<2>& previous, const VoxelMap<2>& current) { /* STUB */ };
+    virtual void publish_statistics(const Stamp& stamp, const OdometrySystem::Statistics& statistics) { /* STUB */ };
+    virtual void publish_progress(const Stamp& stamp, float percent, float remaining) { /* STUB */ }
 private:
     std::pair<float, float> compute_progress() {
         if(msg_count_ == 0) return std::make_pair(0.f, std::numeric_limits<float>::max());
@@ -143,7 +143,7 @@ private:
     OdometryNodeConfig odometry_config_;
     OdometrySystem odometry_system_;
     // buffer projection to show alignment
-    std::optional<VoxelMap<2>> projection_previous_;
+    std::optional<VoxelMap<2>> projection_prev_;
     // progress
     size_t msg_count_{0};
     size_t msg_processed_{0};

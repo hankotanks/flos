@@ -1,4 +1,4 @@
-#include "odometry/threshold.h"
+#include "odometry/adaptive_threshold.h"
 
 void AdaptiveThreshold::update(const Sophus::SE3f& deviation) noexcept {
     const float model_error = std::invoke([this, &deviation]() {

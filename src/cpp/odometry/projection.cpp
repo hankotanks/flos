@@ -1,11 +1,6 @@
-#include "odometry/bev.h"
+#include "odometry/projection.h"
 
-// eigen
-#include <Eigen/Eigenvalues>
-// tbb
-#include <tbb/parallel_for_each.h>
-#include <tbb/enumerable_thread_specific.h>
-
+namespace {
 void correspond(const VoxelMap<2>& source, const VoxelMap<2>& target, std::vector<std::tuple<Eigen::Vector2f, Eigen::Vector2f, float>>& correspondences, float correspondence_distance_sq) {
     correspondences.clear();
     tbb::enumerable_thread_specific<std::vector<std::tuple<Eigen::Vector2f, Eigen::Vector2f, float>>> correspondence_pool;
@@ -21,9 +16,10 @@ void correspond(const VoxelMap<2>& source, const VoxelMap<2>& target, std::vecto
         correspondences.insert(correspondences.end(), std::make_move_iterator(local.begin()), std::make_move_iterator(local.end()));
     }
 }
+} // private scope
 
-std::optional<Sophus::SE2f> align_projection(VoxelMap<2>& source, const VoxelMap<2>& target, size_t max_iterations, float convergence_criterion, float correspondence_distance) {
-    if(source.empty() || target.empty()) return std::nullopt;
+std::optional<Sophus::SE2f> Projection::align(size_t max_iterations, float convergence_criterion, float correspondence_distance) {
+    if(curr.empty() || prev.empty()) return std::nullopt;
     float chi = -1.f;
     float correspondence_distance_sq = correspondence_distance * correspondence_distance;
     // preallocate correspondence vector
@@ -32,7 +28,7 @@ std::optional<Sophus::SE2f> align_projection(VoxelMap<2>& source, const VoxelMap
     Sophus::SE2f T{};
     for(size_t iter = 0; iter < max_iterations; ++iter) {
         // build bidirectional correspondences
-        correspond(source, target, correspondences, correspondence_distance_sq);
+        correspond(curr, prev, correspondences, correspondence_distance_sq);
         if(correspondences.size() < 3) return std::nullopt;
         // ensure symmetry and construct means
         Eigen::Vector2f source_mean = Eigen::Vector2f::Zero();
@@ -60,7 +56,7 @@ std::optional<Sophus::SE2f> align_projection(VoxelMap<2>& source, const VoxelMap
         const Sophus::SO2f R{std::atan2(cross, dot)};
         const Sophus::SE2f est{R, target_mean - R * source_mean};
         // shift centroids
-        source.apply(est);
+        curr.apply(est);
         // accumulate transform
         T = est * T;
         // termination criterion

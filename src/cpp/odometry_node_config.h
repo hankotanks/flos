@@ -25,6 +25,10 @@ struct OdometryNodeConfig {
         // correspondence
         util::param_opt(node, "correspondence_weighting", config.correspondence.weighting);
         util::param_opt(node, "correspondence_target", config.correspondence.target);
+        // projection
+        util::param_opt(node, "projection_enable", config.projection.enable);
+        util::param_opt(node, "projection_ground", config.projection.ground);
+        util::param_opt(node, "projection_target", config.projection.target);
         // log parameters
         RCLCPP_INFO_STREAM(node->get_logger(), config);
     }

@@ -2,7 +2,6 @@
 
 // package
 #include "classes.h"
-#include "odometry/ground_plane.h"
 #include "odometry/voxel_map.h"
 // util
 #include "util/cloud.h"
@@ -38,9 +37,6 @@ struct SemanticCloud : public Frame<SemanticCloud, 3, Semantics, Belief> {
     void transform(const Sophus::SE3f& t) const noexcept;
     virtual std::pair<Eigen::Vector3f&, Semantics> operator[](size_t i) noexcept override final;
     virtual std::pair<const Eigen::Vector3f&, Semantics> operator[](size_t i) const noexcept override final;
-public:
-    // TODO: this signature is subject to change
-    void project(VoxelMap<2>& projection, const GroundPlane<SemanticCloud>& ground) const;
 private:
     Semantics data(size_t i) const noexcept;
 private:

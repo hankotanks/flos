@@ -38,6 +38,9 @@ class Config:
             'convergence_criterion': (float, False),
             'correspondence_weighting': (bool, False), 
             'correspondence_target': (int, False),
+            'projection_enable': (bool, False),
+            'projection_ground': (typing.List[int], False),
+            'projection_target': (typing.List[int], False)
         }
 
     def __init__(self, context):
