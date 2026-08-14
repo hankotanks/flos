@@ -126,8 +126,10 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigne
             float correspondence_distance = sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER;
             if(config_.projection.enable) {
                 PROFILE(refinement, &align) {
-                    OdometrySystem::project(projection_.curr, points_kp_wrapper);
-                    OdometrySystem::refine(points_kp_wrapper, initial_guess, correspondence_distance);
+                    if(frame_ > config_.voxel_capacity) {
+                        OdometrySystem::project(projection_.curr, points_kp_wrapper);
+                        OdometrySystem::refine(points_kp_wrapper, initial_guess, correspondence_distance);
+                    }
                 }
             }   
             // ICP
@@ -141,7 +143,9 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigne
             last_pose_ = pose;
             // maintain ground plane and previous frame's projection
             if(config_.projection.enable) {
-                PROFILE(refinement_update, &align) OdometrySystem::fit(points_kp_wrapper, T_icp);
+                PROFILE(refinement_update, &align) {
+                    if(frame_ > config_.voxel_capacity) OdometrySystem::fit(points_kp_wrapper, T_icp);
+                }
             }
         }
         // append points to map
@@ -157,6 +161,7 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigne
             statistics_.velocity.angular = angular_velocity(xi, dt);
         }
     }
+    ++frame_;
     // return const ref to the computed pose, since we store it anyway
     return last_pose_;
 }

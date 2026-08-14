@@ -78,7 +78,8 @@ private:
     Config config_;
     // statistics
     Statistics statistics_;
-    // previous frame state
+    // frame state
+    size_t frame_{0};
     Sophus::SE3f last_pose_;
     Sophus::SE3f last_delta_;
     unsigned int init_seconds_{std::numeric_limits<unsigned int>::max()};
