@@ -8,13 +8,17 @@
 
 void correspond(const VoxelMap<2>& source, const VoxelMap<2>& target, std::vector<std::tuple<Eigen::Vector2f, Eigen::Vector2f, float>>& correspondences, float correspondence_distance_sq) {
     correspondences.clear();
-    tbb::enumerable_thread_specific<std::vector<std::tuple<Eigen::Vector2f, Eigen::Vector2f, float>>> local;
-    source.for_each([&](const Eigen::Vector2f& query) {
-        auto neighbor = target.closest(query, correspondence_distance_sq);
-        if(neighbor) local.local().emplace_back(query, neighbor->point, neighbor->distance_sq);
+    tbb::enumerable_thread_specific<std::vector<std::tuple<Eigen::Vector2f, Eigen::Vector2f, float>>> correspondence_pool;
+    tbb::parallel_for(source.view(), [&target, &correspondence_distance_sq, &correspondence_pool](auto& range) {
+        for(const auto& query : range) {
+            auto neighbor = target.closest(query, correspondence_distance_sq);
+            if(!neighbor) continue;
+            auto& local = correspondence_pool.local();
+            local.emplace_back(query, neighbor->point, neighbor->distance_sq);
+        }
     });
-    for(auto& v : local) {
-        correspondences.insert(correspondences.end(), std::make_move_iterator(v.begin()), std::make_move_iterator(v.end()));
+    for(auto& local : correspondence_pool) {
+        correspondences.insert(correspondences.end(), std::make_move_iterator(local.begin()), std::make_move_iterator(local.end()));
     }
 }
 

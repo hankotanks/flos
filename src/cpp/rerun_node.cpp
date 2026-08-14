@@ -5,7 +5,6 @@
 // package
 #include "offline_node.h"
 // util
-#include "rerun/archetypes/line_strips3d.hpp"
 #include "util/cloud.h"
 
 // PARAMETERS
@@ -69,14 +68,17 @@ protected:
     virtual void publish_experimental(const std_msgs::msg::Header::_stamp_type& stamp, const VoxelMap<2>& previous, const VoxelMap<2>& current) override {
         RerunNode::set_stamp(stamp);
         // previous
-        std::vector<rerun::Vec2D> points_previous = previous.transform([](const Eigen::Vector2f& point) {
-            return rerun::Vec2D{point.x(), point.y()};
-        });
+
+        std::vector<rerun::Vec2D> points_previous;
+        for(const auto& point : previous.view()) {
+            points_previous.emplace_back(point.x(), point.y());
+        }
         rr_.log("scan/projection/previous", rerun::Points2D(points_previous));
         // current
-        std::vector<rerun::Vec2D> points_current = current.transform([](const Eigen::Vector2f& point) {
-            return rerun::Vec2D{point.x(), point.y()};
-        });
+        std::vector<rerun::Vec2D> points_current;
+        for(const auto& point : current.view()) {
+            points_current.emplace_back(point.x(), point.y());
+        }
         rr_.log("scan/projection/current", rerun::Points2D(points_current));
         
     }

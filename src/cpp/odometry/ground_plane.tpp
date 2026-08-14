@@ -2,33 +2,38 @@
 
 #include "odometry/ground_plane.h"
 
+#include <tbb/parallel_for.h>
+
 template<typename F>
 template<typename Predicate>
 GroundPlane<F>::GroundPlane(const VoxelMap<3, F>& map, const Eigen::Vector3f& origin, float max_distance, Predicate&& pred) {
-    // centroid
-    struct Acc {
-        Eigen::Vector3f centroid = Eigen::Vector3f::Zero();
-        size_t count{0};
-        Acc& operator+=(const Acc& rhs) {
-            centroid += rhs.centroid;
-            count += rhs.count;
-            return *this;
+    tbb::enumerable_thread_specific<std::pair<Eigen::Vector3f, size_t>> centroid_pool;
+    tbb::parallel_for(map.view_within_radius(origin, max_distance), [&centroid_pool](auto& range) {
+        for(const auto& [point, data] : range) {
+            if(data.prediction != 1) continue;
+            auto& local = centroid_pool.local();
+            local.first += point;
+            local.second++;
         }
-    };
-    auto [centroid_temp, count] = map.reduce_within_radius(origin, max_distance, Acc{}, 
-        [&pred](Acc acc, const Eigen::Vector3f& point, const typename F::point_data_t& data) -> Acc {
-            if(!pred(data)) return acc;
-            const auto [centroid, count] = acc;
-            return {centroid + point, count + 1};
-        });
-    centroid = centroid_temp / static_cast<float>(count);
+    });
+    size_t count = 0;
+    for(const auto& [local_centroid, local_count] : centroid_pool)  {
+        centroid += local_centroid;
+        count += local_count;
+    }
+    centroid /= static_cast<float>(count);
     // covariance
-    Eigen::Matrix3f S = map.reduce_within_radius(origin, max_distance, Eigen::Matrix3f::Zero().eval(), 
-        [this, &pred](Eigen::Matrix3f acc, const Eigen::Vector3f& point, const typename F::point_data_t& data) -> Eigen::Matrix3f {
-            if(!pred(data)) return acc;
+    tbb::enumerable_thread_specific<Eigen::Matrix3f> covariance_pool;
+    tbb::parallel_for(map.view_within_radius(origin, max_distance), [this, &covariance_pool](auto& range) {
+        for(const auto& [point, data] : range) {
+            if(data.prediction != 1) continue;
+            auto& local = covariance_pool.local();
             const Eigen::Vector3f d = point - this->centroid;
-            return acc + d * d.transpose();
-        });
+            local += d * d.transpose();
+        }
+    });
+    Eigen::Matrix3f S = Eigen::Matrix3f::Zero();
+    for(const auto& local_covariance : covariance_pool) S += local_covariance;
     S /= static_cast<float>(count);
     // solve
     Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> solver{S};

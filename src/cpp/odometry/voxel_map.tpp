@@ -135,6 +135,7 @@ requires(DefaultFrameType<D, F>) {
     search.value().add(point, voxel_resolution_);
 }
 
+#if 0
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
 template<typename Fn>
@@ -282,6 +283,7 @@ auto VoxelMap<D, F>::transform_filter(Fn&& f) const {
         return result;
     }
 }
+#endif
 
 template<size_t D>
 requires(D >= 2 && D <= 3)
@@ -440,4 +442,170 @@ inline float VoxelMap<D, F>::lower_bound_distance_sq(const Eigen::Vector<float, 
     Eigen::Vector<float, D> d = (query - center).cwiseAbs() - Eigen::Vector<float, D>::Constant(h);
     d = d.cwiseMax(Eigen::Vector<float, D>::Zero());
     return d.squaredNorm();
+}
+
+template<size_t D, typename F>
+requires(ValidVoxelMap<D, F>)
+VoxelMap<D, F>::view_global::view_global(VoxelMap<D, F>::view_global& other, tbb::split) : map_(other.map_), begin_(other.begin_), end_(other.end_) {
+    const auto distance = std::distance(begin_, end_);
+    const auto mid = distance / 2;
+    std::advance(begin_, mid);
+    other.end_ = begin_;
+}
+
+template<size_t D, typename F>
+requires(ValidVoxelMap<D, F>)
+VoxelMap<D, F>::view_global::iterator::reference VoxelMap<D, F>::view_global::iterator::operator*() const noexcept {
+    if constexpr (DefaultFrameType<D, F>) {
+        return voxel_->second.points[i_];
+    } else {
+        return {
+            voxel_->second.points[i_],
+            voxel_->second.point_data[i_]
+        };
+    }
+}
+
+template<size_t D, typename F>
+requires(ValidVoxelMap<D, F>)
+VoxelMap<D, F>::view_global::iterator::pointer VoxelMap<D, F>::view_global::iterator::operator->() const noexcept {
+    if constexpr (DefaultFrameType<D, F>) {
+        return std::addressof(voxel_->second.points[i_]);
+    } else {
+        return {
+            voxel_->second.points[i_],
+            voxel_->second.point_data[i_]
+        };
+    }
+}
+
+template<size_t D, typename F>
+requires(ValidVoxelMap<D, F>)
+VoxelMap<D, F>::view_global::iterator& VoxelMap<D, F>::view_global::iterator::operator++() {
+    ++i_;
+    satisfy();
+    return *this;
+}
+
+template<size_t D, typename F>
+requires(ValidVoxelMap<D, F>)
+VoxelMap<D, F>::view_global::iterator VoxelMap<D, F>::view_global::iterator::operator++(int) {
+    auto copy = *this;
+    ++*this;
+    return copy;
+}
+
+template<size_t D, typename F>
+requires(ValidVoxelMap<D, F>)
+VoxelMap<D, F>::view_global::iterator::iterator(const VoxelMap<D, F>::view_global* range, typename tsl::robin_map<Eigen::Vector<int, D>, Voxel>::const_iterator voxel) : range_(range), voxel_(voxel) { 
+    satisfy(); 
+}
+
+template<size_t D, typename F>
+requires(ValidVoxelMap<D, F>)
+void VoxelMap<D, F>::view_global::iterator::satisfy() {
+    while(voxel_ != range_->end_) {
+        if(i_ < voxel_->second.points.size()) return;
+        ++voxel_;
+        i_ = 0;
+    }
+}
+
+template<size_t D, typename F>
+requires(ValidVoxelMap<D, F>)
+VoxelMap<D, F>::view_local::view_local(const VoxelMap<D, F>& map, const Eigen::Vector<float, D>& origin, float radius) : 
+    map_(&map), 
+    origin_(origin), 
+    radius_sq_(radius * radius), 
+    minima_(map.point_to_voxel(origin - Eigen::Vector<float, D>::Constant(radius))),
+    maxima_(map.point_to_voxel(origin + Eigen::Vector<float, D>::Constant(radius))) {
+    for(int d = 0; d < D; ++d) end_ *= static_cast<std::size_t>(maxima_[d] - minima_[d] + 1);
+}
+
+template<size_t D, typename F>
+requires(ValidVoxelMap<D, F>)
+VoxelMap<D, F>::view_local::view_local(view_local& other, tbb::split) : 
+    map_(other.map_), 
+    origin_(other.origin_), 
+    radius_sq_(other.radius_sq_), 
+    minima_(other.minima_), 
+    maxima_(other.maxima_) {
+    const auto mid = other.begin_ + (other.end_ - other.begin_) / 2;
+    begin_ = mid;
+    end_ = other.end_;
+    other.end_ = mid;
+}
+
+template<size_t D, typename F>
+requires(ValidVoxelMap<D, F>)
+VoxelMap<D, F>::view_local::iterator::reference VoxelMap<D, F>::view_local::iterator::operator*() const noexcept { 
+    if constexpr (DefaultFrameType<D, F>) {
+        return voxel_->points[j_];
+    } else {
+        return {
+            voxel_->points[j_],
+            voxel_->point_data[j_]
+        };
+    } 
+}
+
+template<size_t D, typename F>
+requires(ValidVoxelMap<D, F>)
+VoxelMap<D, F>::view_local::iterator::pointer VoxelMap<D, F>::view_local::iterator::operator->() const noexcept { 
+    if constexpr (DefaultFrameType<D, F>) {
+        return std::addressof(voxel_->points[j_]);
+    } else {
+        return operator*().operator->();
+    }
+}
+
+template<size_t D, typename F>
+requires(ValidVoxelMap<D, F>)
+VoxelMap<D, F>::view_local::iterator& VoxelMap<D, F>::view_local::iterator::operator++() {
+    ++j_;
+    VoxelMap<D, F>::view_local::iterator::satisfy();
+    return *this;
+}
+
+template<size_t D, typename F>
+requires(ValidVoxelMap<D, F>)
+VoxelMap<D, F>::view_local::iterator VoxelMap<D, F>::view_local::iterator::operator++(int) {
+    auto copy = *this;
+    ++(*this);
+    return copy;
+}
+
+template<size_t D, typename F>
+requires(ValidVoxelMap<D, F>)
+VoxelMap<D, F>::view_local::iterator::iterator(const typename VoxelMap<D, F>::view_local* range, size_t i) : range_(range), i_(i) {
+    VoxelMap<D, F>::view_local::iterator::satisfy();
+}
+
+template<size_t D, typename F>
+requires(ValidVoxelMap<D, F>)
+void VoxelMap<D, F>::view_local::iterator::satisfy() {
+    while(i_ < range_->end_) {
+        if(voxel_ != nullptr) {
+            while(j_ < voxel_->points.size()) {
+                const Eigen::Vector<float, D>& point = voxel_->points[j_];
+                if((point - range_->origin_).squaredNorm() <= range_->radius_sq_) return;
+                ++j_;
+            }
+            j_ = 0;
+            voxel_ = nullptr;
+        }
+        Eigen::Vector<int, D> voxel = range_->minima_;
+        for(int d = 0, i = i_; d < D; ++d) {
+            const auto extent = static_cast<size_t>(range_->maxima_[d] - range_->minima_[d] + 1);
+            voxel[d] += static_cast<int>(i % extent);
+            i /= extent;
+        }
+        ++i_;
+        auto it = range_->map_->map_.find(voxel);
+        if(it == range_->map_->map_.end()) continue;
+        j_ = 0;
+        voxel_ = std::addressof(it.value());
+    }
+    voxel_ = nullptr;
+    j_ = 0;
 }

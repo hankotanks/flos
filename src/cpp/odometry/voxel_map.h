@@ -2,10 +2,12 @@
 
 // system
 #include <limits>
+#include <tbb/blocked_range.h>
 #include <optional>
 // eigen
 #include <Eigen/Dense>
 // tsl
+#include <ranges>
 #include <span>
 #include <tsl/robin_map.h>
 // sophus
@@ -96,19 +98,6 @@ public:
     void extend(const Eigen::Vector<int, D>& voxel, const Eigen::Vector<float, D>& point)
     requires(DefaultFrameType<D, F>);
 public:
-    // 'algorithms' (parallelized wherever possible)
-    template<typename Fn>
-    void for_each(Fn&& f) const noexcept;
-    template<typename Fn>
-    void for_each_within_radius(const Eigen::Vector<float, D>& origin, float radius, Fn&& f) const noexcept;
-    template<typename Fn, typename Acc>
-    requires requires(Acc a, const Acc& b) { a += b; }
-    Acc reduce_within_radius(const Eigen::Vector<float, D>& origin, float radius, Acc init, Fn&& f) const noexcept;
-    template<typename Fn>
-    auto transform(Fn&& f) const;
-    template<typename Fn>
-    auto transform_filter(Fn&& f) const;
-public:
     template<size_t _D, typename _F>
     struct NeighborInner { /* STUB */ };
     template<size_t _D, typename _F>
@@ -166,6 +155,116 @@ private:
     size_t voxel_capacity_;
     // underlying map structure
     tsl::robin_map<Eigen::Vector<int, D>, Voxel> map_;
+private:
+    struct view_global : public std::ranges::view_interface<view_global> {
+        view_global(const VoxelMap<D, F>& map) : map_(&map), begin_(map.map_.cbegin()), end_(map.map_.cend()) { /* STUB */ }
+        view_global(view_global& other, tbb::split);
+        // helpers
+        inline bool empty() const noexcept { return begin_ == end_; }
+        inline bool is_divisible() const noexcept { return std::distance(begin_, end_) > 1; }
+        // iterator inner class
+        struct iterator {
+            friend class view_global;
+            // proxy for reference type 
+            template<typename T = F>
+            struct proxy {
+                const Eigen::Vector<float, D>& first;
+                const typename T::point_data_t& second;
+                const proxy* operator->() const noexcept { return this; }
+            };
+            // iterator description
+            using iterator_concept = std::forward_iterator_tag;
+            using iterator_category = std::forward_iterator_tag;
+            template<typename T = F>
+            using value_type = std::conditional_t<DefaultFrameType<D, F>, Eigen::Vector<float, D>, std::pair<Eigen::Vector<float, D>, typename T::point_data_t>>;
+            using difference_type = std::ptrdiff_t;
+            using reference = std::conditional_t<DefaultFrameType<D, F>, const Eigen::Vector<float, D>&, proxy<>>;
+            using pointer = std::conditional_t<DefaultFrameType<D, F>, const Eigen::Vector<float, D>*, proxy<>>;
+            // default constructor
+            iterator() = default;
+            // operators
+            reference operator*() const noexcept;
+            pointer operator->() const noexcept;
+            iterator& operator++();
+            iterator operator++(int);
+            friend bool operator==(const iterator& lhs, const iterator& rhs) noexcept { return lhs.range_ == rhs.range_ && lhs.i_ == rhs.i_ && lhs.voxel_ == rhs.voxel_; }
+            friend bool operator!=(const iterator& lhs, const iterator& rhs) noexcept { return !(lhs == rhs); }
+        private:
+            iterator(const view_global* range, typename tsl::robin_map<Eigen::Vector<int, D>, Voxel>::const_iterator voxel);
+            void satisfy();
+            // state
+            const view_global* range_{nullptr};
+            size_t i_{0};
+            typename tsl::robin_map<Eigen::Vector<int, D>, Voxel>::const_iterator voxel_{};
+        };
+    public:
+        inline iterator begin() const { return {this, begin_}; }
+        inline iterator end() const { return {this, end_}; }
+    private:
+        const VoxelMap<D, F>* map_;
+        typename tsl::robin_map<Eigen::Vector<int, D>, Voxel>::const_iterator begin_;
+        typename tsl::robin_map<Eigen::Vector<int, D>, Voxel>::const_iterator end_;
+    };
+private:
+    struct view_local : public std::ranges::view_interface<view_local> {
+        view_local(const VoxelMap<D, F>& map, const Eigen::Vector<float, D>& origin, float radius);
+        view_local(view_local& other, tbb::split);
+        // helpers
+        inline bool empty() const noexcept { return begin_ == end_; }
+        inline bool is_divisible() const noexcept { return end_ - begin_ > 1; }
+        // iterator inner class
+        struct iterator {
+            friend class view_local;
+            // proxy for the reference type (unable to construct the pair of pointers without getting local copies)
+            struct proxy {
+                const Eigen::Vector<float, D>& first;
+                const typename F::point_data_t& second;
+                const proxy* operator->() const noexcept { return this; }
+            };
+            // iterator description
+            using iterator_concept = std::forward_iterator_tag;
+            using iterator_category = std::forward_iterator_tag;
+            using value_type = std::conditional_t<DefaultFrameType<D, F>, Eigen::Vector<float, D>, std::pair<Eigen::Vector<float, D>, typename F::point_data_t>>;
+            using difference_type = std::ptrdiff_t;
+            using reference = std::conditional_t<DefaultFrameType<D, F>, const Eigen::Vector<float, D>&, proxy>;
+            using pointer = std::conditional_t<DefaultFrameType<D, F>, const Eigen::Vector<float, D>*, proxy>;
+            // default constructor (an expectation of forward iterators)
+            iterator() = default;
+            // operators
+            reference operator*() const noexcept;
+            pointer operator->() const noexcept;
+            iterator& operator++();
+            iterator operator++(int);
+            friend bool operator==(const iterator& lhs, const iterator& rhs) noexcept { return lhs.range_ == rhs.range_ && lhs.i_ == rhs.i_ && lhs.j_ == rhs.j_; }
+            friend bool operator!=(const iterator& lhs, const iterator& rhs) noexcept { return !(lhs == rhs); }
+        private:
+            iterator(const view_local* range, size_t i);
+            void satisfy();
+        private:
+            const view_local* range_{nullptr};
+            size_t i_{0};
+            size_t j_{0};
+            const Voxel* voxel_{nullptr};
+        };
+    public:
+        inline iterator begin() const { return {this, begin_}; }
+        inline iterator end() const { return {this, end_}; }
+    private:
+        const VoxelMap<D, F>* map_;
+        Eigen::Vector<float, D> origin_;
+        float radius_sq_;
+        Eigen::Vector<int, D> minima_;
+        Eigen::Vector<int, D> maxima_;
+        size_t begin_{0};
+        size_t end_{1};
+    };
+public:
+    view_global view() const {
+        return {*this};
+    }
+    view_local view_within_radius(const Eigen::Vector<float, D>& origin, float radius) const {
+        return {*this, origin, radius};
+    }
 };
 
 #include "odometry/voxel_map.tpp" // IWYU pragma: keep
