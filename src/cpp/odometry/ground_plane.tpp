@@ -55,6 +55,9 @@ Sophus::SE3f GroundPlane<F>::lift(const Sophus::SE2f& T) const noexcept {
     return Sophus::SE3f{R, t};
 }
 
+// TODO: this is insufficient because we don't currently store the distance above the plane
+// we can do this, but its probably simpler to just reproject the points
+// see the note below...
 template<typename F>
 Eigen::Affine2f GroundPlane<F>::project(const Sophus::SE3f& T) const noexcept {
     const Eigen::Matrix3f& R = T.so3().matrix();
@@ -65,6 +68,13 @@ Eigen::Affine2f GroundPlane<F>::project(const Sophus::SE3f& T) const noexcept {
     Eigen::Affine2f T2 = Eigen::Affine2f::Identity();
     T2.linear() = basis.transpose() * R * basis;
     T2.translation() = basis.transpose() * (R * centroid + t - centroid);
+    // ... this affine transform is correct, however, we need to consider another translational component
+    // Eigen::Vector2f t_prime = basis.transpose() * R * plane_.col(0);
+    // in order to actually compute a new points position, we need to do the following:
+    // T2 * x_i + s_i * t_prime
+    // where x_i is the 2D point and s_i is the signed distance from the plane.
+    // this can be stored as point_data in the VoxelMap, but it requires another wrapper implementation
+    // this could be defined in projection.h, but I really don't think it's worth it
     return T2;
 }
 
