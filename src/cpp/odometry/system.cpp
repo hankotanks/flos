@@ -186,7 +186,7 @@ std::pair<Sophus::SE3f, double> OdometrySystem::predict(unsigned int seconds, un
 }
 
 void OdometrySystem::fit(const SemanticCloud& points, const Sophus::SE3f& T) {
-    if((projection_.origin - last_pose_.translation()).squaredNorm() > (config_.max_distance_ground * config_.max_distance_ground * 0.25f)) {
+    if((projection_.ground.centroid - last_pose_.translation()).squaredNorm() > (config_.max_distance_ground * config_.max_distance_ground * 0.25f)) {
         projection_.origin = last_pose_.translation();
         projection_.ground = GroundPlane<SemanticCloud>(map_, projection_.origin, config_.max_distance_ground, 
             [this](const Semantics& data) { return this->config_.projection.ground.count(data.prediction) > 0; });
@@ -194,7 +194,7 @@ void OdometrySystem::fit(const SemanticCloud& points, const Sophus::SE3f& T) {
     } else {
         // update current frame projection
         projection_.prev = std::move(projection_.curr);
-        Sophus::SE2f T_icp_projected = projection_.ground.project(T);
+        Eigen::Affine2f T_icp_projected = projection_.ground.project(T);
         projection_.prev.apply(T_icp_projected);
     }
 }

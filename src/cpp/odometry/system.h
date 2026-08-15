@@ -73,7 +73,7 @@ private:
     // simplified from the robust kernel, which had no appreciable benefit
     static constexpr float CORRESPONDENCE_MULTIPLIER{3.f};
     // downsampling scalar for keypoints
-    static constexpr float VOXEL_SIZE_SCALAR{1.5f};
+    static constexpr float VOXEL_SIZE_SCALAR{1.25f};
     // configuration
     Config config_;
     // statistics

@@ -47,6 +47,11 @@ struct Frame {
     virtual std::pair<const Eigen::Vector<float, D>&, point_data_t> operator[](size_t) const noexcept = 0;
 };
 
+template<size_t D, typename T>
+concept TransformEuclid = (D == 2 && std::same_as<T, Sophus::SE2f>) || (D == 3 && std::same_as<T, Sophus::SE3f>);
+template<size_t D, typename T>
+concept TransformAffine = (D == 2 && std::same_as<T, Eigen::Affine2f>) || (D == 3 && std::same_as<T, Eigen::Affine3f>);
+
 // if F is provided to VoxelMap, it must be derived from Frame
 template<size_t D, typename F>
 concept FrameType = requires {
@@ -84,11 +89,14 @@ public:
     inline void clear() noexcept { map_.clear(); }
     inline bool empty() const noexcept { return map_.empty(); }
 public:
-    using Transform = std::conditional_t<D == 2, Sophus::SE2f, Sophus::SE3f>;
     // transform all points in the map
+    template<typename Transform>
+    requires(TransformEuclid<D, Transform> || TransformAffine<D, Transform>)
     void apply(const Transform& T)
     requires(DefaultFrameType<D, F>);
     // update transforms points by pose, extends the map with them, then prunes by max_distance
+    template<typename Transform>
+    requires(TransformEuclid<D, Transform>)
     void update(F& points, const Transform& pose);
     // extend just adds (a) point(s) to the map directly
     void extend(const F& points);

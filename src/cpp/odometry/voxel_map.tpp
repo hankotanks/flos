@@ -38,6 +38,8 @@ inline Eigen::Vector<float, D> VoxelMap<D, F>::voxel_to_point(const Eigen::Vecto
 // if it is, it should be removed from the map
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
+template<typename Transform>
+requires(TransformEuclid<D, Transform> || TransformAffine<D, Transform>)
 void VoxelMap<D, F>::apply(const Transform& T) 
 requires(DefaultFrameType<D, F>) {
     std::vector<std::pair<Eigen::Vector<int, D>, Eigen::Vector<float, D>>> extension;
@@ -65,6 +67,8 @@ requires(DefaultFrameType<D, F>) {
 
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
+template<typename Transform>
+requires(TransformEuclid<D, Transform>)
 void VoxelMap<D, F>::update(F& points, const Transform& pose) {
     // transform points by pose
     for(size_t i = 0; i < points.size(); ++i) {

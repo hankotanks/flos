@@ -56,23 +56,16 @@ Sophus::SE3f GroundPlane<F>::lift(const Sophus::SE2f& T) const noexcept {
 }
 
 template<typename F>
-Sophus::SE2f GroundPlane<F>::project(const Sophus::SE3f& T) const noexcept {
-    const Eigen::Matrix3f R = T.so3().matrix();
-    const Eigen::Vector3f t = T.translation();
-    const Eigen::Matrix<float, 3, 2> B = plane_.block<3, 2>(0, 1);
-    const Eigen::Matrix2f A = B.transpose() * R * B;
-    Eigen::JacobiSVD<Eigen::Matrix2f> svd(A, Eigen::ComputeFullU | Eigen::ComputeFullV);
-    Eigen::Matrix2f R2 = svd.matrixU() * svd.matrixV().transpose();
-    if(R2.determinant() < 0.f) {
-        auto U = svd.matrixU();
-        U.col(1) *= -1.f;
-        R2 = U * svd.matrixV().transpose();
-    }
-    Eigen::Matrix3f R_plane = Eigen::Matrix3f::Identity();
-    R_plane.block<2, 2>(1, 1) = R2;
-    const Eigen::Matrix3f R_projected = plane_ * R_plane * plane_.transpose();
-    const Eigen::Vector2f t2 = B.transpose() * (t + R_projected * centroid - centroid);
-    return Sophus::SE2f{R2, t2};
+Eigen::Affine2f GroundPlane<F>::project(const Sophus::SE3f& T) const noexcept {
+    const Eigen::Matrix3f& R = T.so3().matrix();
+    const Eigen::Vector3f& t = T.translation();
+    Eigen::Matrix<float, 3, 2> basis;
+    basis.col(0) = t1;
+    basis.col(1) = t2;
+    Eigen::Affine2f T2 = Eigen::Affine2f::Identity();
+    T2.linear() = basis.transpose() * R * basis;
+    T2.translation() = basis.transpose() * (R * centroid + t - centroid);
+    return T2;
 }
 
 template<typename F>
