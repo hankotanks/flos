@@ -42,9 +42,9 @@ template<typename Transform>
 requires(TransformEuclid<D, Transform> || TransformAffine<D, Transform>)
 void VoxelMap<D, F>::apply(const Transform& T) {
     if constexpr (DefaultFrameType<D, F>) {
-        VoxelMap<D, F>::apply([&T](const Eigen::Vector<float, D>& point) { return T * point; });
+        VoxelMap<D, F>::apply([&T](Eigen::Vector<float, D>& point) { point = T * point; });
     } else {
-        VoxelMap<D, F>::apply([&T](const Eigen::Vector<float, D>& point, const typename F::point_data_t&) { return T * point; });
+        VoxelMap<D, F>::apply([&T](Eigen::Vector<float, D>& point, typename F::point_data_t&) { point = T * point; });
     }
 }
 
@@ -62,7 +62,8 @@ void VoxelMap<D, F>::apply(Transform&& fn) {
             static_assert(!std::is_const_v<std::remove_reference_t<decltype(voxel)>>);
             size_t i_write = 0;
             for(size_t i_read = 0; i_read < voxel.points.size(); ++i_read) {
-                Eigen::Vector<float, D> point = std::invoke(fn, voxel.points[i_read]);
+                Eigen::Vector<float, D> point = voxel.points[i_read];
+                std::invoke(fn, point);
                 Eigen::Vector<int, D> key_after = VoxelMap<D, F>::point_to_voxel(point);
                 if(key_before != key_after) {
                     extension.emplace_back(std::move(key_after), std::move(point));
@@ -84,17 +85,20 @@ void VoxelMap<D, F>::apply(Transform&& fn) {
             static_assert(!std::is_const_v<std::remove_reference_t<decltype(voxel)>>);
             size_t i_write = 0;
             for(size_t i_read = 0; i_read < voxel.points.size(); ++i_read) {
-                Eigen::Vector<float, D> point = std::invoke(fn, voxel.points[i_read], voxel.point_data[i_read]);
+                Eigen::Vector<float, D> point = voxel.points[i_read];
+                typename F::point_data_t data = voxel.point_data[i_read];
+                std::invoke(fn, point, data);
                 Eigen::Vector<int, D> key_after = VoxelMap<D, F>::point_to_voxel(point);
                 if(key_before != key_after) {
-                    extension.emplace_back(std::move(key_after), std::move(point), std::move(voxel.point_data[i_read]));
+                    extension.emplace_back(std::move(key_after), std::move(point), std::move(data));
                     continue;
                 }
                 voxel.points[i_write] = std::move(point);
-                if(i_write != i_read) voxel.point_data[i_write] = std::move(voxel.point_data[i_read]);
+                voxel.point_data[i_write] = std::move(data);
                 ++i_write;
             }
             voxel.points.resize(i_write);
+            voxel.point_data.resize(i_write);
         }
         // add the points which changed voxels
         for(const auto& [voxel, point, data] : extension) VoxelMap<D, F>::extend(voxel, point, data);
@@ -106,11 +110,7 @@ requires(ValidVoxelMap<D, F>)
 template<typename Transform>
 requires(TransformEuclid<D, Transform>)
 void VoxelMap<D, F>::update(F& points, const Transform& pose) {
-    // transform points by pose...
-    for(size_t i = 0; i < points.size(); ++i) {
-        // ...and add to map
-        VoxelMap<D, F>::extend(pose * points[i].first, points[i].second);
-    }
+    VoxelMap<D, F>::extend(points, pose);
     // remove points outside of a distance threshold to the current pose
     const Eigen::Vector<float, D>& origin = pose.translation();
     const auto max_distance_sq = max_distance_ * max_distance_;
@@ -143,6 +143,41 @@ void VoxelMap<D, F>::extend(const F& points) {
     } else {
         for(size_t i = 0; i < points.size(); ++i) {
             const auto& point = points[i];
+            const Eigen::Vector<int, D> voxel = VoxelMap<D, F>::point_to_voxel(point);
+            auto search = map_.find(voxel);
+            if(search == map_.end()) {
+                auto [it, _] = map_.try_emplace(voxel, voxel_capacity_);
+                search = it;
+            }
+            search.value().add(point, voxel_resolution_);
+        }
+    }
+}
+
+template<size_t D, typename F>
+requires(ValidVoxelMap<D, F>)
+template<typename Transform>
+requires(TransformEuclid<D, Transform>)
+void VoxelMap<D, F>::extend(const F& points, const Transform& pose) {
+    if constexpr (!DefaultFrameType<D, F>) {
+        for(size_t i = 0; i < points.size(); ++i) {
+            auto [point, data] = points[i];
+            point = pose * point;
+            const Eigen::Vector<int, D> voxel = VoxelMap<D, F>::point_to_voxel(point);
+            auto search = map_.find(voxel);
+            if(search == map_.end()) {
+                auto [it, _] = map_.try_emplace(voxel, voxel_capacity_);
+                search = it;
+            }
+            // update VoxelData
+            search.value().add(point, data, voxel_resolution_);
+        }
+        for(auto it = map_.begin(); it != map_.end(); ++it) {
+            it.value().data.finish();
+        }
+    } else {
+        for(size_t i = 0; i < points.size(); ++i) {
+            const auto point = pose * points[i];
             const Eigen::Vector<int, D> voxel = VoxelMap<D, F>::point_to_voxel(point);
             auto search = map_.find(voxel);
             if(search == map_.end()) {

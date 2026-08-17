@@ -68,8 +68,8 @@ template<size_t D, typename T>
 concept TransformAffine = (D == 2 && std::same_as<T, Eigen::Affine2f>) || (D == 3 && std::same_as<T, Eigen::Affine3f>);
 template<size_t D, typename F, typename T>
 concept TransformLambda = (
-    (DefaultFrameType<D, F> && requires(T&& fn, const Eigen::Vector<float, D>& point) { { std::invoke(std::forward<T>(fn), point) } -> std::same_as<Eigen::Vector<float, D>>; }) ||
-    (!DefaultFrameType<D, F> && requires(T&& fn, const Eigen::Vector<float, D>& point, const typename F::point_data_t& data) { { std::invoke(std::forward<T>(fn), point, data) } -> std::same_as<Eigen::Vector<float, D>>; }));
+    (DefaultFrameType<D, F> && requires(T&& fn, Eigen::Vector<float, D>& point) { { std::invoke(std::forward<T>(fn), point) } -> std::same_as<void>; }) ||
+    (!DefaultFrameType<D, F> && requires(T&& fn, Eigen::Vector<float, D>& point, typename F::point_data_t& data) { { std::invoke(std::forward<T>(fn), point, data) } -> std::same_as<void>; }));
 
 template<size_t D, typename F = std::span<const Eigen::Vector<float, D>>>
 requires(ValidVoxelMap<D, F>)
@@ -106,6 +106,9 @@ public:
     void update(F& points, const Transform& pose);
     // extend just adds (a) point(s) to the map directly
     void extend(const F& points);
+    template<typename Transform>
+    requires(TransformEuclid<D, Transform>)
+    void extend(const F& points, const Transform& pose);
     // overload for a single point
     void extend(const Eigen::Vector<float, D>& point)
     requires(DefaultFrameType<D, F>);

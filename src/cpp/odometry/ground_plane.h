@@ -26,8 +26,8 @@ public:
     Sophus::SE3f lift(const Sophus::SE2f& T) const noexcept;
     // project a transform onto the plane
     // returns a lambda with signature (const Eigen::Vector2f&) -> Eigen::Vector2f
-    std::function<Eigen::Vector2f(const Eigen::Vector2f&, float)> project(const Sophus::SE3f& T) const noexcept;
-    std::function<Eigen::Vector2f(const Eigen::Vector2f&, float)> project(const GroundPlane& source) const noexcept;
+    std::function<void(Eigen::Vector2f&, float&)> project(const Sophus::SE3f& T) const noexcept;
+    std::function<void(Eigen::Vector2f&, float&)> project(const GroundPlane& source) const noexcept;
     // project a point onto the plane
     Eigen::Vector3f project(const Eigen::Vector3f& point) const noexcept;
 public:

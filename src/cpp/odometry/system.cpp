@@ -105,9 +105,7 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigne
         const auto& [delta, dt] = OdometrySystem::predict(seconds, nanoseconds);
         // deskewing
         if(config_.deskew) {
-            PROFILE(deskew, &registration) {
-                deskew_frame(points, delta);
-            }
+            PROFILE(deskew, &registration) deskew_frame(points, delta);
         }
         // downsample incoming points to obtain keypoints and the preprocessed frame
         util::Cloud points_kp{points};
@@ -125,15 +123,14 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigne
             float sigma = threshold_.compute();
             // and correspondence distance
             float correspondence_distance = sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER;
+            // refine initial_guess (invariant: point_kp_wrapper is transformed by initial_guess)
             if(config_.projection.enable) {
                 PROFILE(refinement, &align) {
-                    if(frame_ > config_.voxel_capacity) {
-                        OdometrySystem::refine(points_kp_wrapper, initial_guess, correspondence_distance);
-                    }
+                    if(frame_ > config_.voxel_capacity) OdometrySystem::refine(points_kp_wrapper, initial_guess, correspondence_distance);
                 }
             }   
             // ICP
-            Sophus::SE3f T_icp = OdometrySystem::align(points_kp_wrapper, initial_guess, sigma);
+            Sophus::SE3f T_icp = OdometrySystem::align(points_kp_wrapper, initial_guess, correspondence_distance);
             // build the current estimated pose
             Sophus::SE3f pose = T_icp * initial_guess;
             // update AdaptiveThreshold with deviation
@@ -145,7 +142,7 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigne
             if(config_.projection.enable) {
                 PROFILE(refinement_update, &align) {
                     if(frame_ > config_.voxel_capacity) {
-                        projection_.fit(map_, last_pose_, T_icp, [this](const Semantics& data) { 
+                        projection_.fit(map_, points_kp_wrapper, last_pose_, T_icp, [this](const Semantics& data) { 
                             return this->config_.projection.ground.count(data.prediction) > 0; 
                         });
                     }
@@ -250,7 +247,7 @@ std::pair<Eigen::Matrix<float, 6, 1>, float> OdometrySystem::solve(const Odometr
     return std::make_pair(JTJ.ldlt().solve(-JTr), w > 0.f ? chi / w : 0.f);
 }
 
-Sophus::SE3f OdometrySystem::align(SemanticCloud& points, const Sophus::SE3f& initial_guess, float sigma) {
+Sophus::SE3f OdometrySystem::align(SemanticCloud& points, const Sophus::SE3f& initial_guess, float correspondence_distance) {
     // determine starting point
     if(map_.empty()) return {};
     // termination threshold (Ceres-style)
@@ -262,7 +259,7 @@ Sophus::SE3f OdometrySystem::align(SemanticCloud& points, const Sophus::SE3f& in
         statistics_.iterations++;
         CorrespondenceSet correspondences; 
         // get correspondences
-        correspondences = OdometrySystem::correspond(points, sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER);
+        correspondences = OdometrySystem::correspond(points, correspondence_distance);
         // update statistics
         statistics_.correspondences += static_cast<float>(correspondences.size());    
         // Equation (11)

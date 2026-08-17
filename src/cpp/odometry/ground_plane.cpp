@@ -13,10 +13,11 @@ Sophus::SE3f GroundPlane::lift(const Sophus::SE2f& T) const noexcept {
     return Sophus::SE3f{R, t};
 }
 
+#if 0
 // TODO: this is insufficient because we don't currently store the distance above the plane
 // we can do this, but its probably simpler to just reproject the points
 // see the note below...
-std::function<Eigen::Vector2f(const Eigen::Vector2f&, float)> GroundPlane::project(const Sophus::SE3f& T) const noexcept {
+std::function<void(const Eigen::Vector2f&, float&)> GroundPlane::project(const Sophus::SE3f& T) const noexcept {
     const Eigen::Matrix3f& R = T.so3().matrix();
     const Eigen::Vector3f& t = T.translation();
     Eigen::Matrix<float, 3, 2> basis;
@@ -33,10 +34,12 @@ std::function<Eigen::Vector2f(const Eigen::Vector2f&, float)> GroundPlane::proje
     // where x_i is the 2D point and s_i is the signed distance from the plane.
     // this can be stored as point_data in the VoxelMap, but it requires another wrapper implementation
     // this could be defined in projection.h, but I really don't think it's worth it
-    return [T2, t_prime](const Eigen::Vector2f& point, const float& s) -> Eigen::Vector2f { return T2 * point + s * t_prime; };
+    return [T2, t_prime](Eigen::Vector2f& point, float& s) { 
+        return T2 * point + s * t_prime; 
+    };
 }
 
-std::function<Eigen::Vector2f(const Eigen::Vector2f&, float)> GroundPlane::project(const GroundPlane& source) const noexcept {
+std::function<void(const Eigen::Vector2f&, float&)> GroundPlane::project(const GroundPlane& source) const noexcept {
     Eigen::Matrix3f source_basis;
     source_basis.col(0) = source.t1;
     source_basis.col(1) = source.t2;
@@ -62,10 +65,100 @@ std::function<Eigen::Vector2f(const Eigen::Vector2f&, float)> GroundPlane::proje
         R.topRightCorner<2, 1>();
 
     return [A, b, s](
-        const Eigen::Vector2f& point,
-        float distance
-    ) -> Eigen::Vector2f {
-        return A * point + b + distance * s;
+        Eigen::Vector2f& point,
+        float& distance
+    ) {
+        point = A * point + b + distance * s;
+    };
+}
+#endif
+
+#if 1
+std::function<void(Eigen::Vector2f&, float&)>
+GroundPlane::project(const Sophus::SE3f& T) const noexcept {
+    const Eigen::Matrix3f& R = T.so3().matrix();
+    const Eigen::Vector3f& t = T.translation();
+
+    Eigen::Matrix<float, 3, 2> basis;
+    basis.col(0) = t1;
+    basis.col(1) = t2;
+
+    const Eigen::Matrix2f A =
+        basis.transpose() * R * basis;
+
+    const Eigen::Vector2f b =
+        basis.transpose() * (R * centroid + t - centroid);
+
+    const Eigen::Vector2f s =
+        basis.transpose() * R * n;
+
+    const Eigen::RowVector2f d_x =
+        n.transpose() * R * basis;
+
+    const float d_s =
+        n.dot(R * n);
+
+    const float d_b =
+        n.dot(R * centroid + t - centroid);
+
+    return [A, b, s, d_x, d_s, d_b]
+           (Eigen::Vector2f& point, float& distance) {
+        const Eigen::Vector2f old_point = point;
+        const float old_distance = distance;
+
+        point = A * old_point + b + old_distance * s;
+        distance = d_x.dot(old_point)
+                 + d_s * old_distance
+                 + d_b;
+    };
+}
+#endif
+
+std::function<void(Eigen::Vector2f&, float&)>
+GroundPlane::project(const GroundPlane& source) const noexcept {
+    Eigen::Matrix3f source_basis;
+    source_basis.col(0) = source.t1;
+    source_basis.col(1) = source.t2;
+    source_basis.col(2) = source.n;
+
+    Eigen::Matrix3f target_basis;
+    target_basis.col(0) = t1;
+    target_basis.col(1) = t2;
+    target_basis.col(2) = n;
+
+    const Eigen::Matrix3f R =
+        target_basis.transpose() * source_basis;
+
+    const Eigen::Vector3f translation =
+        target_basis.transpose() * (source.centroid - centroid);
+
+    const Eigen::Matrix2f A =
+        R.topLeftCorner<2, 2>();
+
+    const Eigen::Vector2f b =
+        translation.head<2>();
+
+    const Eigen::Vector2f s =
+        R.topRightCorner<2, 1>();
+
+    const Eigen::RowVector2f d_x =
+        R.bottomLeftCorner<1, 2>();
+
+    const float d_s =
+        R(2, 2);
+
+    const float d_b =
+        translation.z();
+
+    return [A, b, s, d_x, d_s, d_b]
+           (Eigen::Vector2f& point, float& distance) {
+        const Eigen::Vector2f old_point = point;
+        const float old_distance = distance;
+
+        point = A * old_point + b + old_distance * s;
+        distance = d_x.dot(old_point)
+                 + d_s * old_distance
+                 + d_b;
     };
 }
 

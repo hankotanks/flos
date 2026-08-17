@@ -15,7 +15,9 @@ BirdsEyeCloud::BirdsEyeCloud(const SemanticCloud& points, const GroundPlane& gro
 
 template<typename Predicate>
 GroundPlane::GroundPlane(const VoxelMap<3, SemanticCloud>& map, const Eigen::Vector3f& origin, float max_distance, Predicate&& pred) {
-    tbb::enumerable_thread_specific<std::pair<Eigen::Vector3f, size_t>> centroid_pool;
+    tbb::enumerable_thread_specific<std::pair<Eigen::Vector3f, size_t>> centroid_pool([] {
+        return std::make_pair(Eigen::Vector3f::Zero(), size_t{0});
+    });
     tbb::parallel_for(map.view_within_radius(origin, max_distance), [&pred, &centroid_pool](auto& range) {
         for(const auto& [point, data] : range) {
             if(!pred(data)) continue;
@@ -31,10 +33,12 @@ GroundPlane::GroundPlane(const VoxelMap<3, SemanticCloud>& map, const Eigen::Vec
     }
     centroid /= static_cast<float>(count);
     // covariance
-    tbb::enumerable_thread_specific<Eigen::Matrix3f> covariance_pool;
-    tbb::parallel_for(map.view_within_radius(origin, max_distance), [this, &covariance_pool](auto& range) {
+    tbb::enumerable_thread_specific<Eigen::Matrix3f> covariance_pool([] { 
+        return Eigen::Matrix3f::Zero();
+    });
+    tbb::parallel_for(map.view_within_radius(origin, max_distance), [this, &pred, &covariance_pool](auto& range) {
         for(const auto& [point, data] : range) {
-            if(data.prediction != 1) continue;
+            if(!pred(data)) continue;
             auto& local = covariance_pool.local();
             const Eigen::Vector3f d = point - this->centroid;
             local += d * d.transpose();
@@ -46,9 +50,10 @@ GroundPlane::GroundPlane(const VoxelMap<3, SemanticCloud>& map, const Eigen::Vec
     // solve
     Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> solver{S};
     plane_ = solver.eigenvectors();
+    n = plane_.col(0);
     t1 = plane_.col(1);
     t2 = plane_.col(2);
-    if(t1.cross(t2).dot(plane_.col(0)) < 0.f) {
+    if(t1.cross(t2).dot(n) < 0.f) {
         plane_.col(2) *= -1.f;
         t2 *= -1.f;
     }

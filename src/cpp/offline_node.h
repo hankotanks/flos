@@ -12,6 +12,7 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 // package
 #include "odometry/ground_plane.h"
+#include "odometry/semantic_cloud.h"
 #include "segmentation_node_config.h"
 #include "segmentation/system.h"
 #include "odometry_node_config.h"
@@ -79,6 +80,8 @@ public:
             poses_.emplace_back(header, pose);
             // publications
             if(visualize_) {
+                SemanticCloud cloud_wrapper{cloud};
+                cloud_wrapper.transform(pose);
                 this->publish_scan(header.stamp, cloud);
                 // TODO: removed visualize_map, it needs to be added back
                 this->publish_pose(header.stamp, header.frame_id, pose);
