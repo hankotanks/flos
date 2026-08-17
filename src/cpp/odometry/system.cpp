@@ -142,7 +142,7 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigne
             if(config_.projection.enable) {
                 PROFILE(refinement_update, &align) {
                     if(frame_ > config_.voxel_capacity) {
-                        projection_.fit(map_, points_kp_wrapper, last_pose_, T_icp, [this](const Semantics& data) { 
+                        projection_.fit(map_, last_pose_, T_icp, [this](const Semantics& data) { 
                             return this->config_.projection.ground.count(data.prediction) > 0; 
                         });
                     }
