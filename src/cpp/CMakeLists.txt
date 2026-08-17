@@ -98,6 +98,7 @@ set(ODOMETRY_SOURCES
 set(ODOMETRY_HEADERS
   odometry/system.h
   odometry/projection.h
+  odometry/projection.tpp
   odometry/ground_plane.h
   odometry/ground_plane.tpp
   odometry/semantic_cloud.h
