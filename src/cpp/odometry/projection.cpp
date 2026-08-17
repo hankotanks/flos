@@ -1,4 +1,6 @@
 #include "odometry/projection.h"
+#include <tuple>
+#include <utility>
 
 namespace {
 void correspond(const VoxelMap<2>& source, const VoxelMap<2>& target, std::vector<std::tuple<Eigen::Vector2f, Eigen::Vector2f, float>>& correspondences, float correspondence_distance_sq) {
@@ -64,4 +66,18 @@ std::optional<Sophus::SE2f> Projection::align(size_t max_iterations, float conve
         chi = chi_i;
     }
     return T;
+}
+
+template<typename Predicate>
+BirdsEyeCloud::BirdsEyeCloud(const SemanticCloud& points, const GroundPlane<SemanticCloud>& ground, Predicate&& pred) {
+    for(size_t i = 0; i < points.size(); ++i) {
+        auto [point, data] = points[i];
+        if(!pred(data)) continue;
+        points_.emplace_back(ground.project(point));
+    }
+}
+
+std::pair<Eigen::Vector2f, float> BirdsEyeCloud::operator[](size_t i) const noexcept {
+    const Eigen::Vector3f& point = points_[i];
+    return std::pair<Eigen::Vector2f, float>(std::piecewise_construct, std::forward_as_tuple(point.x(), point.y()), std::forward_as_tuple(point.z()));
 }

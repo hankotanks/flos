@@ -43,14 +43,17 @@ struct Frame {
     using point_data_t = PointData;
     using voxel_data_t = VoxelData;
     virtual size_t size() const noexcept = 0;
-    virtual std::pair<Eigen::Vector<float, D>&, point_data_t> operator[](size_t) noexcept = 0;
-    virtual std::pair<const Eigen::Vector<float, D>&, point_data_t> operator[](size_t) const noexcept = 0;
+    virtual std::pair<Eigen::Vector<float, D>, point_data_t> operator[](size_t) const noexcept = 0;
 };
 
 template<size_t D, typename T>
 concept TransformEuclid = (D == 2 && std::same_as<T, Sophus::SE2f>) || (D == 3 && std::same_as<T, Sophus::SE3f>);
 template<size_t D, typename T>
 concept TransformAffine = (D == 2 && std::same_as<T, Eigen::Affine2f>) || (D == 3 && std::same_as<T, Eigen::Affine3f>);
+template<size_t D, typename T>
+concept TransformLambda = requires(T&& fn, const Eigen::Vector<float, D>& v) { 
+    { std::invoke(std::forward<T>(fn), v) } -> std::same_as<Eigen::Vector<float, D>>; 
+};
 
 // if F is provided to VoxelMap, it must be derived from Frame
 template<size_t D, typename F>
@@ -94,17 +97,27 @@ public:
     requires(TransformEuclid<D, Transform> || TransformAffine<D, Transform>)
     void apply(const Transform& T)
     requires(DefaultFrameType<D, F>);
+    // transform with a lambda expression
+    template<typename Transform>
+    requires(TransformLambda<D, Transform>)
+    void apply(const Transform&& T)
+    requires(DefaultFrameType<D, F>);
     // update transforms points by pose, extends the map with them, then prunes by max_distance
     template<typename Transform>
     requires(TransformEuclid<D, Transform>)
     void update(F& points, const Transform& pose);
     // extend just adds (a) point(s) to the map directly
-    void extend(const F& points);
     void extend(const Eigen::Vector<float, D>& point)
     requires(DefaultFrameType<D, F>);
+    template<typename T = F>
+    void extend(const Eigen::Vector<float, D>& point, const typename T::point_data_t& data)
+    requires(!DefaultFrameType<D, F>);
     // NOTE: this will not protect you if point does not fall into the given voxel
     void extend(const Eigen::Vector<int, D>& voxel, const Eigen::Vector<float, D>& point)
     requires(DefaultFrameType<D, F>);
+    template<typename T = F>
+    void extend(const Eigen::Vector<int, D>& voxel, const Eigen::Vector<float, D>& point, const typename T::point_data_t& data)
+    requires(!DefaultFrameType<D, F>);
 public:
     template<size_t _D, typename _F>
     struct NeighborInner { /* STUB */ };

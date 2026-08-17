@@ -35,10 +35,7 @@ struct SemanticCloud : public Frame<SemanticCloud, 3, Semantics, Belief> {
     SemanticCloud(util::Cloud& points);
     virtual inline size_t size() const noexcept override final { return points_.size(); };
     void transform(const Sophus::SE3f& t) const noexcept;
-    virtual std::pair<Eigen::Vector3f&, Semantics> operator[](size_t i) noexcept override final;
-    virtual std::pair<const Eigen::Vector3f&, Semantics> operator[](size_t i) const noexcept override final;
-private:
-    Semantics data(size_t i) const noexcept;
+    virtual std::pair<Eigen::Vector3f, Semantics> operator[](size_t i) const noexcept override final;
 private:
     std::span<Eigen::Vector3f> points_;
     std::span<const uint8_t> class_;

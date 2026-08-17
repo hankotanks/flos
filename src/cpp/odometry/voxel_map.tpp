@@ -42,6 +42,15 @@ template<typename Transform>
 requires(TransformEuclid<D, Transform> || TransformAffine<D, Transform>)
 void VoxelMap<D, F>::apply(const Transform& T) 
 requires(DefaultFrameType<D, F>) {
+    VoxelMap<D, F>::apply([&T](const Eigen::Vector<float, D>& point) { return T * point; });
+}
+
+template<size_t D, typename F>
+requires(ValidVoxelMap<D, F>)
+template<typename Transform>
+requires(TransformLambda<D, Transform>)
+void VoxelMap<D, F>::apply(const Transform&& fn)
+requires(DefaultFrameType<D, F>) {
     std::vector<std::pair<Eigen::Vector<int, D>, Eigen::Vector<float, D>>> extension;
     for(auto it = map_.begin(); it != map_.end(); ++it) {
         const auto& key_before = it.key();
@@ -50,7 +59,7 @@ requires(DefaultFrameType<D, F>) {
         static_assert(!std::is_const_v<std::remove_reference_t<decltype(voxel)>>);
         size_t i_write = 0;
         for(size_t i_read = 0; i_read < voxel.points.size(); ++i_read) {
-            Eigen::Vector<float, D> point = T * voxel.points[i_read];
+            Eigen::Vector<float, D> point = std::invoke(fn, voxel.points[i_read]);
             Eigen::Vector<int, D> key_after = VoxelMap<D, F>::point_to_voxel(point);
             if(key_before != key_after) {
                 extension.emplace_back(std::move(key_after), std::move(point));
@@ -70,12 +79,11 @@ requires(ValidVoxelMap<D, F>)
 template<typename Transform>
 requires(TransformEuclid<D, Transform>)
 void VoxelMap<D, F>::update(F& points, const Transform& pose) {
-    // transform points by pose
+    // transform points by pose...
     for(size_t i = 0; i < points.size(); ++i) {
-        points[i].first = pose * points[i].first;
+        // ...and add to map
+        VoxelMap<D, F>::extend(pose * points[i].first, points[i].second);
     }
-    // add points to map
-    VoxelMap<D, F>::extend(points);
     // remove points outside of a distance threshold to the current pose
     const Eigen::Vector<float, D>& origin = pose.translation();
     const auto max_distance_sq = max_distance_ * max_distance_;
@@ -89,42 +97,19 @@ void VoxelMap<D, F>::update(F& points, const Transform& pose) {
 
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
-void VoxelMap<D, F>::extend(const F& points) {
-    if constexpr (!DefaultFrameType<D, F>) {
-        for(size_t i = 0; i < points.size(); ++i) {
-            const auto& [point, data] = points[i];
-            const Eigen::Vector<int, D> voxel = VoxelMap<D, F>::point_to_voxel(point);
-            auto search = map_.find(voxel);
-            if(search == map_.end()) {
-                auto [it, _] = map_.try_emplace(voxel, voxel_capacity_);
-                search = it;
-            }
-            // update VoxelData
-            search.value().add(point, data, voxel_resolution_);
-        }
-        for(auto it = map_.begin(); it != map_.end(); ++it) {
-            it.value().data.finish();
-        }
-    } else {
-        for(size_t i = 0; i < points.size(); ++i) {
-            const auto& point = points[i];
-            const Eigen::Vector<int, D> voxel = VoxelMap<D, F>::point_to_voxel(point);
-            auto search = map_.find(voxel);
-            if(search == map_.end()) {
-                auto [it, _] = map_.try_emplace(voxel, voxel_capacity_);
-                search = it;
-            }
-            search.value().add(point, voxel_resolution_);
-        }
-    }
-}
-
-template<size_t D, typename F>
-requires(ValidVoxelMap<D, F>)
 void VoxelMap<D, F>::extend(const Eigen::Vector<float, D>& point) 
 requires(DefaultFrameType<D, F>) {
     const Eigen::Vector<int, D> voxel = VoxelMap<D, F>::point_to_voxel(point);
     VoxelMap<D, F>::extend(voxel, point);
+}
+
+template<size_t D, typename F>
+requires(ValidVoxelMap<D, F>)
+template<typename T>
+void VoxelMap<D, F>::extend(const Eigen::Vector<float, D>& point, const typename T::point_data_t& data)
+requires(!DefaultFrameType<D, F>) {
+    const Eigen::Vector<int, D> voxel = VoxelMap<D, F>::point_to_voxel(point);
+    VoxelMap<D, F>::extend(voxel, point, data);
 }
 
 template<size_t D, typename F>
@@ -139,155 +124,18 @@ requires(DefaultFrameType<D, F>) {
     search.value().add(point, voxel_resolution_);
 }
 
-#if 0
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
-template<typename Fn>
-void VoxelMap<D, F>::for_each(Fn&& f) const noexcept {
-    tbb::parallel_for_each(map_.begin(), map_.end(), [&](const auto& entry) {
-        const Voxel& voxel = entry.second;
-        for(size_t i = 0; i < voxel.points.size(); ++i) {
-            if constexpr (!DefaultFrameType<D, F>) {
-                std::invoke(f, voxel.points[i], voxel.point_data[i]);
-            } else {
-                std::invoke(f, voxel.points[i]);
-            }
-        }
-    });
-}
-
-template<size_t D, typename F>
-requires(ValidVoxelMap<D, F>)
-template<typename Fn>
-void VoxelMap<D, F>::for_each_within_radius(const Eigen::Vector<float, D>& origin, float radius, Fn&& f) const noexcept {
-    float radius_sq = radius * radius;
-    const Eigen::Vector<float, D> r = Eigen::Vector<float, D>::Constant(radius);
-    const Eigen::Vector<int, D> voxel_min = VoxelMap<D, F>::point_to_voxel(origin - r);
-    const Eigen::Vector<int, D> voxel_max = VoxelMap<D, F>::point_to_voxel(origin + r);
-    // find the 'local' space that will be iterated over
-    const Eigen::Vector<size_t, D> extent = (voxel_max - voxel_min).template cast<size_t>() + Eigen::Vector<size_t, D>::Constant(1);
-    size_t voxel_count = 1;
-    for(size_t d = 0; d < D; ++d) voxel_count *= extent[d];
-    // dispatch over linear indices...
-    tbb::parallel_for(size_t{0}, voxel_count, [&](size_t i) {
-        // ... then recover the voxel key
-        Eigen::Vector<int, D> voxel = voxel_min;
-        for(size_t d = 0; d < D; ++d) {
-            voxel[d] += static_cast<int>(i % extent[d]);
-            i /= extent[d];
-        }
-        // check if voxel exists
-        auto it = map_.find(voxel);
-        if(it == map_.end()) return;
-        // if the voxel is too far away, skip it
-        if((VoxelMap<D, F>::voxel_to_point(voxel) - origin).squaredNorm() > radius_sq) return;
-        // otherwise, invoke `f` on all its points
-        const Voxel& v = it.value();
-        for(size_t j = 0; j < v.points.size(); ++j) {
-            if constexpr (!DefaultFrameType<D, F>) {
-                std::invoke(f, v.points[i], v.point_data[i]);
-            } else {
-                std::invoke(f, v.points[i]);
-            }
-        }
-    });
-}
-
-template<size_t D, typename F>
-requires(ValidVoxelMap<D, F>)
-template<typename Fn, typename Acc>
-requires requires(Acc a, const Acc& b) { a += b; }
-Acc VoxelMap<D, F>::reduce_within_radius(const Eigen::Vector<float, D>& origin, float radius, Acc init, Fn&& f) const noexcept {
-    tbb::enumerable_thread_specific<Acc> acc_pool;
-    if constexpr (!DefaultFrameType<D, F>) {
-        VoxelMap<D, F>::for_each_within_radius(origin, radius, [&f, &acc_pool](const Eigen::Vector<float, D>& point, const F::point_data_t& data) {
-            auto& acc = acc_pool.local();
-            acc = std::invoke(f, acc, point, data);
-        });
-    } else {
-        VoxelMap<D, F>::for_each_within_radius(origin, radius, [&f, &acc_pool](const Eigen::Vector<float, D>& point) {
-            auto& acc = acc_pool.local();
-            acc = std::invoke(f, acc, point);
-        });
+template<typename T>
+void VoxelMap<D, F>::extend(const Eigen::Vector<int, D>& voxel, const Eigen::Vector<float, D>& point, const typename T::point_data_t& data) 
+requires(!DefaultFrameType<D, F>) {
+    auto search = map_.find(voxel);
+    if(search == map_.end()) {
+        auto [it, _] = map_.try_emplace(voxel, voxel_capacity_);
+        search = it;
     }
-    for(const auto& acc : acc_pool) init += acc;
-    return init;
+    search.value().add(point, data, voxel_resolution_);
 }
-
-template<size_t D, typename F>
-requires(ValidVoxelMap<D, F>)
-template<typename Fn>
-auto VoxelMap<D, F>::transform(Fn&& f) const {
-    if constexpr (!DefaultFrameType<D, F>) {
-        using To = std::invoke_result_t<Fn, const Eigen::Vector<float, D>&, const typename F::point_data_t&>;
-        tbb::enumerable_thread_specific<std::vector<To>> result_pool;
-        VoxelMap<D, F>::for_each([&f, &result_pool](const Eigen::Vector<float, D>& point, const F::point_data_t& data) {
-            result_pool.local().emplace_back(std::invoke(f, point, data));
-        });
-        size_t count = 0;
-        for(const auto& result_i : result_pool) count += result_i.size();
-        std::vector<To> result;
-        result.reserve(count);
-        for(auto& result_i : result_pool) {
-            result.insert(result.end(), std::make_move_iterator(result_i.begin()), std::make_move_iterator(result_i.end()));
-        }
-        return result;
-    } else {
-        using To = std::invoke_result_t<Fn, const Eigen::Vector<float, D>&>;
-        tbb::enumerable_thread_specific<std::vector<To>> result_pool;
-        VoxelMap<D, F>::for_each([&f, &result_pool](const Eigen::Vector<float, D>& point) {
-            result_pool.local().emplace_back(std::invoke(f, point));
-        });
-        size_t count = 0;
-        for(const auto& result_i : result_pool) count += result_i.size();
-        std::vector<To> result;
-        result.reserve(count);
-        for(auto& result_i : result_pool) {
-            result.insert(result.end(), std::make_move_iterator(result_i.begin()), std::make_move_iterator(result_i.end()));
-        }
-        return result;
-    }
-}
-
-template<size_t D, typename F>
-requires(ValidVoxelMap<D, F>)
-template<typename Fn>
-auto VoxelMap<D, F>::transform_filter(Fn&& f) const {
-    if constexpr (!DefaultFrameType<D, F>) {
-        using Optional = std::invoke_result_t<Fn, const Eigen::Vector<float, D>&, const typename F::point_data_t&>;
-        using To = typename std::remove_cvref_t<Optional>::value_type;
-        tbb::enumerable_thread_specific<std::vector<To>> result_pool;
-        VoxelMap<D, F>::for_each([&f, &result_pool](const Eigen::Vector<float, D>& point, const F::point_data_t& data) {
-            auto ret = std::invoke(f, point, data);
-            if(ret) result_pool.local().emplace_back(*ret);
-        });
-        size_t count = 0;
-        for(const auto& result_i : result_pool) count += result_i.size();
-        std::vector<To> result;
-        result.reserve(count);
-        for(auto& result_i : result_pool) {
-            result.insert(result.end(), std::make_move_iterator(result_i.begin()), std::make_move_iterator(result_i.end()));
-        }
-        return result;
-    } else {
-        using Optional = std::invoke_result_t<Fn, const Eigen::Vector<float, D>&>;
-        using To = typename std::remove_cvref_t<Optional>::value_type;
-        tbb::enumerable_thread_specific<std::vector<To>> result_pool;
-        VoxelMap<D, F>::for_each([&f, &result_pool](const Eigen::Vector<float, D>& point) {
-            auto ret = std::invoke(f, point);
-            if(ret) result_pool.local().emplace_back(*ret);
-        });
-        size_t count = 0;
-        for(const auto& result_i : result_pool) count += result_i.size();
-        std::vector<To> result;
-        result.reserve(count);
-        for(auto& result_i : result_pool) {
-            result.insert(result.end(), std::make_move_iterator(result_i.begin()), std::make_move_iterator(result_i.end()));
-        }
-        return result;
-    }
-}
-#endif
 
 template<size_t D>
 requires(D >= 2 && D <= 3)

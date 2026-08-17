@@ -8,9 +8,9 @@ template<typename F>
 template<typename Predicate>
 GroundPlane<F>::GroundPlane(const VoxelMap<3, F>& map, const Eigen::Vector3f& origin, float max_distance, Predicate&& pred) {
     tbb::enumerable_thread_specific<std::pair<Eigen::Vector3f, size_t>> centroid_pool;
-    tbb::parallel_for(map.view_within_radius(origin, max_distance), [&centroid_pool](auto& range) {
+    tbb::parallel_for(map.view_within_radius(origin, max_distance), [&pred, &centroid_pool](auto& range) {
         for(const auto& [point, data] : range) {
-            if(data.prediction != 1) continue;
+            if(!pred(data)) continue;
             auto& local = centroid_pool.local();
             local.first += point;
             local.second++;
@@ -79,7 +79,7 @@ Eigen::Affine2f GroundPlane<F>::project(const Sophus::SE3f& T) const noexcept {
 }
 
 template<typename F>
-Eigen::Vector2f GroundPlane<F>::project(const Eigen::Vector3f& point) const noexcept {
+Eigen::Vector3f GroundPlane<F>::project(const Eigen::Vector3f& point) const noexcept {
     Eigen::Vector3f local = point - centroid;
-    return {t1.dot(local), t2.dot(local)};
+    return {t1.dot(local), t2.dot(local), local.dot(n)};
 }

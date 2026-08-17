@@ -63,23 +63,15 @@ SemanticCloud::SemanticCloud(util::Cloud& points) : points_(points.points()), cl
     }
 }
 
-Semantics SemanticCloud::data(size_t i) const noexcept {
+void SemanticCloud::transform(const Sophus::SE3f& t) const noexcept { 
+    std::for_each(points_.begin(), points_.end(), [&t](Eigen::Vector3f& p) { p = t * p; }); 
+}
+
+std::pair<Eigen::Vector3f, Semantics> SemanticCloud::operator[](size_t i) const noexcept { 
     Semantics data;
     data.prediction = class_[i];
     for(size_t j = 0; j < classes::COUNT; ++j) {
         data.confidence[j] = confidence_[j][i];
     }
-    return data;
-}
-
-void SemanticCloud::transform(const Sophus::SE3f& t) const noexcept { 
-    std::for_each(points_.begin(), points_.end(), [&t](Eigen::Vector3f& p) { p = t * p; }); 
-}
-
-std::pair<Eigen::Vector3f&, Semantics> SemanticCloud::operator[](size_t i) noexcept { 
-    return std::pair<Eigen::Vector3f&, Semantics>(points_[i], SemanticCloud::data(i)); 
-}
-
-std::pair<const Eigen::Vector3f&, Semantics> SemanticCloud::operator[](size_t i) const noexcept { 
-    return std::pair<const Eigen::Vector3f&, Semantics>(points_[i], SemanticCloud::data(i)); 
+    return std::pair<Eigen::Vector3f&, Semantics>(points_[i], data); 
 }

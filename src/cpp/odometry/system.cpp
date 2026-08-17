@@ -209,7 +209,7 @@ void OdometrySystem::project(VoxelMap<2>& surface, const SemanticCloud& points) 
     for(size_t i = 0; i < points.size(); ++i) {
         const auto [point, semantics] = points[i];
         if(config_.projection.target.count(semantics.prediction) == 0) continue;
-        surface.extend(projection_.ground.project(point));
+        surface.extend(Eigen::Map<Eigen::Vector2f>(projection_.ground.project(point).data()));
     }
 }
 
