@@ -91,6 +91,7 @@ configure_node(segmentation_node
 set(ODOMETRY_SOURCES
   odometry/system.cpp
   odometry/projection.cpp
+  odometry/ground_plane.cpp
   odometry/semantic_cloud.cpp
   odometry/adaptive_threshold.cpp)
 

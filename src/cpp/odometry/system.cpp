@@ -13,6 +13,7 @@
 // package
 #include "classes.h"
 // util
+#include "odometry/projection.h"
 #include "util/cloud.h"
 #include "util/profiler.h"
 
@@ -83,7 +84,7 @@ OdometrySystem::OdometrySystem(const Config& config) : util::Profiler("OdometryS
     config_(config),
     map_(config.max_distance, config.voxel_size, config.voxel_capacity),
     threshold_(config.max_distance, config.threshold.initial, config.threshold.motion),
-    projection_(config.max_distance, config.voxel_size, config.voxel_capacity) {
+    projection_(config.max_distance, config_.max_distance_ground, config.voxel_size, config.voxel_capacity) {
     size_t max_threads = config.max_threads > 0 ? \
         config.max_threads : tbb::this_task_arena::max_concurrency();
     volatile static const tbb::global_control _ = tbb::global_control( // NOTE: static storage type is required here
@@ -127,7 +128,6 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigne
             if(config_.projection.enable) {
                 PROFILE(refinement, &align) {
                     if(frame_ > config_.voxel_capacity) {
-                        OdometrySystem::project(projection_.curr, points_kp_wrapper);
                         OdometrySystem::refine(points_kp_wrapper, initial_guess, correspondence_distance);
                     }
                 }
@@ -144,7 +144,11 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigne
             // maintain ground plane and previous frame's projection
             if(config_.projection.enable) {
                 PROFILE(refinement_update, &align) {
-                    if(frame_ > config_.voxel_capacity) OdometrySystem::fit(points_kp_wrapper, T_icp);
+                    if(frame_ > config_.voxel_capacity) {
+                        projection_.fit(map_, last_pose_, T_icp, [this](const Semantics& data) { 
+                            return this->config_.projection.ground.count(data.prediction) > 0; 
+                        });
+                    }
                 }
             }
         }
@@ -182,34 +186,6 @@ std::pair<Sophus::SE3f, double> OdometrySystem::predict(unsigned int seconds, un
         last_stamp_ = stamp;
         // compute predicted delta:
         return std::make_pair(Sophus::SE3d::exp(scale * last_delta_.cast<double>().log()).cast<float>(), dt_curr);
-    }
-}
-
-// TODO: we need to store the distance to the plane as well in order to produce an accurate affine transformation
-// see ground_plane.tpp:58
-void OdometrySystem::fit(const SemanticCloud& points, const Sophus::SE3f& T) {
-    if((projection_.ground.centroid - last_pose_.translation()).squaredNorm() > (config_.max_distance_ground * config_.max_distance_ground * 0.25f)) {
-        projection_.origin = last_pose_.translation();
-        projection_.ground = GroundPlane<SemanticCloud>(map_, projection_.origin, config_.max_distance_ground, 
-            [this](const Semantics& data) { return this->config_.projection.ground.count(data.prediction) > 0; });
-#if 0
-        OdometrySystem::project(projection_.prev, points);
-    } else {
-        // update current frame projection
-        projection_.prev = std::move(projection_.curr);
-        Eigen::Affine2f T_icp_projected = projection_.ground.project(T);
-        projection_.prev.apply(T_icp_projected);
-#endif
-    }
-    OdometrySystem::project(projection_.prev, points);
-}
-
-void OdometrySystem::project(VoxelMap<2>& surface, const SemanticCloud& points) {
-    surface.clear();
-    for(size_t i = 0; i < points.size(); ++i) {
-        const auto [point, semantics] = points[i];
-        if(config_.projection.target.count(semantics.prediction) == 0) continue;
-        surface.extend(Eigen::Map<Eigen::Vector2f>(projection_.ground.project(point).data()));
     }
 }
 
@@ -306,7 +282,10 @@ Sophus::SE3f OdometrySystem::align(SemanticCloud& points, const Sophus::SE3f& in
 }
 
 Sophus::SE2f OdometrySystem::refine(SemanticCloud& points, Sophus::SE3f& initial_guess, float correspondence_distance) {
-    if(std::optional<Sophus::SE2f> T_bev_projected = projection_.align(config_.max_iterations, config_.convergence_criterion, correspondence_distance)) {
+    BirdsEyeCloud bev{points, projection_.ground, [this](const Semantics& data) {
+        return this->config_.projection.target.count(data.prediction) > 0;
+    }};
+    if(std::optional<Sophus::SE2f> T_bev_projected = projection_.align(bev, config_.max_iterations, config_.convergence_criterion, correspondence_distance)) {
         Sophus::SE3f T_bev = projection_.ground.lift(*T_bev_projected);
         // ensure that the refined residual is smaller than the initial
         CorrespondenceSet correspondences_initial = OdometrySystem::correspond(points, correspondence_distance);

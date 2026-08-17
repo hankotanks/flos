@@ -46,15 +46,6 @@ struct Frame {
     virtual std::pair<Eigen::Vector<float, D>, point_data_t> operator[](size_t) const noexcept = 0;
 };
 
-template<size_t D, typename T>
-concept TransformEuclid = (D == 2 && std::same_as<T, Sophus::SE2f>) || (D == 3 && std::same_as<T, Sophus::SE3f>);
-template<size_t D, typename T>
-concept TransformAffine = (D == 2 && std::same_as<T, Eigen::Affine2f>) || (D == 3 && std::same_as<T, Eigen::Affine3f>);
-template<size_t D, typename T>
-concept TransformLambda = requires(T&& fn, const Eigen::Vector<float, D>& v) { 
-    { std::invoke(std::forward<T>(fn), v) } -> std::same_as<Eigen::Vector<float, D>>; 
-};
-
 // if F is provided to VoxelMap, it must be derived from Frame
 template<size_t D, typename F>
 concept FrameType = requires {
@@ -70,6 +61,15 @@ concept DefaultFrameType = std::is_same_v<F, std::span<const Eigen::Vector<float
 // indicates that the VoxelMap is well-defined given its template arguments
 template<size_t D, typename F>
 concept ValidVoxelMap = (D >= 2 && D <= 3) && (DefaultFrameType<D, F> || FrameType<D, F>);
+
+template<size_t D, typename T>
+concept TransformEuclid = (D == 2 && std::same_as<T, Sophus::SE2f>) || (D == 3 && std::same_as<T, Sophus::SE3f>);
+template<size_t D, typename T>
+concept TransformAffine = (D == 2 && std::same_as<T, Eigen::Affine2f>) || (D == 3 && std::same_as<T, Eigen::Affine3f>);
+template<size_t D, typename F, typename T>
+concept TransformLambda = (
+    (DefaultFrameType<D, F> && requires(T&& fn, const Eigen::Vector<float, D>& point) { { std::invoke(std::forward<T>(fn), point) } -> std::same_as<Eigen::Vector<float, D>>; }) ||
+    (!DefaultFrameType<D, F> && requires(T&& fn, const Eigen::Vector<float, D>& point, const typename F::point_data_t& data) { { std::invoke(std::forward<T>(fn), point, data) } -> std::same_as<Eigen::Vector<float, D>>; }));
 
 template<size_t D, typename F = std::span<const Eigen::Vector<float, D>>>
 requires(ValidVoxelMap<D, F>)
@@ -95,18 +95,18 @@ public:
     // transform all points in the map
     template<typename Transform>
     requires(TransformEuclid<D, Transform> || TransformAffine<D, Transform>)
-    void apply(const Transform& T)
-    requires(DefaultFrameType<D, F>);
+    void apply(const Transform& T);
     // transform with a lambda expression
     template<typename Transform>
-    requires(TransformLambda<D, Transform>)
-    void apply(const Transform&& T)
-    requires(DefaultFrameType<D, F>);
+    requires(TransformLambda<D, F, Transform>)
+    void apply(Transform&& T);
     // update transforms points by pose, extends the map with them, then prunes by max_distance
     template<typename Transform>
     requires(TransformEuclid<D, Transform>)
     void update(F& points, const Transform& pose);
     // extend just adds (a) point(s) to the map directly
+    void extend(const F& points);
+    // overload for a single point
     void extend(const Eigen::Vector<float, D>& point)
     requires(DefaultFrameType<D, F>);
     template<typename T = F>

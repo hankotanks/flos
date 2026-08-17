@@ -4,9 +4,17 @@
 
 #include <tbb/parallel_for.h>
 
-template<typename F>
 template<typename Predicate>
-GroundPlane<F>::GroundPlane(const VoxelMap<3, F>& map, const Eigen::Vector3f& origin, float max_distance, Predicate&& pred) {
+BirdsEyeCloud::BirdsEyeCloud(const SemanticCloud& points, const GroundPlane& ground, Predicate&& pred) {
+    for(size_t i = 0; i < points.size(); ++i) {
+        auto [point, data] = points[i];
+        if(!pred(data)) continue;
+        points_.emplace_back(ground.project(point));
+    }
+}
+
+template<typename Predicate>
+GroundPlane::GroundPlane(const VoxelMap<3, SemanticCloud>& map, const Eigen::Vector3f& origin, float max_distance, Predicate&& pred) {
     tbb::enumerable_thread_specific<std::pair<Eigen::Vector3f, size_t>> centroid_pool;
     tbb::parallel_for(map.view_within_radius(origin, max_distance), [&pred, &centroid_pool](auto& range) {
         for(const auto& [point, data] : range) {
@@ -44,42 +52,4 @@ GroundPlane<F>::GroundPlane(const VoxelMap<3, F>& map, const Eigen::Vector3f& or
         plane_.col(2) *= -1.f;
         t2 *= -1.f;
     }
-}
-
-template<typename F>
-Sophus::SE3f GroundPlane<F>::lift(const Sophus::SE2f& T) const noexcept {
-    Eigen::Matrix3f R_plane = Eigen::Matrix3f::Identity();
-    R_plane.block<2, 2>(1, 1) = T.so2().matrix();
-    const Eigen::Matrix3f R = plane_ * R_plane * plane_.transpose();
-    const Eigen::Vector3f t = centroid + plane_.block<3, 2>(0, 1) * T.translation() - R * centroid;
-    return Sophus::SE3f{R, t};
-}
-
-// TODO: this is insufficient because we don't currently store the distance above the plane
-// we can do this, but its probably simpler to just reproject the points
-// see the note below...
-template<typename F>
-Eigen::Affine2f GroundPlane<F>::project(const Sophus::SE3f& T) const noexcept {
-    const Eigen::Matrix3f& R = T.so3().matrix();
-    const Eigen::Vector3f& t = T.translation();
-    Eigen::Matrix<float, 3, 2> basis;
-    basis.col(0) = t1;
-    basis.col(1) = t2;
-    Eigen::Affine2f T2 = Eigen::Affine2f::Identity();
-    T2.linear() = basis.transpose() * R * basis;
-    T2.translation() = basis.transpose() * (R * centroid + t - centroid);
-    // ... this affine transform is correct, however, we need to consider another translational component
-    // Eigen::Vector2f t_prime = basis.transpose() * R * plane_.col(0);
-    // in order to actually compute a new points position, we need to do the following:
-    // T2 * x_i + s_i * t_prime
-    // where x_i is the 2D point and s_i is the signed distance from the plane.
-    // this can be stored as point_data in the VoxelMap, but it requires another wrapper implementation
-    // this could be defined in projection.h, but I really don't think it's worth it
-    return T2;
-}
-
-template<typename F>
-Eigen::Vector3f GroundPlane<F>::project(const Eigen::Vector3f& point) const noexcept {
-    Eigen::Vector3f local = point - centroid;
-    return {t1.dot(local), t2.dot(local), local.dot(n)};
 }

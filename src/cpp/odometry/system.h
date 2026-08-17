@@ -94,10 +94,6 @@ private:
 private:
     // get the predicted delta (and handle statistics)
     std::pair<Sophus::SE3f, double> predict(unsigned int seconds, unsigned int nanoseconds) noexcept;
-    // refit the ground plane using the T_icp correction
-    void fit(const SemanticCloud& points, const Sophus::SE3f& T);
-    // used to project a frame into a 2D map using the precalculated ground surface
-    void project(VoxelMap<2>& surface, const SemanticCloud& points);
 private:
     // find correspondences
     using Correspondence = std::tuple<Eigen::Vector3f, Semantics, VoxelMap<3, SemanticCloud>::Neighbor>;

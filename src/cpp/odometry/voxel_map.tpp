@@ -40,38 +40,65 @@ template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
 template<typename Transform>
 requires(TransformEuclid<D, Transform> || TransformAffine<D, Transform>)
-void VoxelMap<D, F>::apply(const Transform& T) 
-requires(DefaultFrameType<D, F>) {
-    VoxelMap<D, F>::apply([&T](const Eigen::Vector<float, D>& point) { return T * point; });
+void VoxelMap<D, F>::apply(const Transform& T) {
+    if constexpr (DefaultFrameType<D, F>) {
+        VoxelMap<D, F>::apply([&T](const Eigen::Vector<float, D>& point) { return T * point; });
+    } else {
+        VoxelMap<D, F>::apply([&T](const Eigen::Vector<float, D>& point, const typename F::point_data_t&) { return T * point; });
+    }
 }
 
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
 template<typename Transform>
-requires(TransformLambda<D, Transform>)
-void VoxelMap<D, F>::apply(const Transform&& fn)
-requires(DefaultFrameType<D, F>) {
-    std::vector<std::pair<Eigen::Vector<int, D>, Eigen::Vector<float, D>>> extension;
-    for(auto it = map_.begin(); it != map_.end(); ++it) {
-        const auto& key_before = it.key();
-        auto& voxel = it.value();
-        static_assert(std::is_same_v<decltype(voxel), Voxel&>);
-        static_assert(!std::is_const_v<std::remove_reference_t<decltype(voxel)>>);
-        size_t i_write = 0;
-        for(size_t i_read = 0; i_read < voxel.points.size(); ++i_read) {
-            Eigen::Vector<float, D> point = std::invoke(fn, voxel.points[i_read]);
-            Eigen::Vector<int, D> key_after = VoxelMap<D, F>::point_to_voxel(point);
-            if(key_before != key_after) {
-                extension.emplace_back(std::move(key_after), std::move(point));
-                continue;
+requires(TransformLambda<D, F, Transform>)
+void VoxelMap<D, F>::apply(Transform&& fn) {
+    if constexpr (DefaultFrameType<D, F>) {
+        std::vector<std::pair<Eigen::Vector<int, D>, Eigen::Vector<float, D>>> extension;
+        for(auto it = map_.begin(); it != map_.end(); ++it) {
+            const auto& key_before = it.key();
+            auto& voxel = it.value();
+            static_assert(std::is_same_v<decltype(voxel), Voxel&>);
+            static_assert(!std::is_const_v<std::remove_reference_t<decltype(voxel)>>);
+            size_t i_write = 0;
+            for(size_t i_read = 0; i_read < voxel.points.size(); ++i_read) {
+                Eigen::Vector<float, D> point = std::invoke(fn, voxel.points[i_read]);
+                Eigen::Vector<int, D> key_after = VoxelMap<D, F>::point_to_voxel(point);
+                if(key_before != key_after) {
+                    extension.emplace_back(std::move(key_after), std::move(point));
+                    continue;
+                }
+                voxel.points[i_write] = std::move(point);
+                ++i_write;
             }
-            voxel.points[i_write] = std::move(point);
-            ++i_write;
+            voxel.points.resize(i_write);
         }
-        voxel.points.resize(i_write);
+        // add the points which changed voxels
+        for(const auto& [voxel, point] : extension) VoxelMap<D, F>::extend(voxel, point);
+    } else {
+        std::vector<std::tuple<Eigen::Vector<int, D>, Eigen::Vector<float, D>, typename F::point_data_t>> extension;
+        for(auto it = map_.begin(); it != map_.end(); ++it) {
+            const auto& key_before = it.key();
+            auto& voxel = it.value();
+            static_assert(std::is_same_v<decltype(voxel), Voxel&>);
+            static_assert(!std::is_const_v<std::remove_reference_t<decltype(voxel)>>);
+            size_t i_write = 0;
+            for(size_t i_read = 0; i_read < voxel.points.size(); ++i_read) {
+                Eigen::Vector<float, D> point = std::invoke(fn, voxel.points[i_read], voxel.point_data[i_read]);
+                Eigen::Vector<int, D> key_after = VoxelMap<D, F>::point_to_voxel(point);
+                if(key_before != key_after) {
+                    extension.emplace_back(std::move(key_after), std::move(point), std::move(voxel.point_data[i_read]));
+                    continue;
+                }
+                voxel.points[i_write] = std::move(point);
+                if(i_write != i_read) voxel.point_data[i_write] = std::move(voxel.point_data[i_read]);
+                ++i_write;
+            }
+            voxel.points.resize(i_write);
+        }
+        // add the points which changed voxels
+        for(const auto& [voxel, point, data] : extension) VoxelMap<D, F>::extend(voxel, point, data);
     }
-    // add the points which changed voxels
-    for(const auto& [voxel, point] : extension) VoxelMap<D, F>::extend(voxel, point);
 }
 
 template<size_t D, typename F>
@@ -92,6 +119,38 @@ void VoxelMap<D, F>::update(F& points, const Transform& pose) {
         if((VoxelMap<D, F>::voxel_to_point(voxel) - origin).squaredNorm() >= max_distance_sq) {
             it = map_.erase(it);
         } else ++it;
+    }
+}
+
+template<size_t D, typename F>
+requires(ValidVoxelMap<D, F>)
+void VoxelMap<D, F>::extend(const F& points) {
+    if constexpr (!DefaultFrameType<D, F>) {
+        for(size_t i = 0; i < points.size(); ++i) {
+            const auto& [point, data] = points[i];
+            const Eigen::Vector<int, D> voxel = VoxelMap<D, F>::point_to_voxel(point);
+            auto search = map_.find(voxel);
+            if(search == map_.end()) {
+                auto [it, _] = map_.try_emplace(voxel, voxel_capacity_);
+                search = it;
+            }
+            // update VoxelData
+            search.value().add(point, data, voxel_resolution_);
+        }
+        for(auto it = map_.begin(); it != map_.end(); ++it) {
+            it.value().data.finish();
+        }
+    } else {
+        for(size_t i = 0; i < points.size(); ++i) {
+            const auto& point = points[i];
+            const Eigen::Vector<int, D> voxel = VoxelMap<D, F>::point_to_voxel(point);
+            auto search = map_.find(voxel);
+            if(search == map_.end()) {
+                auto [it, _] = map_.try_emplace(voxel, voxel_capacity_);
+                search = it;
+            }
+            search.value().add(point, voxel_resolution_);
+        }
     }
 }
 

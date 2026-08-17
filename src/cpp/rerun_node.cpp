@@ -3,6 +3,7 @@
 // rerun
 #include <rerun.hpp>
 // package
+#include "odometry/ground_plane.h"
 #include "offline_node.h"
 // util
 #include "util/cloud.h"
@@ -63,17 +64,17 @@ protected:
         rr_.log("progress/remaining", rerun::Scalar(remaining));
     }
 
-    virtual void publish_projection(const OfflineNode::Stamp& stamp, const VoxelMap<2>& previous, const VoxelMap<2>& current) override {
+    virtual void publish_projection(const OfflineNode::Stamp& stamp, const VoxelMap<2, BirdsEyeCloud>& previous, const VoxelMap<2, BirdsEyeCloud>& current) override {
         RerunNode::set_stamp(stamp);
         // previous
         std::vector<rerun::Vec2D> points_previous;
-        for(const auto& point : previous.view()) {
+        for(const auto& [point, data] : previous.view()) {
             points_previous.emplace_back(point.x(), point.y());
         }
         rr_.log("scan/projection/previous", rerun::Points2D(points_previous));
         // current
         std::vector<rerun::Vec2D> points_current;
-        for(const auto& point : current.view()) {
+        for(const auto& [point, data] : current.view()) {
             points_current.emplace_back(point.x(), point.y());
         }
         rr_.log("scan/projection/current", rerun::Points2D(points_current));
