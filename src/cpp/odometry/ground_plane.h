@@ -21,6 +21,11 @@ public:
     template<typename Predicate>
     explicit GroundPlane(const VoxelMap<3, SemanticCloud>& map, const Eigen::Vector3f& origin, float max_distance, Predicate&&);
     explicit GroundPlane() = default;
+    GroundPlane(const GroundPlane&) = delete;
+    GroundPlane(GroundPlane&&) = default;
+    GroundPlane& operator=(const GroundPlane&) = delete;
+    GroundPlane& operator=(GroundPlane&&) = default;
+    ~GroundPlane() = default;
 public:
     // lift a 2d transform along the planar surface
     Sophus::SE3f lift(const Sophus::SE2f& T) const noexcept;

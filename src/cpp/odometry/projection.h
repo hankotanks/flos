@@ -17,6 +17,11 @@ public:
         voxel_size_(voxel_size * 2.f),
         voxel_capacity_(voxel_capacity * 2),
         target(max_distance, voxel_size * 2.f, voxel_capacity * 2) { /* STUB */ }
+    Projection(const Projection&) = delete;
+    Projection(Projection&&) = delete;
+    Projection& operator=(const Projection&) = delete;
+    Projection& operator=(Projection&&) = delete;
+    ~Projection() = default;
 public:
     // aligns the current projection to the previous
     std::optional<Sophus::SE2f> align(const BirdsEyeCloud& source, size_t max_iterations, float convergence_criterion, float correspondence_distance);
