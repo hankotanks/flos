@@ -56,13 +56,15 @@ public:
     std::span<const T> field(const std::string& name) const;
     template<typename T>
     std::span<T> field(const std::string& name);
+    // add a new point (ONLY IF NO FIELDS ARE PRESENT)
+    void add_point(const Eigen::Vector3f& point);
     // add a new field to the cloud
     // must provide a number of scalars equal to Cloud::size
     // can throw std::runtime_error if the number of scalars is wrong
     template<typename T>
-    void add_field(const std::string& name, const std::vector<T>& scalars = {}) noexcept;
+    std::span<T> add_field(const std::string& name, const std::vector<T>& scalars = {}) noexcept;
     template<typename T>
-    void add_field(const std::string& name, const T& scalar) noexcept;
+    std::span<T> add_field(const std::string& name, const T& scalar) noexcept;
 public:
     // python bindings
 #ifdef GENERATE_CLOUD_PYBIND_MODULE
@@ -73,7 +75,7 @@ public:
     py::object field_as_py_object(const std::string& name) const;
     // add a new field to the cloud from a python object containing one of `FieldUInt8` `FieldFloat32` etc
     template<typename T>
-    void add_field_from_py_object(const std::string& name, py::object obj) noexcept;
+    std::span<T> add_field_from_py_object(const std::string& name, py::object obj) noexcept;
 #endif // GENERATE_CLOUD_PYBIND_MODULE
 public:
     void downsample(float voxel_size);

@@ -19,7 +19,7 @@ public:
     ~Projection() = default;
 public:
     // aligns the current projection to the previous
-    std::optional<Sophus::SE2f> align(const BirdsEyeCloud& source, size_t max_iterations, float convergence_criterion, float correspondence_distance);
+    std::optional<Sophus::SE2f> align(const BirdsEyeCloud& source, size_t max_iterations, float convergence_criterion);
     // update ground plane and maintain state
     template<typename Predicate>
     void fit(const VoxelMap<3, SemanticCloud>& map, const Sophus::SE3f& pose, const Sophus::SE3f& T, Predicate&& pred);

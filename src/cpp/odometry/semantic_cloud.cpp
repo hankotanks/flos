@@ -57,7 +57,7 @@ float Belief::weight(const Semantics& query) const noexcept {
 }
 #endif
 
-SemanticCloud::SemanticCloud(util::Cloud& points) : points_(points.points()), class_(points.field<uint8_t>("class")) {
+SemanticCloud::SemanticCloud(util::Cloud& points) : points_(points.points()), class_(points.field<uint8_t>("prediction")) {
     for(size_t i = 0; i < classes::COUNT; ++i) {
         confidence_[i] = points.field<float>(std::to_string(i));
     }

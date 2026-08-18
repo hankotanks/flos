@@ -139,26 +139,22 @@ protected:
                 // localized points publication
                 outgoing_points_publisher_->publish(std::move(cloud.message(header)));
                 // local map publication
-#if 0
                 auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(steady_clock::now() - local_map_last_publication);
                 if(elapsed.count() >= OdometryNode::LOCAL_MAP_RATE * 1000) {
                     std_msgs::msg::Header local_map_header;
                     local_map_header.stamp = header.stamp;
                     local_map_header.frame_id = OdometryNode::LOCAL_MAP_FRAME;
-                    const auto& local_map = system_.cloud();
-                    util::Cloud out{local_map.points};
-                    { // TODO: lots of copying going on here, should be improved
-                        static std::vector<uint8_t> semantics;
-                        semantics.clear();
-                        semantics.reserve(local_map.data.size());
-                        std::transform(local_map.data.begin(), local_map.data.end(), std::back_inserter(semantics), 
-                            [](const OdometrySystem::Semantics& p) { return p.prediction; });
-                        out.add_field<uint8_t>("class", semantics);
+                    util::Cloud out;
+                    std::vector<uint8_t> prediction;
+                    prediction.reserve(system_.map_.size() * system_.config_.voxel_capacity);
+                    for(const auto& [point, semantics] : system_.map_.view()) {
+                        out.add_point(point);
+                        prediction.emplace_back(semantics.prediction);
                     }
+                    out.add_field<uint8_t>("prediction", prediction);
                     local_map_publisher_->publish(std::move(out.message(local_map_header)));
                     local_map_last_publication = steady_clock::now();
                 }
-#endif
             }
         }
     }

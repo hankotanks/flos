@@ -245,8 +245,9 @@ constexpr size_t offset_pow() {
 
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
-std::optional<typename VoxelMap<D, F>::Neighbor> VoxelMap<D, F>::closest(const Eigen::Vector<float, D>& query, float correspondence_distance_sq) const 
+std::optional<typename VoxelMap<D, F>::Neighbor> VoxelMap<D, F>::closest(const Eigen::Vector<float, D>& query) const 
 requires(DefaultFrameType<D, F>) {
+    float correspondence_distance_sq = voxel_size_ * voxel_size_ * 0.25f;
     // NOTE: moved inside of the function for namespacing reasons 
     // (since VoxelMap::closest must be included in the header due to templating constraints)
     static const auto offsets = std::invoke([]() {
@@ -292,8 +293,9 @@ requires(DefaultFrameType<D, F>) {
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
 template<typename T>
-std::optional<typename VoxelMap<D, F>::Neighbor> VoxelMap<D, F>::closest(const Eigen::Vector<float, D>& query, typename T::point_data_t data, float correspondence_distance_sq) const 
+std::optional<typename VoxelMap<D, F>::Neighbor> VoxelMap<D, F>::closest(const Eigen::Vector<float, D>& query, const typename T::point_data_t& data) const 
 requires(!DefaultFrameType<D, F>) {
+    float correspondence_distance_sq = voxel_size_ * voxel_size_ * 0.25f;
     // NOTE: moved inside of the function for namespacing reasons 
     // (since VoxelMap::closest must be included in the header due to templating constraints)
     static const auto offsets = std::invoke([]() {

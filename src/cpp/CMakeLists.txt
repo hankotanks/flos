@@ -35,6 +35,7 @@ set(COMMON_HEADERS
 
 set(COMMON_LIBRARIES
   Eigen3::Eigen
+  TBB::tbb
   tsl::robin_map)
 
 set(COMMON_PACKAGES
@@ -92,8 +93,7 @@ set(ODOMETRY_SOURCES
   odometry/system.cpp
   odometry/projection.cpp
   odometry/ground_plane.cpp
-  odometry/semantic_cloud.cpp
-  odometry/adaptive_threshold.cpp)
+  odometry/semantic_cloud.cpp)
 
 set(ODOMETRY_HEADERS
   odometry/system.h
@@ -102,14 +102,12 @@ set(ODOMETRY_HEADERS
   odometry/ground_plane.h
   odometry/ground_plane.tpp
   odometry/semantic_cloud.h
-  odometry/adaptive_threshold.h
   odometry/voxel_map.h
   odometry/voxel_map.tpp
   odometry_node_config.h)
 
 set(ODOMETRY_LIBRARIES
-  Sophus::Sophus
-  TBB::tbb)
+  Sophus::Sophus)
 
 set(ODOMETRY_PACKAGES
   tf2_ros::tf2_ros

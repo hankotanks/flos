@@ -1,14 +1,16 @@
 #include "odometry/projection.h"
+
+// system
 #include <tuple>
 #include <utility>
 
 namespace {
-void correspond(const VoxelMap<2, BirdsEyeCloud>& source, const VoxelMap<2, BirdsEyeCloud>& target, std::vector<std::tuple<Eigen::Vector2f, Eigen::Vector2f, float>>& correspondences, float correspondence_distance_sq) {
+void correspond(const VoxelMap<2, BirdsEyeCloud>& source, const VoxelMap<2, BirdsEyeCloud>& target, std::vector<std::tuple<Eigen::Vector2f, Eigen::Vector2f, float>>& correspondences) {
     correspondences.clear();
     tbb::enumerable_thread_specific<std::vector<std::tuple<Eigen::Vector2f, Eigen::Vector2f, float>>> correspondence_pool;
-    tbb::parallel_for(source.view(), [&target, &correspondence_distance_sq, &correspondence_pool](auto& range) {
+    tbb::parallel_for(source.view(), [&target, &correspondence_pool](auto& range) {
         for(const auto& [query, data] : range) {
-            auto neighbor = target.closest(query, data, correspondence_distance_sq);
+            auto neighbor = target.closest(query, data);
             if(!neighbor) continue;
             auto& local = correspondence_pool.local();
             local.emplace_back(query, neighbor->point, neighbor->distance_sq);
@@ -20,7 +22,7 @@ void correspond(const VoxelMap<2, BirdsEyeCloud>& source, const VoxelMap<2, Bird
 }
 } // private scope
 
-std::optional<Sophus::SE2f> Projection::align(const BirdsEyeCloud& points, size_t max_iterations, float convergence_criterion, float correspondence_distance) {
+std::optional<Sophus::SE2f> Projection::align(const BirdsEyeCloud& points, size_t max_iterations, float convergence_criterion) {
     if(target_.empty()) {
         target_.extend(points);
         return std::nullopt;
@@ -30,14 +32,13 @@ std::optional<Sophus::SE2f> Projection::align(const BirdsEyeCloud& points, size_
     source_.extend(points);
     // chi termination criterion
     float chi = -1.f;
-    float correspondence_distance_sq = correspondence_distance * correspondence_distance;
     // preallocate correspondence vector
     std::vector<std::tuple<Eigen::Vector2f, Eigen::Vector2f, float>> correspondences;
     // build transform
     Sophus::SE2f T{};
     for(size_t iter = 0; iter < max_iterations; ++iter) {
         // build bidirectional correspondences
-        correspond(source_, target_, correspondences, correspondence_distance_sq);
+        correspond(source_, target_, correspondences);
         if(correspondences.size() < 3) {
             target_.clear();
             target_.extend(points);

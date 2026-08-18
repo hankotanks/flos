@@ -2,10 +2,32 @@
 
 // system
 #include <stdexcept>
+// tbb
+#include <tbb/parallel_for.h>
 // package
 #include "classes.h"
 // util
 #include "util/profiler.h"
+
+namespace {
+void predict(std::span<uint8_t> prediction, const std::span<std::span<const float>> fields) {
+    if(fields.empty()) return;
+    tbb::parallel_for(tbb::blocked_range<std::size_t>(0, prediction.size()), [&prediction, &fields](const tbb::blocked_range<std::size_t>& range) {
+        for(size_t i = range.begin(); i != range.end(); ++i) {
+            float best_prob = fields[0][i];
+            size_t best_pred = 0;
+            for(size_t pred = 1; pred < fields.size(); ++pred) {
+                const float& prob = fields[pred][i];
+                if(prob > best_prob) {
+                    best_prob = prob;
+                    best_pred = pred;
+                }
+            }
+            prediction[i] = static_cast<uint8_t>(best_pred);
+        }
+    });
+}
+} // private scope
 
 SegmentationSystem::Model::Model(const SegmentationSystem::Config& config, const std::filesystem::path& path_to_model, util::Profiler* profiler) :
     profiler_(profiler),
@@ -34,24 +56,28 @@ SegmentationSystem::Model SegmentationSystem::load(const std::filesystem::path& 
 void SegmentationSystem::Model::infer(util::Cloud& cloud) {
     PROFILE(inference, profiler_) {
         py::object points = cloud.points_as_py_object();
+        std::vector<std::span<const float>> fields;
+        fields.reserve(classes::COUNT);
         try {
             // perform inference
-            py::tuple result;
+            py::list result;
             PROFILE(python, &inference) {
-                result = infer_(points).cast<py::tuple>();
+                result = infer_(points).cast<py::list>();
             }
             // output
-            cloud.add_field_from_py_object<uint8_t>("class", result[0]);
-            py::list result_confidence = result[1].cast<py::list>();
-            for(size_t i = 0; i < result_confidence.size(); ++i) {
-                cloud.add_field_from_py_object<float>(std::to_string(i), result_confidence[i]);
+            for(size_t i = 0; i < result.size(); ++i) {
+                fields.emplace_back(cloud.add_field_from_py_object<float>(std::to_string(i), result[i]));
             }
         } catch(const py::cast_error&) {
             throw std::runtime_error("inference failed");
         }
+        // argmax
+        std::span<uint8_t> prediction = cloud.add_field<uint8_t>("prediction", 0);
+        predict(prediction, fields);
+        // postprocessing
         PROFILE(postprocessing, &inference) {
             // remove ignored classes
-            cloud.filter<uint8_t>("class", [this](const uint8_t& scalar) {
+            cloud.filter<uint8_t>("prediction", [this](const uint8_t& scalar) {
                 return this->config_.semantics.ignore.count(scalar) == 0;
             });
             // downsample only if the inference resolution was different from the output resolution
@@ -61,17 +87,17 @@ void SegmentationSystem::Model::infer(util::Cloud& cloud) {
             }
             // remap semantic classes...
             if(!config_.semantics.remap.empty()) {
-                cloud.transform<uint8_t>("class", [this](const uint8_t& cls) {
-                    if(this->config_.semantics.remap.contains(cls)) {
-                        return static_cast<uint8_t>(this->config_.semantics.remap[static_cast<size_t>(cls)]);
+                cloud.transform<uint8_t>("prediction", [this](const uint8_t& prediction) {
+                    if(this->config_.semantics.remap.contains(prediction)) {
+                        return static_cast<uint8_t>(this->config_.semantics.remap[static_cast<size_t>(prediction)]);
                     } else {
-                        return cls;
+                        return prediction;
                     }
                 });
                 // ...and accumulate their respective probabilities
-                for(const auto& [cls_from, cls_to] : config_.semantics.remap) {
-                    std::span<float> from = cloud.field<float>(std::to_string(cls_from));
-                    std::span<float> to = cloud.field<float>(std::to_string(cls_to));
+                for(const auto& [prediction_from, prediction_to] : config_.semantics.remap) {
+                    std::span<float> from = cloud.field<float>(std::to_string(prediction_from));
+                    std::span<float> to = cloud.field<float>(std::to_string(prediction_to));
                     std::transform(to.begin(), to.end(), from.begin(), to.begin(), std::plus<>{});
                     std::fill(from.begin(), from.end(), 0.f);
                 }

@@ -84,6 +84,17 @@ public:
                 cloud_wrapper.transform(pose);
                 this->publish_scan(header.stamp, cloud);
                 // TODO: removed visualize_map, it needs to be added back
+                if(visualize_map_) {
+                    util::Cloud out;
+                    std::vector<uint8_t> prediction;
+                    prediction.reserve(odometry_system_.map_.size() * odometry_system_.config_.voxel_capacity);
+                    for(const auto& [point, semantics] : odometry_system_.map_.view()) {
+                        out.add_point(point);
+                        prediction.emplace_back(semantics.prediction);
+                    }
+                    out.add_field<uint8_t>("prediction", prediction);
+                    this->publish_local_map(header.stamp, out);
+                }
                 this->publish_pose(header.stamp, header.frame_id, pose);
                 if(projection_target_) this->publish_projection(header.stamp, *projection_target_, odometry_system_.projection_.target_);
                 projection_target_.emplace(odometry_system_.projection_.target_);

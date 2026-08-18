@@ -440,8 +440,13 @@ template const u4& Cloud::Field::operator[](size_t index) const;
 template const f4& Cloud::Field::operator[](size_t index) const;
 template const f8& Cloud::Field::operator[](size_t index) const;
 
+void Cloud::add_point(const Eigen::Vector3f& point) {
+    assert(fields_.size() == 0);
+    points_.emplace_back(point);
+}
+
 template<typename T>
-void Cloud::add_field(const std::string& name, const std::vector<T>& scalars) noexcept {
+std::span<T> Cloud::add_field(const std::string& name, const std::vector<T>& scalars) noexcept {
     assert(Cloud::size() == scalars.size());
     assert(!desc_.names_.contains(name));
     uint8_t datatype;
@@ -455,47 +460,49 @@ void Cloud::add_field(const std::string& name, const std::vector<T>& scalars) no
     else if constexpr (std::is_same_v<T, f8>) datatype = sensor_msgs::msg::PointField::FLOAT64;
     else static_assert(Cloud::False<T>, "unsupported field type");
     desc_.add_field(datatype, name);
+    size_t n = fields_.size();
     fields_.emplace_back(scalars);
+    return std::get<std::vector<T>>(fields_[n].data_);
 }
 
-template void Cloud::add_field<i1>(const std::string&, const std::vector<i1>&) noexcept;
-template void Cloud::add_field<u1>(const std::string&, const std::vector<u1>&) noexcept;
-template void Cloud::add_field<i2>(const std::string&, const std::vector<i2>&) noexcept;
-template void Cloud::add_field<u2>(const std::string&, const std::vector<u2>&) noexcept;
-template void Cloud::add_field<i4>(const std::string&, const std::vector<i4>&) noexcept;
-template void Cloud::add_field<u4>(const std::string&, const std::vector<u4>&) noexcept;
-template void Cloud::add_field<f4>(const std::string&, const std::vector<f4>&) noexcept;
-template void Cloud::add_field<f8>(const std::string&, const std::vector<f8>&) noexcept;
+template std::span<i1> Cloud::add_field<i1>(const std::string&, const std::vector<i1>&) noexcept;
+template std::span<u1> Cloud::add_field<u1>(const std::string&, const std::vector<u1>&) noexcept;
+template std::span<i2> Cloud::add_field<i2>(const std::string&, const std::vector<i2>&) noexcept;
+template std::span<u2> Cloud::add_field<u2>(const std::string&, const std::vector<u2>&) noexcept;
+template std::span<i4> Cloud::add_field<i4>(const std::string&, const std::vector<i4>&) noexcept;
+template std::span<u4> Cloud::add_field<u4>(const std::string&, const std::vector<u4>&) noexcept;
+template std::span<f4> Cloud::add_field<f4>(const std::string&, const std::vector<f4>&) noexcept;
+template std::span<f8> Cloud::add_field<f8>(const std::string&, const std::vector<f8>&) noexcept;
 
 template<typename T>
-void Cloud::add_field(const std::string& name, const T& scalar) noexcept {
+std::span<T> Cloud::add_field(const std::string& name, const T& scalar) noexcept {
     std::vector<T> scalars(Cloud::size(), scalar);
-    Cloud::add_field(name, scalars);
+    return Cloud::add_field(name, scalars);
 }
 
-template void Cloud::add_field<i1>(const std::string&, const i1&) noexcept;
-template void Cloud::add_field<u1>(const std::string&, const u1&) noexcept;
-template void Cloud::add_field<i2>(const std::string&, const i2&) noexcept;
-template void Cloud::add_field<u2>(const std::string&, const u2&) noexcept;
-template void Cloud::add_field<i4>(const std::string&, const i4&) noexcept;
-template void Cloud::add_field<u4>(const std::string&, const u4&) noexcept;
-template void Cloud::add_field<f4>(const std::string&, const f4&) noexcept;
-template void Cloud::add_field<f8>(const std::string&, const f8&) noexcept;
+template std::span<i1> Cloud::add_field<i1>(const std::string&, const i1&) noexcept;
+template std::span<u1> Cloud::add_field<u1>(const std::string&, const u1&) noexcept;
+template std::span<i2> Cloud::add_field<i2>(const std::string&, const i2&) noexcept;
+template std::span<u2> Cloud::add_field<u2>(const std::string&, const u2&) noexcept;
+template std::span<i4> Cloud::add_field<i4>(const std::string&, const i4&) noexcept;
+template std::span<u4> Cloud::add_field<u4>(const std::string&, const u4&) noexcept;
+template std::span<f4> Cloud::add_field<f4>(const std::string&, const f4&) noexcept;
+template std::span<f8> Cloud::add_field<f8>(const std::string&, const f8&) noexcept;
 
 #ifdef GENERATE_CLOUD_PYBIND_MODULE
 template<typename T>
-void Cloud::add_field_from_py_object(const std::string& name, py::object obj) noexcept {
-    Cloud::add_field(name, obj.cast<std::vector<T>>());
+std::span<T> Cloud::add_field_from_py_object(const std::string& name, py::object obj) noexcept {
+    return Cloud::add_field(name, obj.cast<std::vector<T>>());
 }
 
-template void Cloud::add_field_from_py_object<i1>(const std::string&, py::object) noexcept;
-template void Cloud::add_field_from_py_object<u1>(const std::string&, py::object) noexcept;
-template void Cloud::add_field_from_py_object<i2>(const std::string&, py::object) noexcept;
-template void Cloud::add_field_from_py_object<u2>(const std::string&, py::object) noexcept;
-template void Cloud::add_field_from_py_object<i4>(const std::string&, py::object) noexcept;
-template void Cloud::add_field_from_py_object<u4>(const std::string&, py::object) noexcept;
-template void Cloud::add_field_from_py_object<f4>(const std::string&, py::object) noexcept;
-template void Cloud::add_field_from_py_object<f8>(const std::string&, py::object) noexcept;
+template std::span<i1> Cloud::add_field_from_py_object<i1>(const std::string&, py::object) noexcept;
+template std::span<u1> Cloud::add_field_from_py_object<u1>(const std::string&, py::object) noexcept;
+template std::span<i2> Cloud::add_field_from_py_object<i2>(const std::string&, py::object) noexcept;
+template std::span<u2> Cloud::add_field_from_py_object<u2>(const std::string&, py::object) noexcept;
+template std::span<i4> Cloud::add_field_from_py_object<i4>(const std::string&, py::object) noexcept;
+template std::span<u4> Cloud::add_field_from_py_object<u4>(const std::string&, py::object) noexcept;
+template std::span<f4> Cloud::add_field_from_py_object<f4>(const std::string&, py::object) noexcept;
+template std::span<f8> Cloud::add_field_from_py_object<f8>(const std::string&, py::object) noexcept;
 #endif // GENERATE_CLOUD_PYBIND_MODULE
 } // namespace util
 

@@ -33,7 +33,7 @@ public:
 protected:
     virtual void publish_scan(const OfflineNode::Stamp& stamp, const util::Cloud& cloud) override {
         RerunNode::set_stamp(stamp);
-        RerunNode::publish_points(cloud, "scan", rerun::Color(255, 255, 255));
+        RerunNode::publish_points(cloud, "map/points");
     }
 
     virtual void publish_local_map(const OfflineNode::Stamp& stamp, const util::Cloud& cloud) override {
@@ -81,20 +81,17 @@ protected:
         
     }
 private:
-    void publish_points(const util::Cloud& cloud, const std::string& topic, std::optional<rerun::Color> single_color = std::nullopt, float radius_scalar = 1.f) {
+    void publish_points(const util::Cloud& cloud, const std::string& topic) {
         if(cloud.empty()) return;
         std::map<uint8_t, std::vector<rerun::Position3D>> scans;
-        const auto semantics = cloud.field<uint8_t>("class");
+        const auto prediction = cloud.field<uint8_t>("prediction");
         for(size_t i = 0; i < cloud.size(); ++i) {
-            if(scans.count(semantics[i]) == 0) scans[semantics[i]] = {};
+            if(scans.count(prediction[i]) == 0) scans[prediction[i]] = {};
             const auto& point = cloud[i];
-            scans[semantics[i]].emplace_back(point.x(), point.y(), point.z());
+            scans[prediction[i]].emplace_back(point.x(), point.y(), point.z());
         }
         for(const auto& [semantics, points] : scans) {
-            auto msg = rerun::Points3D()
-                .with_positions(points)
-                .with_radii(RerunNode::DEFAULT_POINT_RADIUS * radius_scalar);
-            if(single_color) msg = std::move(msg).with_colors(*single_color);
+            auto msg = rerun::Points3D().with_positions(points);
             rr_.log(topic + "/" + std::to_string(semantics), msg);
         }
     }

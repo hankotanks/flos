@@ -13,12 +13,12 @@
 #include "odometry/semantic_cloud.h"
 #include "odometry/projection.h"
 #include "odometry/voxel_map.h"
-#include "odometry/adaptive_threshold.h"
 // util
 #include "util/cloud.h"
 #include "util/profiler.h"
 
 class OdometrySystem: util::Profiler {
+    friend class OdometryNode;
     friend class OfflineNode;
 public:
     struct Config {
@@ -70,27 +70,23 @@ public:
         } velocity;
     };
 private:
-    // simplified from the robust kernel, which had no appreciable benefit
-    static constexpr float CORRESPONDENCE_DISTANCE_MULTIPLIER{0.5f};
     // downsampling scalar for keypoints
-    static constexpr float VOXEL_SIZE_SCALAR{1.25f};
+    static constexpr float VOXEL_SIZE_SCALAR{1.f};
     // configuration
     Config config_;
     // statistics
     Statistics statistics_;
     // frame state
     size_t frame_{0};
-    Sophus::SE3f last_pose_;
-    Sophus::SE3f last_delta_;
     unsigned int init_seconds_{std::numeric_limits<unsigned int>::max()};
     double last_stamp_{0.0};
     double prev_stamp_{0.0};
+    Sophus::SE3f last_pose_;
+    Sophus::SE3f last_delta_;
     // voxel map
     VoxelMap<3, SemanticCloud> map_;
     // current and previous frame projections
     Projection projection_;
-    // adaptive threshold for correspondence search
-    AdaptiveThreshold threshold_;
 private:
     // get the predicted delta (and handle statistics)
     std::pair<Sophus::SE3f, double> predict(unsigned int seconds, unsigned int nanoseconds) noexcept;
@@ -98,13 +94,13 @@ private:
     // find correspondences
     using Correspondence = std::tuple<Eigen::Vector3f, Semantics, VoxelMap<3, SemanticCloud>::Neighbor>;
     using CorrespondenceSet = tbb::concurrent_vector<Correspondence>;
-    CorrespondenceSet correspond(const SemanticCloud& points, float correspondence_distance) const noexcept;
+    CorrespondenceSet correspond(const SemanticCloud& points) const noexcept;
     // constructs and solves the linear system, returning dx and chi
     std::pair<Eigen::Matrix<float, 6, 1>, float> solve(const CorrespondenceSet& correspondences) noexcept;
 private:
-    // returns pose and deviation respectively
-    Sophus::SE3f align(SemanticCloud& points, const Sophus::SE3f& initial_guess, float correspondence_distance);
     // assumes points are already transformed by initial_guess
     // updates initial guess (and points)
-    Sophus::SE2f refine(SemanticCloud& points, Sophus::SE3f& initial_guess, float correspondence_distance);
+    Sophus::SE2f refine(SemanticCloud& points, Sophus::SE3f& initial_guess);
+    // returns pose and deviation respectively
+    Sophus::SE3f align(SemanticCloud& points, const Sophus::SE3f& initial_guess);
 };
