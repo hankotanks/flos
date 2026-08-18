@@ -6,17 +6,12 @@
 #include "odometry/voxel_map.h"
 
 // grouped for better management of projection state between frames
-struct Projection {
-    Eigen::Vector3f origin;
-    GroundPlane ground;
-    VoxelMap<2, BirdsEyeCloud> target;
+class Projection {
 public:
     Projection(float max_distance, float max_distance_ground, float voxel_size, size_t voxel_capacity) :
-        max_distance_(max_distance),
         max_distance_ground_(max_distance_ground),
-        voxel_size_(voxel_size * 2.f),
-        voxel_capacity_(voxel_capacity * 2),
-        target(max_distance, voxel_size * 2.f, voxel_capacity * 2) { /* STUB */ }
+        target_(max_distance, voxel_size * 2.f, voxel_capacity * 2),
+        source_(max_distance, voxel_size * 2.f, voxel_capacity * 2) { /* STUB */ }
     Projection(const Projection&) = delete;
     Projection(Projection&&) = delete;
     Projection& operator=(const Projection&) = delete;
@@ -28,11 +23,13 @@ public:
     // update ground plane and maintain state
     template<typename Predicate>
     void fit(const VoxelMap<3, SemanticCloud>& map, const Sophus::SE3f& pose, const Sophus::SE3f& T, Predicate&& pred);
+public:
+    Eigen::Vector3f origin_;
+    GroundPlane ground_;
+    VoxelMap<2, BirdsEyeCloud> target_;
 private:
-    float max_distance_;
     float max_distance_ground_;
-    float voxel_size_;
-    size_t voxel_capacity_;
+    VoxelMap<2, BirdsEyeCloud> source_;
 };
 
 #include "odometry/projection.tpp" // IWYU pragma: keep

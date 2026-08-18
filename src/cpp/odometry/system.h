@@ -30,7 +30,7 @@ public:
             float initial{2.f};
             float motion{0.1f};
         } threshold;
-        bool deskew{false};
+        bool deskew{true};
         bool fixed_dt{false};
         size_t max_iterations{500};
         size_t max_threads{0};
@@ -71,7 +71,7 @@ public:
     };
 private:
     // simplified from the robust kernel, which had no appreciable benefit
-    static constexpr float CORRESPONDENCE_MULTIPLIER{3.f};
+    static constexpr float CORRESPONDENCE_DISTANCE_MULTIPLIER{0.5f};
     // downsampling scalar for keypoints
     static constexpr float VOXEL_SIZE_SCALAR{1.25f};
     // configuration

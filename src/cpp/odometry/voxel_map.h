@@ -62,10 +62,12 @@ concept DefaultFrameType = std::is_same_v<F, std::span<const Eigen::Vector<float
 template<size_t D, typename F>
 concept ValidVoxelMap = (D >= 2 && D <= 3) && (DefaultFrameType<D, F> || FrameType<D, F>);
 
+// rigid and affine transformations
 template<size_t D, typename T>
 concept TransformEuclid = (D == 2 && std::same_as<T, Sophus::SE2f>) || (D == 3 && std::same_as<T, Sophus::SE3f>);
 template<size_t D, typename T>
 concept TransformAffine = (D == 2 && std::same_as<T, Eigen::Affine2f>) || (D == 3 && std::same_as<T, Eigen::Affine3f>);
+// represents a transformation which accepts Eigen::Vector<float, D>& and F::point_data_t& and mutates them
 template<size_t D, typename F, typename T>
 concept TransformLambda = (
     (DefaultFrameType<D, F> && requires(T&& fn, Eigen::Vector<float, D>& point) { { std::invoke(std::forward<T>(fn), point) } -> std::same_as<void>; }) ||
@@ -102,7 +104,7 @@ public:
     void apply(Transform&& T);
     // update transforms points by pose, extends the map with them, then prunes by max_distance
     template<typename Transform>
-    requires(TransformEuclid<D, Transform>)
+    requires(TransformEuclid<D, Transform> || TransformAffine<D, Transform>)
     void update(F& points, const Transform& pose);
     // extend just adds (a) point(s) to the map directly
     void extend(const F& points);
@@ -142,16 +144,17 @@ public:
     requires(!DefaultFrameType<D, F>);
 private:
     template<size_t _D, typename _F>
-    struct VoxelInner { /* STUB */ };
+    class VoxelInner { /* STUB */ };
     template<size_t _D, typename _F>
     requires(!DefaultFrameType<_D, _F>)
-    struct VoxelInner<_D, _F> {
+    class VoxelInner<_D, _F> {
+    protected:
         friend class VoxelMap<D, F>;
-        std::vector<typename _F::point_data_t> point_data;
-        typename _F::voxel_data_t data;
+        std::vector<typename _F::point_data_t> point_data_;
+        typename _F::voxel_data_t data_;
     };
     // internal voxel representation
-    struct Voxel : VoxelInner<D, F> {
+    class Voxel : VoxelInner<D, F> {
         friend class VoxelMap<D, F>;
     public:
         Voxel(size_t voxel_capacity);
@@ -167,7 +170,7 @@ private:
         void add(const Eigen::Vector<float, D>& point, typename T::point_data_t data, float voxel_resolution) noexcept
         requires(!DefaultFrameType<D, F>);
     private:
-        std::vector<Eigen::Vector<float, D>> points;
+        std::vector<Eigen::Vector<float, D>> points_;
     };
     // get lower bound distance for pruning the search space in VoxelMap::closest
     inline float lower_bound_distance_sq(const Eigen::Vector<float, D>& query, const Eigen::Vector<int, D>& voxel) const noexcept;
@@ -179,16 +182,19 @@ private:
     size_t voxel_capacity_;
     // underlying map structure
     tsl::robin_map<Eigen::Vector<int, D>, Voxel> map_;
-private:
-    struct view_global : public std::ranges::view_interface<view_global> {
+public:
+    class view_global : public std::ranges::view_interface<view_global> {
+        friend class VoxelMap<D, F>;
         view_global(const VoxelMap<D, F>& map) : map_(&map), begin_(map.map_.cbegin()), end_(map.map_.cend()) { /* STUB */ }
+    public:
         view_global(view_global& other, tbb::split);
         // helpers
         inline bool empty() const noexcept { return begin_ == end_; }
         inline bool is_divisible() const noexcept { return std::distance(begin_, end_) > 1; }
         // iterator inner class
-        struct iterator {
+        class iterator {
             friend class view_global;
+        public:
             // proxy for reference type 
             template<typename T = F>
             struct proxy {
@@ -216,12 +222,12 @@ private:
         private:
             iterator(const view_global* range, typename tsl::robin_map<Eigen::Vector<int, D>, Voxel>::const_iterator voxel);
             void satisfy();
-            // state
+        private:
             const view_global* range_{nullptr};
             size_t i_{0};
             typename tsl::robin_map<Eigen::Vector<int, D>, Voxel>::const_iterator voxel_{};
         };
-    public:
+        // iterator initializerss
         inline iterator begin() const { return {this, begin_}; }
         inline iterator end() const { return {this, end_}; }
     private:
@@ -229,16 +235,19 @@ private:
         typename tsl::robin_map<Eigen::Vector<int, D>, Voxel>::const_iterator begin_;
         typename tsl::robin_map<Eigen::Vector<int, D>, Voxel>::const_iterator end_;
     };
-private:
-    struct view_local : public std::ranges::view_interface<view_local> {
+public:
+    class view_local : public std::ranges::view_interface<view_local> {
+        friend class VoxelMap<D, F>;
         view_local(const VoxelMap<D, F>& map, const Eigen::Vector<float, D>& origin, float radius);
+    public:
         view_local(view_local& other, tbb::split);
         // helpers
         inline bool empty() const noexcept { return begin_ == end_; }
         inline bool is_divisible() const noexcept { return end_ - begin_ > 1; }
         // iterator inner class
-        struct iterator {
+        class iterator {
             friend class view_local;
+        public:
             // proxy for the reference type (unable to construct the pair of pointers without getting local copies)
             struct proxy {
                 const Eigen::Vector<float, D>& first;
@@ -270,7 +279,7 @@ private:
             size_t j_{0};
             const Voxel* voxel_{nullptr};
         };
-    public:
+        // iterator initializers
         inline iterator begin() const { return {this, begin_}; }
         inline iterator end() const { return {this, end_}; }
     private:

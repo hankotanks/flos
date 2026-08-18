@@ -4,35 +4,35 @@ Belief::Belief() {
     // populate will a flat distribution
     // NOTE: distribution will be populated by the VoxelMap::update, so we don't need to worry about it
     static constexpr float UNIFORM_CONFIDENCE = 1.f / static_cast<float>(classes::COUNT);
-    confidence.fill(UNIFORM_CONFIDENCE);
+    confidence_.fill(UNIFORM_CONFIDENCE);
     static const float UNIFORM_BELIEF = std::log(UNIFORM_CONFIDENCE);
-    belief.fill(UNIFORM_BELIEF);
-    prediction = std::numeric_limits<size_t>::max();
+    belief_.fill(UNIFORM_BELIEF);
+    prediction_ = std::numeric_limits<size_t>::max();
 }
 
 void Belief::update(const Semantics& data) noexcept {
     static constexpr float EPS = 1e-6f;
     for(size_t i = 0; i < classes::COUNT; ++i) {
-        belief[i] += std::log(std::max(data.confidence[i], EPS));
+        belief_[i] += std::log(std::max(data.confidence[i], EPS));
     }
 }
 
 void Belief::finish() noexcept {
-    auto it = std::max_element(belief.begin(), belief.end());
+    auto it = std::max_element(belief_.begin(), belief_.end());
     // update predicted class of this voxel
-    prediction = std::distance(belief.begin(), it);
+    prediction_ = std::distance(belief_.begin(), it);
     // renormalize belief so it doesn't keep growing
     float maxima = *it;
-    for(auto& b : belief) b -= maxima;
+    for(auto& b : belief_) b -= maxima;
     // compute confidence probabilities for future VoxelMap::closest queries
-    for(size_t i = 0; i < classes::COUNT; ++i) confidence[i] = std::exp(belief[i]);
-    float sum = confidence[0];
-    for(size_t i = 1; i < classes::COUNT; ++i) sum += confidence[i];
-    for(size_t i = 0; i < classes::COUNT; ++i) confidence[i] /= sum;
+    for(size_t i = 0; i < classes::COUNT; ++i) confidence_[i] = std::exp(belief_[i]);
+    float sum = confidence_[0];
+    for(size_t i = 1; i < classes::COUNT; ++i) sum += confidence_[i];
+    for(size_t i = 0; i < classes::COUNT; ++i) confidence_[i] /= sum;
 }
 
 bool Belief::accept(const Semantics& query) const noexcept {
-    return prediction == query.prediction;
+    return prediction_ == query.prediction;
 }
 
 #if 0
@@ -51,7 +51,7 @@ float Belief::weight(const Semantics& query) const noexcept {
 #else
 float Belief::weight(const Semantics& query) const noexcept {
     float w = 0.f;
-    for(size_t i = 0; i < classes::COUNT; ++i) w += confidence[i] * query.confidence[i];
+    for(size_t i = 0; i < classes::COUNT; ++i) w += confidence_[i] * query.confidence[i];
     assert(w >= 0.f && w <= 1.f);
     return w;
 }

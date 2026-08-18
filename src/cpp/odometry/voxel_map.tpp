@@ -61,18 +61,18 @@ void VoxelMap<D, F>::apply(Transform&& fn) {
             static_assert(std::is_same_v<decltype(voxel), Voxel&>);
             static_assert(!std::is_const_v<std::remove_reference_t<decltype(voxel)>>);
             size_t i_write = 0;
-            for(size_t i_read = 0; i_read < voxel.points.size(); ++i_read) {
-                Eigen::Vector<float, D> point = voxel.points[i_read];
+            for(size_t i_read = 0; i_read < voxel.points_.size(); ++i_read) {
+                Eigen::Vector<float, D> point = voxel.points_[i_read];
                 std::invoke(fn, point);
                 Eigen::Vector<int, D> key_after = VoxelMap<D, F>::point_to_voxel(point);
                 if(key_before != key_after) {
                     extension.emplace_back(std::move(key_after), std::move(point));
                     continue;
                 }
-                voxel.points[i_write] = std::move(point);
+                voxel.points_[i_write] = std::move(point);
                 ++i_write;
             }
-            voxel.points.resize(i_write);
+            voxel.points_.resize(i_write);
         }
         // add the points which changed voxels
         for(const auto& [voxel, point] : extension) VoxelMap<D, F>::extend(voxel, point);
@@ -84,21 +84,21 @@ void VoxelMap<D, F>::apply(Transform&& fn) {
             static_assert(std::is_same_v<decltype(voxel), Voxel&>);
             static_assert(!std::is_const_v<std::remove_reference_t<decltype(voxel)>>);
             size_t i_write = 0;
-            for(size_t i_read = 0; i_read < voxel.points.size(); ++i_read) {
-                Eigen::Vector<float, D> point = voxel.points[i_read];
-                typename F::point_data_t data = voxel.point_data[i_read];
+            for(size_t i_read = 0; i_read < voxel.points_.size(); ++i_read) {
+                Eigen::Vector<float, D> point = voxel.points_[i_read];
+                typename F::point_data_t data = voxel.point_data_[i_read];
                 std::invoke(fn, point, data);
                 Eigen::Vector<int, D> key_after = VoxelMap<D, F>::point_to_voxel(point);
                 if(key_before != key_after) {
                     extension.emplace_back(std::move(key_after), std::move(point), std::move(data));
                     continue;
                 }
-                voxel.points[i_write] = std::move(point);
-                voxel.point_data[i_write] = std::move(data);
+                voxel.points_[i_write] = std::move(point);
+                voxel.point_data_[i_write] = std::move(data);
                 ++i_write;
             }
-            voxel.points.resize(i_write);
-            voxel.point_data.resize(i_write);
+            voxel.points_.resize(i_write);
+            voxel.point_data_.resize(i_write);
         }
         // add the points which changed voxels
         for(const auto& [voxel, point, data] : extension) VoxelMap<D, F>::extend(voxel, point, data);
@@ -108,11 +108,11 @@ void VoxelMap<D, F>::apply(Transform&& fn) {
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
 template<typename Transform>
-requires(TransformEuclid<D, Transform>)
-void VoxelMap<D, F>::update(F& points, const Transform& pose) {
-    VoxelMap<D, F>::extend(points, pose);
+requires(TransformEuclid<D, Transform> || TransformAffine<D, Transform>)
+void VoxelMap<D, F>::update(F& points, const Transform& T) {
+    VoxelMap<D, F>::extend(points, T);
     // remove points outside of a distance threshold to the current pose
-    const Eigen::Vector<float, D>& origin = pose.translation();
+    const Eigen::Vector<float, D>& origin = T.translation();
     const auto max_distance_sq = max_distance_ * max_distance_;
     for(auto it = map_.begin(); it != map_.end();) {
         const auto& [voxel, inner] = *it;
@@ -137,8 +137,10 @@ void VoxelMap<D, F>::extend(const F& points) {
             // update VoxelData
             search.value().add(point, data, voxel_resolution_);
         }
-        for(auto it = map_.begin(); it != map_.end(); ++it) {
-            it.value().data.finish();
+        if constexpr (!std::is_same_v<typename F::voxel_data_t, VoxelDataBase<F, typename F::point_data_t>>) {
+            for(auto it = map_.begin(); it != map_.end(); ++it) {
+                it.value().data_.finish();
+            }
         }
     } else {
         for(size_t i = 0; i < points.size(); ++i) {
@@ -172,8 +174,10 @@ void VoxelMap<D, F>::extend(const F& points, const Transform& pose) {
             // update VoxelData
             search.value().add(point, data, voxel_resolution_);
         }
-        for(auto it = map_.begin(); it != map_.end(); ++it) {
-            it.value().data.finish();
+        if constexpr (!std::is_same_v<typename F::voxel_data_t, VoxelDataBase<F, typename F::point_data_t>>) {
+            for(auto it = map_.begin(); it != map_.end(); ++it) {
+                it.value().data_.finish();
+            }
         }
     } else {
         for(size_t i = 0; i < points.size(); ++i) {
@@ -269,11 +273,12 @@ requires(DefaultFrameType<D, F>) {
         auto search = map_.find(key_offset);
         if(search == map_.end()) continue;
         const Voxel& voxel_shifted = search.value();
-        for(size_t i = 0; i < voxel_shifted.points.size(); ++i) {
-            float distance_sq = (voxel_shifted.points[i] - query).squaredNorm();
+        for(size_t i = 0; i < voxel_shifted.points_.size(); ++i) {
+            const Eigen::Vector<float, D>& point = voxel_shifted.points_[i];
+            float distance_sq = (point - query).squaredNorm();
             if(distance_sq >= correspondence_distance_sq) continue;
             if(distance_sq >= neighbor.distance_sq) continue;
-            neighbor.point = voxel_shifted.points[i];
+            neighbor.point = point;
             neighbor.distance_sq = distance_sq; 
             voxel = &voxel_shifted;
         }
@@ -315,20 +320,24 @@ requires(!DefaultFrameType<D, F>) {
         auto search = map_.find(key_offset);
         if(search == map_.end()) continue;
         const Voxel& voxel_shifted = search.value();
-        for(size_t i = 0; i < voxel_shifted.points.size(); ++i) {
-            float distance_sq = (voxel_shifted.points[i] - query).squaredNorm();
+        for(size_t i = 0; i < voxel_shifted.points_.size(); ++i) {
+            const Eigen::Vector<float, D>& point = voxel_shifted.points_[i];
+            float distance_sq = (point - query).squaredNorm();
             if(distance_sq >= correspondence_distance_sq) continue;
             if(distance_sq >= neighbor.distance_sq) continue;
-            if(voxel_shifted.data.accept(data)) {
-                neighbor.point = voxel_shifted.points[i];
-                neighbor.data = voxel_shifted.point_data[i];
-                neighbor.distance_sq = distance_sq; 
-                voxel = &voxel_shifted;
+            if constexpr (!std::is_same_v<typename F::voxel_data_t, VoxelDataBase<F, typename F::point_data_t>>) {
+                if(!voxel_shifted.data_.accept(data)) continue;
             }
+            neighbor.point = point;
+            neighbor.data = voxel_shifted.point_data_[i];
+            neighbor.distance_sq = distance_sq; 
+            voxel = &voxel_shifted;
         }
     }
     if(neighbor.distance_sq < correspondence_distance_sq) {
-        neighbor.weight = voxel->data.weight(data);
+        if constexpr (!std::is_same_v<typename F::voxel_data_t, VoxelDataBase<F, typename F::point_data_t>>) {
+            neighbor.weight = voxel->data_.weight(data);
+        }
         return std::make_optional(std::move(neighbor));
     }
     return std::nullopt;
@@ -337,9 +346,9 @@ requires(!DefaultFrameType<D, F>) {
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
 VoxelMap<D, F>::Voxel::Voxel(size_t voxel_capacity) {
-    points.reserve(voxel_capacity);
+    points_.reserve(voxel_capacity);
     if constexpr (!DefaultFrameType<D, F>) {
-        this->point_data.reserve(voxel_capacity);
+        this->point_data_.reserve(voxel_capacity);
     }
 }
 
@@ -347,15 +356,15 @@ template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
 void VoxelMap<D, F>::Voxel::add(const Eigen::Vector<float, D>& point, float voxel_resolution) noexcept 
 requires(DefaultFrameType<D, F>){
-    if(points.size() < points.capacity()) {
+    if(points_.size() < points_.capacity()) {
         size_t flag = std::numeric_limits<size_t>::max();
-        for(size_t j = 0; j < points.size(); ++j) {
-            if((points[j] - point).squaredNorm() >= voxel_resolution) continue;
+        for(size_t j = 0; j < points_.size(); ++j) {
+            if((points_[j] - point).squaredNorm() >= voxel_resolution) continue;
             flag = j;
             break;
         }
         if(flag == std::numeric_limits<size_t>::max()) {
-            points.emplace_back(point);
+            points_.emplace_back(point);
         }
     }
 }
@@ -365,19 +374,21 @@ requires(ValidVoxelMap<D, F>)
 template<typename T>
 void VoxelMap<D, F>::Voxel::add(const Eigen::Vector<float, D>& point, typename T::point_data_t data, float voxel_resolution) noexcept 
 requires(!DefaultFrameType<D, F>){
-    if(points.size() < points.capacity()) {
+    if(points_.size() < points_.capacity()) {
         size_t flag = std::numeric_limits<size_t>::max();
-        for(size_t j = 0; j < points.size(); ++j) {
-            if((points[j] - point).squaredNorm() >= voxel_resolution) continue;
+        for(size_t j = 0; j < points_.size(); ++j) {
+            if((points_[j] - point).squaredNorm() >= voxel_resolution) continue;
             flag = j;
             break;
         }
         if(flag == std::numeric_limits<size_t>::max()) {
-            points.emplace_back(point);
-            this->point_data.emplace_back(data);
+            points_.emplace_back(point);
+            this->point_data_.emplace_back(data);
         }
     }
-    this->data.update(data);
+    if constexpr (!std::is_same_v<typename F::voxel_data_t, VoxelDataBase<F, typename F::point_data_t>>) {
+        this->data_.update(data);
+    }
 }
 
 template<size_t D, typename F>
@@ -406,8 +417,8 @@ VoxelMap<D, F>::view_global::iterator::reference VoxelMap<D, F>::view_global::it
         return voxel_->second.points[i_];
     } else {
         return {
-            voxel_->second.points[i_],
-            voxel_->second.point_data[i_]
+            voxel_->second.points_[i_],
+            voxel_->second.point_data_[i_]
         };
     }
 }
@@ -419,8 +430,8 @@ VoxelMap<D, F>::view_global::iterator::pointer VoxelMap<D, F>::view_global::iter
         return std::addressof(voxel_->second.points[i_]);
     } else {
         return {
-            voxel_->second.points[i_],
-            voxel_->second.point_data[i_]
+            voxel_->second.points_[i_],
+            voxel_->second.point_data_[i_]
         };
     }
 }
@@ -451,7 +462,7 @@ template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
 void VoxelMap<D, F>::view_global::iterator::satisfy() {
     while(voxel_ != range_->end_) {
-        if(i_ < voxel_->second.points.size()) return;
+        if(i_ < voxel_->second.points_.size()) return;
         ++voxel_;
         i_ = 0;
     }
@@ -486,11 +497,11 @@ template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
 VoxelMap<D, F>::view_local::iterator::reference VoxelMap<D, F>::view_local::iterator::operator*() const noexcept { 
     if constexpr (DefaultFrameType<D, F>) {
-        return voxel_->points[j_];
+        return voxel_->points_[j_];
     } else {
         return {
-            voxel_->points[j_],
-            voxel_->point_data[j_]
+            voxel_->points_[j_],
+            voxel_->point_data_[j_]
         };
     } 
 }
@@ -499,7 +510,7 @@ template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
 VoxelMap<D, F>::view_local::iterator::pointer VoxelMap<D, F>::view_local::iterator::operator->() const noexcept { 
     if constexpr (DefaultFrameType<D, F>) {
-        return std::addressof(voxel_->points[j_]);
+        return std::addressof(voxel_->points_[j_]);
     } else {
         return operator*().operator->();
     }
@@ -532,8 +543,8 @@ requires(ValidVoxelMap<D, F>)
 void VoxelMap<D, F>::view_local::iterator::satisfy() {
     while(i_ < range_->end_) {
         if(voxel_ != nullptr) {
-            while(j_ < voxel_->points.size()) {
-                const Eigen::Vector<float, D>& point = voxel_->points[j_];
+            while(j_ < voxel_->points_.size()) {
+                const Eigen::Vector<float, D>& point = voxel_->points_[j_];
                 if((point - range_->origin_).squaredNorm() <= range_->radius_sq_) return;
                 ++j_;
             }

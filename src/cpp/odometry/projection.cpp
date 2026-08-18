@@ -21,13 +21,13 @@ void correspond(const VoxelMap<2, BirdsEyeCloud>& source, const VoxelMap<2, Bird
 } // private scope
 
 std::optional<Sophus::SE2f> Projection::align(const BirdsEyeCloud& points, size_t max_iterations, float convergence_criterion, float correspondence_distance) {
-    if(target.empty()) {
-        target.extend(points);
+    if(target_.empty()) {
+        target_.extend(points);
         return std::nullopt;
     }
     // construct source map (current frame)
-    VoxelMap<2, BirdsEyeCloud> source{max_distance_, voxel_size_, voxel_capacity_};
-    source.extend(points);
+    source_.clear();
+    source_.extend(points);
     // chi termination criterion
     float chi = -1.f;
     float correspondence_distance_sq = correspondence_distance * correspondence_distance;
@@ -37,10 +37,10 @@ std::optional<Sophus::SE2f> Projection::align(const BirdsEyeCloud& points, size_
     Sophus::SE2f T{};
     for(size_t iter = 0; iter < max_iterations; ++iter) {
         // build bidirectional correspondences
-        correspond(source, target, correspondences, correspondence_distance_sq);
+        correspond(source_, target_, correspondences, correspondence_distance_sq);
         if(correspondences.size() < 3) {
-            target.clear();
-            target.extend(points);
+            target_.clear();
+            target_.extend(points);
             return std::nullopt;
         }
         // ensure symmetry and construct means
@@ -69,13 +69,13 @@ std::optional<Sophus::SE2f> Projection::align(const BirdsEyeCloud& points, size_
         const Sophus::SO2f R{std::atan2(cross, dot)};
         const Sophus::SE2f est{R, target_mean - R * source_mean};
         // shift centroids
-        source.apply(est);
+        source_.apply(est);
         // accumulate transform
         T = est * T;
         // termination criterion
         if(chi > 0.f && std::abs(chi - chi_i) <= convergence_criterion * chi) break;
         chi = chi_i;
     }
-    target = std::move(source);
+    target_ = std::move(source_);
     return T;
 }

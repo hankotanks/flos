@@ -85,8 +85,8 @@ public:
                 this->publish_scan(header.stamp, cloud);
                 // TODO: removed visualize_map, it needs to be added back
                 this->publish_pose(header.stamp, header.frame_id, pose);
-                if(projection_target_) this->publish_projection(header.stamp, *projection_target_, odometry_system_.projection_.target);
-                projection_target_.emplace(odometry_system_.projection_.target);
+                if(projection_target_) this->publish_projection(header.stamp, *projection_target_, odometry_system_.projection_.target_);
+                projection_target_.emplace(odometry_system_.projection_.target_);
             }
             this->publish_statistics(header.stamp, odometry_system_.statistics_);
             const auto [percent, remaining] = OfflineNode::compute_progress();

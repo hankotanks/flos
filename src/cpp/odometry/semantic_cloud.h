@@ -10,28 +10,29 @@
 struct Semantics {
     size_t prediction;
     std::array<float, classes::COUNT> confidence;
-    explicit Semantics() = default;
 };
 
 // forward declaration
 struct SemanticCloud;
 
 // voxel belief
-struct Belief: public VoxelDataBase<SemanticCloud, Semantics> {
+class Belief: public VoxelDataBase<SemanticCloud, Semantics> {
+public:
     explicit Belief();
     virtual void update(const Semantics& data) noexcept override final;
     virtual void finish() noexcept override final;
     virtual bool accept(const Semantics& data) const noexcept override final;
     virtual float weight(const Semantics& query) const noexcept override final;
 public:
-    size_t prediction;
-    std::array<float, classes::COUNT> belief; 
-    std::array<float, classes::COUNT> confidence;
+    size_t prediction_;
+    std::array<float, classes::COUNT> belief_; 
+    std::array<float, classes::COUNT> confidence_;
 };
 
 // util::Cloud wrapper for fast access of fields
-struct SemanticCloud : public Frame<SemanticCloud, 3, Semantics, Belief> {
+class SemanticCloud : public Frame<SemanticCloud, 3, Semantics, Belief> {
     friend Belief;
+public:
     SemanticCloud(util::Cloud& points);
     virtual inline size_t size() const noexcept override final { return points_.size(); };
     void transform(const Sophus::SE3f& t) const noexcept;

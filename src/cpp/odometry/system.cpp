@@ -122,7 +122,7 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigne
             // compute adaptive threshold
             float sigma = threshold_.compute();
             // and correspondence distance
-            float correspondence_distance = sigma * OdometrySystem::CORRESPONDENCE_MULTIPLIER;
+            float correspondence_distance = config_.voxel_size * OdometrySystem::CORRESPONDENCE_DISTANCE_MULTIPLIER;
             // refine initial_guess (invariant: point_kp_wrapper is transformed by initial_guess)
             if(config_.projection.enable) {
                 PROFILE(refinement, &align) {
@@ -193,9 +193,9 @@ OdometrySystem::CorrespondenceSet OdometrySystem::correspond(const SemanticCloud
     float correspondence_distance_sq = correspondence_distance * correspondence_distance;
     tbb::parallel_for(tbb::blocked_range<size_t>{0, points.size()}, [this, &points, &correspondences, correspondence_distance_sq](const tbb::blocked_range<size_t>& range) {
         for(size_t i = range.begin(); i < range.end(); ++i) {
-            const auto& [point, point_data] = points[i];
-            const auto neighbor = this->map_.closest(point, point_data, correspondence_distance_sq);
-            if(neighbor) correspondences.emplace_back(point, point_data, *neighbor);
+            const auto& [point, data] = points[i];
+            const auto neighbor = this->map_.closest(point, data, correspondence_distance_sq);
+            if(neighbor) correspondences.emplace_back(point, data, *neighbor);
         }
     });
     // prune all low-weight correspondences down to a threshold...
@@ -279,11 +279,11 @@ Sophus::SE3f OdometrySystem::align(SemanticCloud& points, const Sophus::SE3f& in
 }
 
 Sophus::SE2f OdometrySystem::refine(SemanticCloud& points, Sophus::SE3f& initial_guess, float correspondence_distance) {
-    BirdsEyeCloud bev{points, projection_.ground, [this](const Semantics& data) {
+    BirdsEyeCloud bev{points, projection_.ground_, [this](const Semantics& data) {
         return this->config_.projection.target.count(data.prediction) > 0;
     }};
     if(std::optional<Sophus::SE2f> T_bev_projected = projection_.align(bev, config_.max_iterations, config_.convergence_criterion, correspondence_distance)) {
-        Sophus::SE3f T_bev = projection_.ground.lift(*T_bev_projected);
+        Sophus::SE3f T_bev = projection_.ground_.lift(*T_bev_projected);
         // ensure that the refined residual is smaller than the initial
         CorrespondenceSet correspondences_initial = OdometrySystem::correspond(points, correspondence_distance);
         const auto [dx_initial, chi_initial] = OdometrySystem::solve(correspondences_initial);
