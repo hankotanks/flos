@@ -243,31 +243,34 @@ constexpr size_t offset_pow() {
     return n;
 }
 
+template<size_t D>
+requires(D >= 2 && D <= 3)
+constexpr std::array<Eigen::Vector<int, D>, offset_pow<D>()> offset() {
+    std::array<Eigen::Vector<int, D>, offset_pow<D>()> result{};
+    for(size_t i = 0; i < result.size(); ++i) {
+        size_t n = i;
+        for(size_t d = 0; d < D; ++d) {
+            result[i][d] = static_cast<int>(n % 3) - 1;
+            n /= 3;
+        }
+    }
+    return result;
+}
+
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
-std::optional<typename VoxelMap<D, F>::Neighbor> VoxelMap<D, F>::closest(const Eigen::Vector<float, D>& query) const 
+std::optional<typename VoxelMap<D, F>::Neighbor> VoxelMap<D, F>::closest(const Eigen::Vector<float, D>& query, float correspondence_distance_sq) const 
 requires(DefaultFrameType<D, F>) {
-    float correspondence_distance_sq = voxel_size_ * voxel_size_ * 0.25f;
     // NOTE: moved inside of the function for namespacing reasons 
     // (since VoxelMap::closest must be included in the header due to templating constraints)
-    static const auto offsets = std::invoke([]() {
-        std::array<Eigen::Vector<int, D>, offset_pow<D>()> result{};
-        for(size_t i = 0; i < result.size(); ++i) {
-            size_t n = i;
-            for(size_t d = 0; d < D; ++d) {
-                result[i][d] = static_cast<int>(n % 3) - 1;
-                n /= 3;
-            }
-        }
-        return result;
-    });
+    // static constexpr auto offsets = offset<D>();
     // find the closest match that respects the provided predicate
     if(map_.empty()) return std::nullopt;
     Eigen::Vector<int, D> key = VoxelMap<D, F>::point_to_voxel(query);
     typename VoxelMap<D, F>::Neighbor neighbor;
     neighbor.distance_sq = std::numeric_limits<float>::max();
     const Voxel* voxel{nullptr};
-    for(const auto& offset : offsets) {
+    for(const auto& offset : offset<D>()) {
         const Eigen::Vector<int, D> key_offset = key + offset;
         float lb_distance_sq = VoxelMap<D, F>::lower_bound_distance_sq(query, key_offset);
         if(lb_distance_sq >= neighbor.distance_sq) continue;
@@ -293,29 +296,18 @@ requires(DefaultFrameType<D, F>) {
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
 template<typename T>
-std::optional<typename VoxelMap<D, F>::Neighbor> VoxelMap<D, F>::closest(const Eigen::Vector<float, D>& query, const typename T::point_data_t& data) const 
+std::optional<typename VoxelMap<D, F>::Neighbor> VoxelMap<D, F>::closest(const Eigen::Vector<float, D>& query, const typename T::point_data_t& data, float correspondence_distance_sq) const 
 requires(!DefaultFrameType<D, F>) {
-    float correspondence_distance_sq = voxel_size_ * voxel_size_ * 0.25f;
     // NOTE: moved inside of the function for namespacing reasons 
     // (since VoxelMap::closest must be included in the header due to templating constraints)
-    static const auto offsets = std::invoke([]() {
-        std::array<Eigen::Vector<int, D>, offset_pow<D>()> result{};
-        for(size_t i = 0; i < result.size(); ++i) {
-            size_t n = i;
-            for(size_t d = 0; d < D; ++d) {
-                result[i][d] = static_cast<int>(n % 3) - 1;
-                n /= 3;
-            }
-        }
-        return result;
-    });
+    // static constexpr auto offsets = ;
     // find the closest match that respects the provided predicate
     if(map_.empty()) return std::nullopt;
     Eigen::Vector<int, D> key = VoxelMap<D, F>::point_to_voxel(query);
     typename VoxelMap<D, F>::Neighbor neighbor;
     neighbor.distance_sq = std::numeric_limits<float>::max();
     const Voxel* voxel{nullptr};
-    for(const auto& offset : offsets) {
+    for(const auto& offset : offset<D>()) {
         const Eigen::Vector<int, D> key_offset = key + offset;
         float lb_distance_sq = VoxelMap<D, F>::lower_bound_distance_sq(query, key_offset);
         if(lb_distance_sq >= neighbor.distance_sq) continue;

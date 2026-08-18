@@ -4,25 +4,25 @@
 #include <tuple>
 #include <utility>
 
-namespace {
-void correspond(const VoxelMap<2, BirdsEyeCloud>& source, const VoxelMap<2, BirdsEyeCloud>& target, std::vector<std::tuple<Eigen::Vector2f, Eigen::Vector2f, float>>& correspondences) {
-    correspondences.clear();
-    tbb::enumerable_thread_specific<std::vector<std::tuple<Eigen::Vector2f, Eigen::Vector2f, float>>> correspondence_pool;
-    tbb::parallel_for(source.view(), [&target, &correspondence_pool](auto& range) {
-        for(const auto& [query, data] : range) {
-            auto neighbor = target.closest(query, data);
-            if(!neighbor) continue;
-            auto& local = correspondence_pool.local();
-            local.emplace_back(query, neighbor->point, neighbor->distance_sq);
-        }
-    });
-    for(auto& local : correspondence_pool) {
-        correspondences.insert(correspondences.end(), std::make_move_iterator(local.begin()), std::make_move_iterator(local.end()));
+void Projection::fit(const VoxelMap<3, SemanticCloud>& map, const Sophus::SE3f& pose, const Sophus::SE3f& T) {
+    // update projection
+    auto T_icp_projected = ground_.project(T);
+    target_.apply(std::move(T_icp_projected));
+    // recompute ground
+    if((origin_ - pose.translation()).squaredNorm() > (max_distance_ground_ * max_distance_ground_ * 0.25f)) {
+        origin_ = pose.translation();
+        GroundPlane previous = std::move(ground_);
+        // TODO: just testing RANSAC at the moment
+        // the inlier threshold should be voxel_size / voxel_capacity
+        ground_ = GroundPlane{map, origin_, max_distance_ground_, pred_ground_, voxel_size_ / static_cast<float>(voxel_capacity_), 100};
+        auto T_g2g = ground_.project(previous);
+        // reproject
+        target_.apply(T_g2g);
     }
 }
-} // private scope
 
-std::optional<Sophus::SE2f> Projection::align(const BirdsEyeCloud& points, size_t max_iterations, float convergence_criterion) {
+std::optional<Sophus::SE3f> Projection::align(const SemanticCloud& source, size_t max_iterations, float convergence_criterion) {
+    BirdsEyeCloud points{source, ground_, pred_target_};
     if(target_.empty()) {
         target_.extend(points);
         return std::nullopt;
@@ -38,7 +38,19 @@ std::optional<Sophus::SE2f> Projection::align(const BirdsEyeCloud& points, size_
     Sophus::SE2f T{};
     for(size_t iter = 0; iter < max_iterations; ++iter) {
         // build bidirectional correspondences
-        correspond(source_, target_, correspondences);
+        correspondences.clear();
+        tbb::enumerable_thread_specific<std::vector<std::tuple<Eigen::Vector2f, Eigen::Vector2f, float>>> correspondence_pool;
+        tbb::parallel_for(source_.view(), [this, &correspondence_pool](auto& range) {
+            for(const auto& [query, data] : range) {
+                auto neighbor = this->target_.closest(query, data, std::numeric_limits<float>::max());
+                if(!neighbor) continue;
+                auto& local = correspondence_pool.local();
+                local.emplace_back(query, neighbor->point, neighbor->distance_sq);
+            }
+        });
+        for(auto& local : correspondence_pool) {
+            correspondences.insert(correspondences.end(), std::make_move_iterator(local.begin()), std::make_move_iterator(local.end()));
+        }
         if(correspondences.size() < 3) {
             target_.clear();
             target_.extend(points);
@@ -78,5 +90,5 @@ std::optional<Sophus::SE2f> Projection::align(const BirdsEyeCloud& points, size_
         chi = chi_i;
     }
     target_ = std::move(source_);
-    return T;
+    return std::make_optional(ground_.lift(T));
 }

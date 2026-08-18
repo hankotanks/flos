@@ -137,10 +137,10 @@ public:
         float distance_sq{std::numeric_limits<float>::max()};
     };
     // returns std::nullopt when no correspondence is found
-    std::optional<Neighbor> closest(const Eigen::Vector<float, D>& query) const
+    std::optional<Neighbor> closest(const Eigen::Vector<float, D>& query, float correspondence_distance_sq) const
     requires(DefaultFrameType<D, F>);
     template<typename T = F>
-    std::optional<Neighbor> closest(const Eigen::Vector<float, D>& query, const typename T::point_data_t& data) const
+    std::optional<Neighbor> closest(const Eigen::Vector<float, D>& query, const typename T::point_data_t& data, float correspondence_distance_sq) const
     requires(!DefaultFrameType<D, F>);
 private:
     template<size_t _D, typename _F>

@@ -20,6 +20,14 @@ class GroundPlane {
 public:
     template<typename Predicate>
     explicit GroundPlane(const VoxelMap<3, SemanticCloud>& map, const Eigen::Vector3f& origin, float max_distance, Predicate&&);
+    template<typename Predicate>
+    explicit GroundPlane(
+        const VoxelMap<3, SemanticCloud>& map,
+        const Eigen::Vector3f& origin,
+        float max_distance,
+        Predicate&& pred,
+        float inlier_distance,
+        size_t ransac_iterations);
     explicit GroundPlane() = default;
     GroundPlane(const GroundPlane&) = delete;
     GroundPlane(GroundPlane&&) = default;
