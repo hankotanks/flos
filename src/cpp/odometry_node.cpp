@@ -146,8 +146,7 @@ protected:
                     local_map_header.frame_id = OdometryNode::LOCAL_MAP_FRAME;
                     util::Cloud out;
                     std::vector<uint8_t> prediction;
-                    prediction.reserve(system_.map_.size() * system_.config_.voxel_capacity);
-                    for(const auto& [point, semantics] : system_.map_.view()) {
+                    for(const auto& [point, semantics] : system_.view()) {
                         out.add_point(point);
                         prediction.emplace_back(semantics.prediction);
                     }

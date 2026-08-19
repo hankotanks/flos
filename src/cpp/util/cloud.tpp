@@ -6,9 +6,6 @@
 #include <numeric>
 
 #ifdef GENERATE_CLOUD_PYBIND_MODULE
-// TODO: I would like to automatically generate these bindings somehow
-// for every type in sensor_msgs::msg::PointField
-
 using FieldI1 = std::vector<int8_t>;
 using FieldU1 = std::vector<uint8_t>;
 using FieldI2 = std::vector<int16_t>;
@@ -28,6 +25,30 @@ PYBIND11_MAKE_OPAQUE(FieldF4);
 PYBIND11_MAKE_OPAQUE(FieldF8);
 PYBIND11_MAKE_OPAQUE(std::vector<Eigen::Vector3f>);
 #endif // GENERATE_CLOUD_PYBIND_MODULE
+
+namespace {
+// this algorithm is sourced from Potatoswatter on StackOverflow: https://stackoverflow.com/a/1267878
+template<typename order_iterator, typename value_iterator>
+void reorder(order_iterator order_begin, order_iterator order_end, value_iterator v)  {   
+    typedef typename std::iterator_traits<value_iterator>::value_type value_t;
+    typedef typename std::iterator_traits<order_iterator>::value_type index_t;
+    typedef typename std::iterator_traits<order_iterator>::difference_type diff_t;
+    
+    diff_t remaining = order_end - 1 - order_begin;
+    for(index_t s = index_t(), d; remaining > 0; ++s) {
+        for(d = order_begin[s]; d > s; d = order_begin[d]);
+        if(d == s) {
+            --remaining;
+            value_t temp = v[s];
+            while(d = order_begin[d], d != s) {
+                std::swap(temp, v[d]);
+                --remaining;
+            }
+            v[s] = temp;
+        }
+    }
+}
+} // INTERNAL
 
 namespace util {
 template<typename T, typename Predicate>
@@ -70,29 +91,6 @@ void Cloud::filter_by_distance(const Eigen::Vector3f& origin, float minima, floa
         ++i_write;
     }
     Cloud::resize(i_write);
-}
-
-// TODO: this should not accessible outside the cloud.cpp translation unit
-// this algorithm is sourced from Potatoswatter on StackOverflow: https://stackoverflow.com/a/1267878
-template<typename order_iterator, typename value_iterator>
-void reorder(order_iterator order_begin, order_iterator order_end, value_iterator v)  {   
-    typedef typename std::iterator_traits<value_iterator>::value_type value_t;
-    typedef typename std::iterator_traits<order_iterator>::value_type index_t;
-    typedef typename std::iterator_traits<order_iterator>::difference_type diff_t;
-    
-    diff_t remaining = order_end - 1 - order_begin;
-    for(index_t s = index_t(), d; remaining > 0; ++s) {
-        for(d = order_begin[s]; d > s; d = order_begin[d]);
-        if(d == s) {
-            --remaining;
-            value_t temp = v[s];
-            while(d = order_begin[d], d != s) {
-                std::swap(temp, v[d]);
-                --remaining;
-            }
-            v[s] = temp;
-        }
-    }
 }
 
 template<typename T, typename Comparator>

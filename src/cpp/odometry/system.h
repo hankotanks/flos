@@ -19,7 +19,6 @@
 #include "util/profiler.h"
 
 class OdometrySystem: util::Profiler {
-    friend class OdometryNode;
     friend class OfflineNode;
 public:
     struct Config {
@@ -62,6 +61,8 @@ public:
     // NOTE: deskews and transforms points by the solution pose
     const Sophus::SE3f& register_to_map(util::Cloud& points) noexcept; // NOTE: sets fixed_dt to true
     const Sophus::SE3f& register_to_map(util::Cloud& points, unsigned int seconds, unsigned int nanoseconds) noexcept;
+    // get a view into the current map
+    inline auto view() const { return map_.view(); }
 public:
     struct Statistics {
         size_t iterations{0};

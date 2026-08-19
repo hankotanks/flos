@@ -2,8 +2,13 @@
 
 #include "odometry/ground_plane.h"
 
+// system
+#include <limits>
+// tbb
 #include <tbb/parallel_for.h>
 
+// TODO: is this possible without allocating the points again?
+// not a big cost, since its only done once every ~5 meters
 template<typename Predicate>
 std::function<void(Eigen::Vector2f&, float&)> GroundPlane::update(const VoxelMap<3, SemanticCloud>& map, const Eigen::Vector3f& origin, Predicate&& pred) {
     // point candidates
@@ -15,93 +20,94 @@ std::function<void(Eigen::Vector2f&, float&)> GroundPlane::update(const VoxelMap
             local.push_back(point);
         }
     });
+    // reserve a vector for the ground points
     std::vector<Eigen::Vector3f> points;
-    size_t count_total = 0;
-    for(const auto& local : point_pool) count_total += local.size();
-    points.reserve(count_total);
+    size_t count = 0;
+    for(const auto& local : point_pool) count += local.size();
+    points.reserve(count);
+    // populate it
     for(const auto& local : point_pool) points.insert(points.end(), local.begin(), local.end());
     if(points.size() < 3) return [](Eigen::Vector2f&, float&) { /* STUB */ };
 
-    // ransac
+    // represents a consesnsus
+    struct Consensus {
+        Eigen::Vector3f point{Eigen::Vector3f::Zero()};
+        Eigen::Vector3f normal{Eigen::Vector3f::Zero()};
+        float error{0.f};
+        size_t count{0};
+    };
+
+    Consensus best;
+    best.error = std::numeric_limits<float>::max();
+
     std::mt19937 rng{static_cast<std::mt19937::result_type>(std::chrono::high_resolution_clock::now().time_since_epoch().count())};
+
+    // get random index generator
     std::uniform_int_distribution<size_t> distribution(0, points.size() - 1);
-
-    Eigen::Vector3f best_normal = Eigen::Vector3f::Zero();
-    Eigen::Vector3f best_point = Eigen::Vector3f::Zero();
-    float best_error = std::numeric_limits<float>::max();
-    size_t best_count_inlier = 0;
-
-    const float threshold_sq = inlier_distance_ * inlier_distance_;
     for(size_t i = 0, j0 = distribution(rng); i < iterations_; ++i, j0 = distribution(rng)) {
         size_t j1, j2;
         do { j1 = distribution(rng); } while (j1 == j0);
         do { j2 = distribution(rng); } while (j2 == j0 || j2 == j1);
-
         const Eigen::Vector3f& p0 = points[j0];
         const Eigen::Vector3f& p1 = points[j1];
         const Eigen::Vector3f& p2 = points[j2];
-
-        const Eigen::Vector3f v1 = p1 - p0;
-        const Eigen::Vector3f v2 = p2 - p0;
-
-        Eigen::Vector3f normal = v1.cross(v2);
-        const float normal_sq = normal.squaredNorm();
-        if(normal_sq < 1e-8f) continue;
-        normal /= std::sqrt(normal_sq);
-
-        size_t count_inlier = 0;
-        float error = 0.f;
+        // construct and test current candidate
+        Consensus current;
+        current.point = p0;
+        current.normal = (p1 - p0).cross(p2 - p0);
+        // manually normalize the... normal
+        auto s = current.normal.squaredNorm();
+        if(s < 1e-6) continue;
+        current.normal /= std::sqrt(s);
+        // get inlier count and error
         for(const Eigen::Vector3f& point : points) {
-            const float distance = normal.dot(point - p0);
-            const float distance_sq = distance * distance;
-            if(distance_sq <= threshold_sq) {
-                ++count_inlier;
-                error += distance_sq;
+            const float distance = current.normal.dot(point - p0);
+            if(std::abs(distance) <= inlier_distance_) {
+                current.count++;
+                current.error += distance * distance;
             }
         }
-
-        if(count_inlier > best_count_inlier || (count_inlier == best_count_inlier && error < best_error)) {
-            best_count_inlier = count_inlier;
-            best_error = error;
-            best_normal = normal;
-            best_point = p0;
-        }
+        if(current.count < best.count) continue;
+        if(current.count == best.count && current.error > best.error) continue;
+        best = current;
     }
-    if(best_count_inlier < 3) return [](Eigen::Vector2f&, float&) { /* STUB */ };
+    if(best.count < 3) return [](Eigen::Vector2f&, float&) { /* STUB */ };
 
-    // compute centroid
+    // compute centroid and covariance
     Eigen::Vector3f centroid = Eigen::Vector3f::Zero();
-    size_t count = 0;
-    for(const Eigen::Vector3f& point : points) {
-        const float distance = best_normal.dot(point - best_point);
-        if(std::abs(distance) <= inlier_distance_) {
+    Eigen::Matrix3f covariance = Eigen::Matrix3f::Zero();
+    {
+        size_t count = 0;
+        for(const Eigen::Vector3f& point : points) {
+            if(std::abs(best.normal.dot(point - best.point)) > inlier_distance_) continue;
             centroid += point;
             ++count;
         }
+        if(count < 3) return [](Eigen::Vector2f&, float&) { /* STUB */ };
+        centroid /= static_cast<float>(count);
+        // S
+        for(const Eigen::Vector3f& point : points) {
+            const float distance = best.normal.dot(point - best.point);
+            if(std::abs(distance) > inlier_distance_) continue;
+            const Eigen::Vector3f d = point - centroid;
+            covariance += d * d.transpose();
+        }
+        covariance /= static_cast<float>(count);
     }
-    if(count < 3) return [](Eigen::Vector2f&, float&) { /* STUB */ };
-    centroid /= static_cast<float>(count);
-
-    // PCA on inliers
-    Eigen::Matrix3f covariance = Eigen::Matrix3f::Zero();
-    for(const Eigen::Vector3f& point : points) {
-        const float distance = best_normal.dot(point - best_point);
-        if(std::abs(distance) > inlier_distance_) continue;
-        const Eigen::Vector3f d = point - centroid;
-        covariance += d * d.transpose();
-    }
-    covariance /= static_cast<float>(count);
-
+    
+    // get plane
     Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> solver{covariance};
     Eigen::Matrix<float, 3, 3> plane = solver.eigenvectors();
     Eigen::Vector3f n  = plane.col(0);
     Eigen::Vector3f t1 = plane.col(1);
     Eigen::Vector3f t2 = plane.col(2);
+    // ensure correct handedness
     if(t1.cross(t2).dot(n) < 0.f) {
         plane.col(2) *= -1.f;
         t2 *= -1.f;
     }
 
+    // get transform to update projection
     Eigen::Matrix3f basis_source;
     basis_source.col(0) = t1_;
     basis_source.col(1) = t2_;
@@ -118,16 +124,17 @@ std::function<void(Eigen::Vector2f&, float&)> GroundPlane::update(const VoxelMap
     const Eigen::Vector2f b = t.head<2>();
     const Eigen::Vector2f s = R.topRightCorner<2, 1>();
     const Eigen::RowVector2f dx = R.bottomLeftCorner<1, 2>();
-
     const float ds = R(2, 2);
     const float db = t.z();
 
+    // update plane
     centroid_ = centroid;
     n_ = n;
     t1_ = t1;
     t2_ = t2;
     plane_ = plane;
 
+    // return transformation
     return [A, b, s, dx, ds, db](Eigen::Vector2f& point, float& distance) {
         const Eigen::Vector2f point_prev = point;
         const float distance_prev = distance;

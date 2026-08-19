@@ -13,9 +13,9 @@
 // package
 #include "odometry/adaptive_threshold.h"
 #include "odometry/projection.h"
+#include "odometry/semantic_cloud.h"
 #include "classes.h"
 // util
-#include "odometry/semantic_cloud.h"
 #include "util/cloud.h"
 #include "util/profiler.h"
 
@@ -99,7 +99,8 @@ void deskew_frame(util::Cloud& points, const Sophus::SE3f& motion, double dt) no
 OdometrySystem::OdometrySystem(const Config& config) : util::Profiler("OdometrySystem"),
     config_(config),
     map_(config.max_distance, config.voxel_size, config.voxel_capacity),
-    projection_(config.max_distance, config_.max_distance_ground, config.voxel_size, config.voxel_capacity, config.projection.iou,
+    // TODO: this is ugly, because we are essential recomputing VoxelMap::voxel_resolution_sq_
+    projection_(config.max_distance, config_.max_distance_ground, config.projection.iou, std::sqrt(config.voxel_size * config.voxel_size / static_cast<float>(config.voxel_capacity)), 
         [this](const Semantics& semantics) { return this->config_.projection.ground.count(semantics.prediction) > 0; },
         [this](const Semantics& semantics) { return this->config_.projection.target.count(semantics.prediction) > 0; }),
     threshold_(config_.max_distance, config_.threshold.initial, config_.threshold.motion) {
@@ -251,7 +252,7 @@ std::pair<Eigen::Matrix<float, 6, 1>, float> OdometrySystem::solve(const Odometr
 }
 
 Sophus::SE3f OdometrySystem::refine(SemanticCloud& points, Sophus::SE3f& initial_guess, float correspondence_distance) {
-    if(std::optional<Sophus::SE3f> T_bev = projection_.align(points, config_.max_iterations, config_.convergence_criterion)) {
+    if(std::optional<Sophus::SE3f> T_bev = projection_.align(points, config_.max_iterations, config_.convergence_criterion, correspondence_distance)) {
         // ensure that the refined residual is smaller than the initial
         CorrespondenceSet correspondences_initial = OdometrySystem::correspond(points, correspondence_distance);
         const auto [dx_initial, chi_initial] = OdometrySystem::solve(correspondences_initial);

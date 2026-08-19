@@ -10,6 +10,7 @@
 #include "util/profiler.h"
 
 class SegmentationSystem : util::Profiler {
+    friend class OfflineNode;
 public:
     struct Config {
         float max_distance{50.f};

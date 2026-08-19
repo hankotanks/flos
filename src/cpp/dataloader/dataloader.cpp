@@ -4,7 +4,6 @@
 #include <typeinfo>
 // package
 #include "dataloader/bag.h"
-#include "dataloader/wild_scenes.h"
 // util
 #include "util/rosarg.h"
 
@@ -21,7 +20,8 @@ std::unique_ptr<Dataloader> try_loader(rclcpp::Node* node, std::map<std::string,
 std::unique_ptr<Dataloader> Dataloader::choose(rclcpp::Node* node) {
     std::map<std::string, Dataloader::UnsupportedFormat> errors;
     if(auto loader = try_loader<BagDataloader>(node, errors)) return loader;
-    if(auto loader = try_loader<WildScenesDataloader>(node, errors)) return loader;
+    // TODO: reintroduce as a generic PLY loader
+    // if(auto loader = try_loader<WildScenesDataloader>(node, errors)) return loader;
     std::ostringstream stream;
     stream << "provided data does not resemble any supported format: ";
     for(const auto& [name, error] : errors) {

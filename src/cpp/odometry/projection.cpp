@@ -17,7 +17,7 @@ void Projection::fit(const VoxelMap<3, SemanticCloud>& map, const Sophus::SE3f& 
     }
 }
 
-std::optional<Sophus::SE3f> Projection::align(const SemanticCloud& source, size_t max_iterations, float convergence_criterion) {
+std::optional<Sophus::SE3f> Projection::align(const SemanticCloud& source, size_t max_iterations, float convergence_criterion, float correspondence_distance) {
     BirdsEyeCloud points{source, ground_, pred_target_};
     if(target_.empty()) {
         target_.extend(points);
@@ -27,21 +27,22 @@ std::optional<Sophus::SE3f> Projection::align(const SemanticCloud& source, size_
     source_.clear();
     source_.extend(points);
     // chi termination criterion
-    float chi = -1.f;
+    float chi = std::numeric_limits<float>::lowest();
+    float correspondence_distance_sq = correspondence_distance * correspondence_distance;
     // preallocate correspondence vector
-    std::vector<std::tuple<Eigen::Vector2f, Eigen::Vector2f, float>> correspondences;
+    std::vector<std::tuple<const Eigen::Vector2f*, const Eigen::Vector2f*, float>> correspondences;
     // build transform
     Sophus::SE2f T{};
     for(size_t iter = 0; iter < max_iterations; ++iter) {
         // build bidirectional correspondences
         correspondences.clear();
-        tbb::enumerable_thread_specific<std::vector<std::tuple<Eigen::Vector2f, Eigen::Vector2f, float>>> correspondence_pool;
-        tbb::parallel_for(source_.view(), [this, &correspondence_pool](auto& range) {
+        tbb::enumerable_thread_specific<std::vector<std::tuple<const Eigen::Vector2f*, const Eigen::Vector2f*, float>>> correspondence_pool;
+        tbb::parallel_for(source_.view(), [this, correspondence_distance_sq, &correspondence_pool](auto& range) {
             for(const auto& [query, data] : range) {
-                auto neighbor = this->target_.closest(query, data, std::numeric_limits<float>::max());
+                auto neighbor = this->target_.closest(query, data, correspondence_distance_sq);
                 if(!neighbor) continue;
                 auto& local = correspondence_pool.local();
-                local.emplace_back(query, neighbor->point, neighbor->distance_sq);
+                local.emplace_back(&query, neighbor->point, neighbor->distance_sq);
             }
         });
         for(auto& local : correspondence_pool) {
@@ -57,8 +58,8 @@ std::optional<Sophus::SE3f> Projection::align(const SemanticCloud& source, size_
         Eigen::Vector2f target_mean = Eigen::Vector2f::Zero();
         float chi_i = 0.f;
         for(const auto& [source_point, target_point, distance_sq] : correspondences) {
-            source_mean += source_point;
-            target_mean += target_point;
+            source_mean += *source_point;
+            target_mean += *target_point;
             chi_i += distance_sq;
         }
         const float count_inv = 1.f / static_cast<float>(correspondences.size());
@@ -69,8 +70,8 @@ std::optional<Sophus::SE3f> Projection::align(const SemanticCloud& source, size_
         float dot = 0.f;
         float cross = 0.f;
         for(const auto& [source_point, target_point, distance_sq] : correspondences) {
-            const Eigen::Vector2f source_norm = source_point - source_mean;
-            const Eigen::Vector2f target_norm = target_point - target_mean;
+            const Eigen::Vector2f source_norm = *source_point - source_mean;
+            const Eigen::Vector2f target_norm = *target_point - target_mean;
             dot += source_norm.dot(target_norm);
             cross += source_norm.x() * target_norm.y() - source_norm.y() * target_norm.x();
         }

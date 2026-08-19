@@ -44,7 +44,6 @@ protected:
     virtual void publish_pose(const OfflineNode::Stamp& stamp, const std_msgs::msg::Header::_frame_id_type& frame_id, const Sophus::SE3f& pose) override {
         RerunNode::set_stamp(stamp);
         const auto& t = pose.translation();
-        // TODO: I would prefer this be a LineStrips3D
         rr_.log("trajectory", rerun::Points3D().with_positions({
             rerun::Position3D(t.x(), t.y(), t.z())
         }).with_radii(RerunNode::DEFAULT_POINT_RADIUS * 3.f));
