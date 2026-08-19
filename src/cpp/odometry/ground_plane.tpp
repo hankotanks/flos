@@ -101,11 +101,22 @@ std::function<void(Eigen::Vector2f&, float&)> GroundPlane::update(const VoxelMap
     Eigen::Vector3f n  = plane.col(0);
     Eigen::Vector3f t1 = plane.col(1);
     Eigen::Vector3f t2 = plane.col(2);
-    // ensure correct handedness
-    if(t1.cross(t2).dot(n) < 0.f) {
-        plane.col(2) *= -1.f;
-        t2 *= -1.f;
+    // normal orientation
+    if(n.dot(n_) < 0.f) {
+        n = -n;
+        t2 = -t2;
     }
+    // preserve the orientation of the projection x-axis
+    if(t1.dot(t1_) < 0.f) {
+        t1 = -t1;
+        t2 = -t2;
+    }
+    // ensure correct handedness
+    if(t1.cross(t2).dot(n) < 0.f) t2 = -t2;
+    // rebuild the basis after all sign corrections
+    plane.col(0) = n;
+    plane.col(1) = t1;
+    plane.col(2) = t2;
 
     // get transform to update projection
     Eigen::Matrix3f basis_source;
