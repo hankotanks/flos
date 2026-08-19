@@ -32,8 +32,6 @@ private:
     float max_distance_; // OdometrySystem::Config::max_distance_ground_
     float inlier_distance_; // OdometrySystem::Config::model_iou
 private:
-    
-private:
     Eigen::Vector3f centroid_ = Eigen::Vector3f::Zero();
     Eigen::Vector3f t1_ = Eigen::Vector3f::UnitX();
     Eigen::Vector3f t2_ = Eigen::Vector3f::UnitY();
