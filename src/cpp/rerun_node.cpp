@@ -1,5 +1,3 @@
-// system
-#include <optional>
 // rerun
 #include <rerun.hpp>
 // package
