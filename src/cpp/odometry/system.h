@@ -32,7 +32,7 @@ public:
             float motion{0.1f};
         } threshold;
         bool deskew{true};
-        bool fixed_dt{false};
+        bool constant_scan_rate{false};
         size_t max_iterations{500};
         size_t max_threads{0};
         float convergence_criterion{0.0001f};
@@ -42,6 +42,7 @@ public:
         } correspondence;
         struct {
             bool enable{true};
+            float iou{0.73f};
             std::set<size_t> ground{1};
             std::set<size_t> target{3};
         } projection;
@@ -69,6 +70,7 @@ public:
             float linear{0.f};
             float angular{0.f};
         } velocity;
+        bool refined{false};
     };
 private:
     static constexpr float CORRESPONDENCE_DISTANCE_SCALAR{3.f};
@@ -95,7 +97,7 @@ private:
     std::pair<Sophus::SE3f, double> predict(unsigned int seconds, unsigned int nanoseconds) noexcept;
 private:
     // find correspondences
-    using Correspondence = std::tuple<Eigen::Vector3f, Semantics, VoxelMap<3, SemanticCloud>::Neighbor>;
+    using Correspondence = std::pair<Eigen::Vector3f, VoxelMap<3, SemanticCloud>::Adjacency>;
     using CorrespondenceSet = tbb::concurrent_vector<Correspondence>;
     CorrespondenceSet correspond(const SemanticCloud& points, float correspondence_distance) const noexcept;
     // constructs and solves the linear system, returning dx and chi

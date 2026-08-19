@@ -25,31 +25,26 @@ public:
 public:
     class Model {
         friend SegmentationSystem;
-    public:
-        void infer(util::Cloud& cloud);
-        void preprocess(util::Cloud& cloud);
-    public:
+        explicit Model(const SegmentationSystem::Config& config, const std::filesystem::path& path_to_model, util::Profiler* profiler);
         Model() = delete;
         Model(const Model&) = delete;
         Model(Model&&) = delete;
         Model& operator=(const Model&) = delete;
         Model& operator=(Model&&) = delete;
+    public:
         ~Model() = default;
-    private:
-        explicit Model(const SegmentationSystem::Config& config, const std::filesystem::path& path_to_model, util::Profiler* profiler);
+    public:
+        void infer(util::Cloud& cloud);
+        void preprocess(util::Cloud& cloud);
     private:
         util::Profiler* profiler_;
         py::object module_;
         py::object helper_;
         py::object infer_;
-        SegmentationSystem::Config config_;
+        const SegmentationSystem::Config& config_;
     };
 public:
     explicit SegmentationSystem(const Config& config) : util::Profiler("SegmentationSystem"), config_(config) { /* STUB */ }
-public:
-    void preprocess(util::Cloud& cloud);
-    SegmentationSystem::Model load(const std::filesystem::path& path_to_model);
-public:
     SegmentationSystem() = delete;
     SegmentationSystem(const SegmentationSystem&) = delete;
     SegmentationSystem(SegmentationSystem&&) = delete;
@@ -57,12 +52,11 @@ public:
     SegmentationSystem& operator=(SegmentationSystem&&) = delete;
     ~SegmentationSystem() = default;
 public:
+    void preprocess(util::Cloud& cloud);
+    SegmentationSystem::Model load(const std::filesystem::path& path_to_model);
+private:
     // NOTE: Config::voxel_size is scaled by this constant for unified parameter passing between segmentation and odometry
     static constexpr float VOXEL_SIZE_SCALAR{0.5f};
-    // scalar for map distance
-    // NOTE: the idea is that we want the map to be larger than any incoming scan's max distance
-    static constexpr float MAX_DISTANCE_SCALAR{1.f};
-protected:
     // system configuration
     Config config_;    
 };

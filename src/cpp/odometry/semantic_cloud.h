@@ -19,6 +19,12 @@ struct SemanticCloud;
 class Belief: public VoxelDataBase<SemanticCloud, Semantics> {
 public:
     explicit Belief();
+    Belief(const Belief&) = default;
+    Belief(Belief&&) = default;
+    Belief& operator=(const Belief&) = default;
+    Belief& operator=(Belief&&) = default;
+    ~Belief() = default;
+public:
     virtual void update(const Semantics& data) noexcept override final;
     virtual void finish() noexcept override final;
     virtual bool accept(const Semantics& data) const noexcept override final;
@@ -33,7 +39,14 @@ public:
 class SemanticCloud : public Frame<SemanticCloud, 3, Semantics, Belief> {
     friend Belief;
 public:
-    SemanticCloud(util::Cloud& points);
+    explicit SemanticCloud(util::Cloud& points);
+    explicit SemanticCloud() = default;
+    SemanticCloud(const SemanticCloud&) = default;
+    SemanticCloud(SemanticCloud&&) = default;
+    SemanticCloud& operator=(const SemanticCloud&) = default;
+    SemanticCloud& operator=(SemanticCloud&&) = default;
+    ~SemanticCloud() = default;
+public:
     virtual inline size_t size() const noexcept override final { return points_.size(); };
     void transform(const Sophus::SE3f& t) const noexcept;
     virtual std::pair<Eigen::Vector3f, Semantics> operator[](size_t i) const noexcept override final;

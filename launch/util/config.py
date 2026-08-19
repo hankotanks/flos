@@ -32,13 +32,14 @@ class Config:
             'threshold_initial': (float, False), 
             'threshold_motion': (float, False), 
             'deskew': (bool, False),
-            'fixed_dt': (bool, False),
+            'constant_scan_rate': (bool, False),
             'max_iterations': (int, False), 
             'max_threads': (int, False), 
             'convergence_criterion': (float, False),
             'correspondence_weighting': (bool, False), 
             'correspondence_target': (int, False),
             'projection_enable': (bool, False),
+            'projection_iou': (float, False),
             'projection_ground': (typing.List[int], False),
             'projection_target': (typing.List[int], False)
         }

@@ -124,6 +124,7 @@ public:
     void extend(const Eigen::Vector<int, D>& voxel, const Eigen::Vector<float, D>& point, const typename T::point_data_t& data)
     requires(!DefaultFrameType<D, F>);
 public:
+    // find the closest neighbor within the map
     template<size_t _D, typename _F>
     struct NeighborInner { /* STUB */ };
     template<size_t _D, typename _F>
@@ -141,6 +142,24 @@ public:
     requires(DefaultFrameType<D, F>);
     template<typename T = F>
     std::optional<Neighbor> closest(const Eigen::Vector<float, D>& query, const typename T::point_data_t& data, float correspondence_distance_sq) const
+    requires(!DefaultFrameType<D, F>);
+public:
+    // find the adjacency of a point within a map
+    template<size_t _D, typename _F>
+    struct AdjacencyInner { /* STUB */ };
+    template<size_t _D, typename _F>
+    requires(!DefaultFrameType<_D, _F>)
+    struct AdjacencyInner<_D, _F> {
+        float weight;
+    };
+    struct Adjacency : AdjacencyInner<D, F> {
+        Eigen::Vector<float, D> residual;
+        float distance_sq{std::numeric_limits<float>::max()};
+    };
+    std::optional<Adjacency> adjacency(const Eigen::Vector<float, D>& query, float correspondence_distance_sq) const
+    requires(DefaultFrameType<D, F>);
+    template<typename T = F>
+    std::optional<Adjacency> adjacency(const Eigen::Vector<float, D>& query, const typename T::point_data_t& data, float correspondence_distance_sq) const
     requires(!DefaultFrameType<D, F>);
 private:
     template<size_t _D, typename _F>
