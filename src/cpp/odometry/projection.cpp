@@ -11,11 +11,7 @@ void Projection::fit(const VoxelMap<3, SemanticCloud>& map, const Sophus::SE3f& 
     // recompute ground
     if((origin_ - pose.translation()).squaredNorm() > (max_distance_ground_ * max_distance_ground_ * 0.25f)) {
         origin_ = pose.translation();
-        GroundPlane previous = std::move(ground_);
-        // TODO: just testing RANSAC at the moment
-        // the inlier threshold should be voxel_size / voxel_capacity
-        ground_ = GroundPlane{map, origin_, max_distance_ground_, pred_ground_, voxel_size_ / static_cast<float>(voxel_capacity_), 100};
-        auto T_g2g = ground_.project(previous);
+        auto T_g2g = ground_.update(map, origin_, pred_ground_);
         // reproject
         target_.apply(T_g2g);
     }

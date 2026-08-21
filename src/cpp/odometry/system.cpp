@@ -20,108 +20,52 @@
 
 namespace {
 // field names to search in get_stamp_field
-static constexpr std::array<std::string, 4> STAMP_FIELD_NAMES = {"timestamps", "time", "timestamp", "t"};
-
+static constexpr std::array<std::string, 4> STAMPS_NAMES = {"timestamps", "time", "timestamp", "t"};
 template<typename T>
-std::optional<std::string> get_stamp_field(util::Cloud& points) noexcept {
-    for(const std::string& name : STAMP_FIELD_NAMES) {
+std::optional<const std::span<T>> stamps(util::Cloud& points) noexcept {
+    for(const std::string& name : STAMPS_NAMES) {
         try {
-            (void) points.field<T>(name);
+            return points.field<T>(name);
         } catch(...) {
             continue;
         }
-        return name;
+        return std::nullopt;
     }
     return std::nullopt;
 }
 
 template<typename T>
-void deskew_frame_inner(util::Cloud& points, const std::string& name, const Sophus::SE3f& motion, double dt) noexcept {
-    const std::span<const T> stamps = points.field<T>(name);
-    const auto [t_min_it, t_max_it] = std::minmax_element(stamps.begin(), stamps.end());
-    const T t_min = *t_min_it;
-    const T t_max = *t_max_it;
-    const T dur = t_max - t_min;
-    if(dur == T{0} || dt <= 1e-6) return;
-    const float scale = static_cast<float>(static_cast<double>(dur) * 1e-9 / dt);
-
-    const Eigen::Matrix<float, 6, 1> xi = scale * motion.log();
-    const Eigen::Vector3f upsilon = xi.template head<3>();
-    const Eigen::Vector3f omega = xi.template tail<3>();
-
-    const float angular_speed = omega.norm();
-    const float inverse_angular_speed = angular_speed > 1e-6f ? 1.f / angular_speed : 0.f;
-
-    const Eigen::Vector3f axis = angular_speed > 1e-6f ? (omega * inverse_angular_speed).eval() : Eigen::Vector3f::Zero();
-
-    const float duration_f = static_cast<float>(dur);
-
-    tbb::parallel_for(tbb::blocked_range<size_t>{0, points.size()},
-        [&](const tbb::blocked_range<size_t>& range) {
-            for(size_t i = range.begin(); i < range.end(); ++i) {
-                const float t = static_cast<float>(stamps[i] - t_min) / static_cast<float>(dur);
-                const float t_neg = -t;
-
-                const Eigen::Vector3f& point = points[i];
-                if(angular_speed <= 1e-6f) {
-                    points[i] = point + t_neg * upsilon;
-                    continue;
-                }
-
-                const float theta = angular_speed * t_neg;
-                const float sin_theta = std::sin(theta);
-                const float cos_theta_neg = 1.f - std::cos(theta);
-
-                const Eigen::Vector3f K_times_p = axis.cross(point);
-                const Eigen::Vector3f R_times_p = point + sin_theta * K_times_p + cos_theta_neg * axis.cross(K_times_p);
-
-                const Eigen::Vector3f K_times_upsilon = axis.cross(upsilon);
-                const Eigen::Vector3f fst = (cos_theta_neg * inverse_angular_speed) * K_times_upsilon;
-                const Eigen::Vector3f snd = ((theta - sin_theta) * inverse_angular_speed) * axis.cross(K_times_upsilon);;
-                const Eigen::Vector3f V_times_rho = t_neg * upsilon + fst + snd;
-
-                points[i] = R_times_p + V_times_rho;
-            }
-        });
+void deskew_inner(util::Cloud& points, std::span<const T> field, const Sophus::SE3f& motion) noexcept {
+    const auto& [t_min, t_max] = std::minmax_element(field.begin(), field.end());
+    const auto t_norm = [&](const T t) { return (t - *t_min) / (*t_max - *t_min); };
+    const auto& omega = -motion.log();
+    tbb::parallel_for(tbb::blocked_range<size_t>{0, points.size()}, [&](const tbb::blocked_range<size_t>& range) {
+        for(size_t i = range.begin(); i < range.end(); ++i) {
+            const T stamp = t_norm(field[i]);
+            const auto pose = Sophus::SE3f::exp((static_cast<float>(stamp) - 1.f) * omega);
+            points[i] = pose * points[i];
+        };
+    });
 }
 
-void deskew_frame(util::Cloud& points, const Sophus::SE3f& motion, double dt) noexcept {
-    auto name = get_stamp_field<float>(points);
-    if(name) {
-        deskew_frame_inner<float>(points, *name, motion, dt);
+void deskew(util::Cloud& points, const Sophus::SE3f& motion) noexcept {
+    if(auto field = stamps<float>(points)) {
+        deskew_inner<float>(points, *field, motion);
+    } else if(auto field = stamps<double>(points)) {
+        deskew_inner<double>(points, *field, motion);
     }
-    name = get_stamp_field<double>(points);
-    if(name) deskew_frame_inner<double>(points, *name, motion, dt);
-}
-} // private scope
-
-namespace {
-inline float linear_velocity(const Eigen::Matrix<float,6,1>& xi, float dt) {
-    return xi.tail<3>().norm() / dt;
-}
-
-inline Eigen::Vector3f angular_wrap(const Eigen::Vector3f& rot) {
-    double angle = rot.norm();
-    if(angle < 1e-12) return rot;
-    double wrapped = std::fmod(angle + M_PI, 2.0 * M_PI) - M_PI;
-    return rot * (wrapped / angle);
-}
-
-inline float angular_velocity(const Eigen::Matrix<float,6,1>& xi, float dt) {
-    Eigen::Vector3f omega = angular_wrap(xi.head<3>()) / dt;
-    return omega.norm();
 }
 } // private scope
 
 OdometrySystem::OdometrySystem(const Config& config) : util::Profiler("OdometrySystem"),
     config_(config),
-    map_(config.max_distance, config.voxel_size, config.voxel_capacity),
-    projection_(config.max_distance, config_.max_distance_ground, config.voxel_size, config.voxel_capacity,
+    map_(config_.max_distance, config_.voxel_size, config_.voxel_capacity),
+    projection_(config_.max_distance, config_.max_distance_ground, config_.projection.iou, std::sqrt(config_.voxel_size * config_.voxel_size / static_cast<float>(config_.voxel_capacity)),
         [this](const Semantics& semantics) { return this->config_.projection.ground.count(semantics.prediction) > 0; },
         [this](const Semantics& semantics) { return this->config_.projection.target.count(semantics.prediction) > 0; }),
     threshold_(config_.max_distance, config_.threshold.initial, config_.threshold.motion) {
-    size_t max_threads = config.max_threads > 0 ? \
-        config.max_threads : tbb::this_task_arena::max_concurrency();
+    size_t max_threads = config_.max_threads > 0 ? \
+        config_.max_threads : tbb::this_task_arena::max_concurrency();
     volatile static const tbb::global_control _ = tbb::global_control( // NOTE: static storage type is required here
         tbb::global_control::max_allowed_parallelism, static_cast<size_t>(max_threads)); 
 }
@@ -136,14 +80,14 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigne
     statistics_ = Statistics{};
     // perform registration
     PROFILE(registration, this) {
-        // deskewing
-        if(config_.deskew) {
-            PROFILE(deskew, &registration) {
-                deskew_frame(points, last_delta_, config_.constant_scan_rate ? 1.f : (last_stamp_ - prev_stamp_));
-            }
-        }
         // compute delta
         const auto& [delta, dt] = OdometrySystem::predict(seconds, nanoseconds);
+        // deskewing
+        if(config_.deskew) {
+            PROFILE(deskewing, &registration) {
+                deskew(points, delta);
+            }
+        }
         // downsample incoming points to obtain keypoints and the preprocessed frame
         util::Cloud points_kp{points};
         PROFILE(downsample, &registration) {
@@ -163,7 +107,7 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigne
                 PROFILE(refinement, &align) {
                     if(frame_ > config_.voxel_capacity) OdometrySystem::refine(points_kp_wrapper, initial_guess, correspondence_distance);
                 }
-            }   
+            }
             // ICP
             Sophus::SE3f T_icp = OdometrySystem::align(points_kp_wrapper, initial_guess, correspondence_distance);
             // build the current estimated pose
@@ -190,8 +134,8 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigne
         PROFILE_SKIP(registration) {
             // log final velocity statistics
             Eigen::Matrix<float, 6, 1> xi = last_delta_.log();
-            statistics_.velocity.linear = linear_velocity(xi, dt);
-            statistics_.velocity.angular = angular_velocity(xi, dt);
+            statistics_.velocity.linear = xi.tail<3>().norm() / dt;
+            statistics_.velocity.angular = xi.head<3>().norm() / dt;
         }
     }
     ++frame_;
@@ -287,6 +231,7 @@ Sophus::SE3f OdometrySystem::refine(SemanticCloud& points, Sophus::SE3f& initial
             return {};
         } else {
             initial_guess = (*T_bev) * initial_guess;
+            statistics_.refined = true;
             return *T_bev;
         }
     }

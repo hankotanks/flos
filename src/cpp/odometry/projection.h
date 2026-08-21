@@ -6,20 +6,18 @@
 #include "odometry/voxel_map.h"
 
 // grouped for better management of projection state between frames
-
 class Projection {
     friend class OfflineNode;
 public:
     template<typename GroundPredicate, typename TargetPredicate>
-    Projection(float max_distance, float max_distance_ground, float voxel_size, size_t voxel_capacity, GroundPredicate&& pred_ground, TargetPredicate&& pred_target) :
+    explicit Projection(float max_distance, float max_distance_ground, float inlier_ratio, float inlier_distance, GroundPredicate&& pred_ground, TargetPredicate&& pred_target) :
         max_distance_(max_distance),
         max_distance_ground_(max_distance_ground),
-        voxel_size_(voxel_size),
-        voxel_capacity_(voxel_capacity),
         pred_ground_(pred_ground),
         pred_target_(pred_target),
-        target_(max_distance, Projection::CORRESPONDENCE_DISTANCE),
-        source_(max_distance, Projection::CORRESPONDENCE_DISTANCE) { /* STUB */ }
+        ground_(max_distance_ground, inlier_ratio, inlier_distance),
+        target_(max_distance_, Projection::CORRESPONDENCE_DISTANCE),
+        source_(max_distance_, Projection::CORRESPONDENCE_DISTANCE) { /* STUB */ }
     Projection(const Projection&) = delete;
     Projection(Projection&&) = delete;
     Projection& operator=(const Projection&) = delete;
@@ -31,14 +29,13 @@ public:
     // update ground plane and maintain state
     void fit(const VoxelMap<3, SemanticCloud>& map, const Sophus::SE3f& pose, const Sophus::SE3f& T);
 private:
-    // NOTE: dependent on the accuracy of the model
-    // at 73% mean IOU on the validation data, 50 is plenty
+    // NOTE: we used a fixed voxel size for projected maps
+    // because VoxelMap::closest only checks neighboring voxels, and in the refinement stage, 
+    // we need to be VERY sure that any large pose errors are corrected
     static constexpr float CORRESPONDENCE_DISTANCE{5.f};
     // shared parameters with OdometrySystem
     float max_distance_;
     float max_distance_ground_;
-    float voxel_size_;
-    size_t voxel_capacity_;
 private:
     std::function<bool(const Semantics&)> pred_ground_;
     std::function<bool(const Semantics&)> pred_target_;

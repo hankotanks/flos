@@ -92,6 +92,7 @@ private:
     VoxelMap<3, SemanticCloud> map_;
     // current and previous frame projections
     Projection projection_;
+    // for correspondence_distance threshold
     AdaptiveThreshold threshold_;
 private:
     // get the predicted delta (and handle statistics)
