@@ -84,7 +84,7 @@ def setup(context, *args, **kwargs):
                     f'visualize:={visualize}',
                     'visualize_map:=false',
                     f'path_to_data:={data}',
-                    f'path_to_result:={path_to_result_inner / dataset / data_name / f"{PACKAGE_NAME}_{data_name}_tum.txt"}',
+                    f'path_to_result:={path_to_result_inner / dataset / data_name}',
                     f'path_to_config:={config}'
                 ],
                 output = 'screen',

@@ -80,7 +80,7 @@ public:
                 // compute pose and store for OfflineNode::save
                 pose = odometry_system_.register_to_map(cloud, stamp);
             }
-            poses_.emplace_back(header, pose, odometry_system_.statistics_);
+            output_.emplace_back(header, pose, odometry_system_.statistics_);
             // publications
             if(visualize_) {
                 SemanticCloud cloud_wrapper{cloud};
@@ -112,7 +112,6 @@ protected:
     virtual void publish_projection(TimeSystem::Stamp stamp, const VoxelMap<2, BirdsEyeCloud>& previous, const VoxelMap<2, BirdsEyeCloud>& current) { /* STUB */ };
     virtual void publish_progress(TimeSystem::Stamp stamp, float percent, float remaining) { /* STUB */ }
     virtual void publish_statistics(TimeSystem::Stamp stamp, const OdometrySystem::Statistics& statistics) { /* STUB */ };
-    
 private:
     std::pair<float, float> compute_progress() {
         if(msg_count_ == 0) return std::make_pair(0.f, std::numeric_limits<float>::max());
@@ -126,12 +125,12 @@ private:
     }
 
     void save() {
-        if(poses_.empty()) return;
+        if(output_.empty()) return;
         if(path_to_result_.empty()) return;
         // record TUM poses
         std::ofstream f_pose{path_to_result_ / "output_tum.txt"};
         std::ofstream f_stat{path_to_result_ / "statistics.csv"};
-        for(auto& [header, pose, statistics] : poses_) {
+        for(auto& [header, pose, statistics] : output_) {
             auto t = pose.translation();
             Eigen::Quaterniond q(pose.so3().unit_quaternion());
             f_pose << std::fixed << std::setprecision(9)
@@ -149,8 +148,9 @@ private:
                 << std::endl;
         }
         std::ofstream f_para{path_to_result_ / "parameters.txt"};
-        f_para << segmentation_config_.config << std::endl << odometry_config_.config << std::endl;
-        RCLCPP_INFO(this->get_logger(), "saved %s [%lu poses]", path_to_result_.c_str(), poses_.size());
+        f_para << segmentation_config_.config << std::endl;
+        f_para << odometry_config_.config << std::endl;
+        RCLCPP_INFO(this->get_logger(), "saved results to %s [%lu poses]", path_to_result_.c_str(), output_.size());
     }
 protected:
     bool visualize_{true};
@@ -172,5 +172,5 @@ private:
     size_t msg_count_{0};
     size_t msg_processed_{0};
     // pose data
-    std::vector<std::tuple<std_msgs::msg::Header, Sophus::SE3f, OdometrySystem::Statistics>> poses_;
+    std::vector<std::tuple<std_msgs::msg::Header, Sophus::SE3f, OdometrySystem::Statistics>> output_;
 };
