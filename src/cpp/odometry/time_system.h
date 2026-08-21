@@ -21,8 +21,8 @@ public:
     ~TimeSystem() = default;
 public:
     struct Stamp {
-        explicit Stamp(unsigned int s, unsigned int ns);
-        explicit Stamp(long double s);
+        explicit Stamp(unsigned int sec, unsigned int nanosec);
+        explicit Stamp(long double sec);
         explicit Stamp();
         // combined timestamp
         long double stamp;

@@ -1,17 +1,14 @@
 #include "odometry/time_system.h"
 
-// system
-#include <iostream>
-
 // i honestly regret adding this pseudo-newtype...
-TimeSystem::Stamp::Stamp(unsigned int s, unsigned int ns) : 
-    stamp(static_cast<long double>(s) + 1e-9L * static_cast<long double>(ns)),
-    sec(s),
-    nanosec(ns) { /* STUB */ } 
-TimeSystem::Stamp::Stamp(long double s) : 
-    stamp(s),
-    sec(static_cast<unsigned int>(s)),
-    nanosec(static_cast<unsigned int>((s - static_cast<long double>(sec)) * 1e9L)) { /* STUB */ }
+TimeSystem::Stamp::Stamp(unsigned int sec, unsigned int nanosec) : 
+    stamp(static_cast<long double>(sec) + 1e-9L * static_cast<long double>(nanosec)),
+    sec(sec),
+    nanosec(nanosec) { /* STUB */ } 
+TimeSystem::Stamp::Stamp(long double sec) : 
+    stamp(sec),
+    sec(static_cast<unsigned int>(sec)),
+    nanosec(static_cast<unsigned int>((sec - static_cast<long double>(sec)) * 1e9L)) { /* STUB */ }
 TimeSystem::Stamp::Stamp() : stamp(std::numeric_limits<long double>::lowest()) { /* STUB */ }
 
 TimeSystem::MotionPrior TimeSystem::predict_motion(const util::Cloud& points, const Sophus::SE3f& last_delta, TimeSystem::Stamp stamp) {
@@ -31,15 +28,12 @@ TimeSystem::MotionPrior TimeSystem::predict_motion(const util::Cloud& points, co
         if(std::abs(offset_sweep_ - offset_frame_) < 1.0) {
             // absolute, same epoch
             curr_stamp = sweep_period->end;
-            std::cout << "absolute, same epoch" << std::endl;
         } else if(std::abs(sweep_period->start) < 1.0 && std::abs(sweep_period->end) < 1.0) {
             // relative
             curr_stamp += sweep_period->end;
-            std::cout << "relative" << std::endl;
         } else {
             // absolute, but different epoch
             curr_stamp += sweep_period->end - offset_sweep_;
-            std::cout << "absolute, different epoch" << std::endl;
         }
     }
     long double prev_dt = prev_dt_;
