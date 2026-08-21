@@ -64,13 +64,16 @@ public:
     inline auto view() const { return map_.view(); }
 public:
     struct Statistics {
-        size_t iterations{0};
-        float correspondences{0.f};
+        struct {
+            bool refined{false};
+            size_t iterations{0};
+            float chi{-1.f};
+            float mean_correspondence_count{0.f};
+        } align;
         struct {
             float linear{0.f};
             float angular{0.f};
         } velocity;
-        bool refined{false};
     };
 private:
     static constexpr float CORRESPONDENCE_DISTANCE_SCALAR{3.f};

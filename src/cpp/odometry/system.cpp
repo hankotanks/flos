@@ -168,7 +168,7 @@ Sophus::SE3f OdometrySystem::refine(SemanticCloud& points, Sophus::SE3f& initial
             return {};
         } else {
             initial_guess = (*T_bev) * initial_guess;
-            statistics_.refined = true;
+            statistics_.align.refined = true;
             return *T_bev;
         }
     }
@@ -184,12 +184,12 @@ Sophus::SE3f OdometrySystem::align(SemanticCloud& points, const Sophus::SE3f& in
     Sophus::SE3f T_icp{};
     for(size_t i = 0; i < config_.max_iterations; ++i) {
         // accumulate iteration count
-        statistics_.iterations++;
+        statistics_.align.iterations++;
         CorrespondenceSet correspondences; 
         // get correspondences
         correspondences = OdometrySystem::correspond(points, correspondence_distance);
         // update statistics
-        statistics_.correspondences += static_cast<float>(correspondences.size());    
+        statistics_.align.mean_correspondence_count += static_cast<float>(correspondences.size());    
         // Equation (11)
         const auto [dx, chi_i] = OdometrySystem::solve(correspondences);
         const Sophus::SE3f est = Sophus::SE3f::exp(dx);
@@ -201,7 +201,8 @@ Sophus::SE3f OdometrySystem::align(SemanticCloud& points, const Sophus::SE3f& in
         if(chi > 0.f && std::abs(chi - chi_i) <= config_.convergence_criterion * chi) break;
         chi = chi_i;
     }
-    statistics_.correspondences /= static_cast<float>(statistics_.iterations);
+    statistics_.align.mean_correspondence_count /= static_cast<float>(statistics_.align.iterations);
+    statistics_.align.chi = chi;
     // return transformation and deviation
     return T_icp;
 }

@@ -45,7 +45,7 @@ public:
         odometry_config_(this),
         odometry_system_(odometry_config_.config) {
         if(!rclcpp::ok()) return;
-        util::param_opt_path(this, "path_to_result", path_to_result_, false, true, true);     
+        util::param_opt_path(this, "path_to_result", path_to_result_, false, false, true);     
         util::param_opt(this, "frames", msg_count_);
         util::param_opt(this, "visualize", visualize_);
         util::param_opt(this, "visualize_map", visualize_map_);
@@ -129,8 +129,8 @@ private:
         if(poses_.empty()) return;
         if(path_to_result_.empty()) return;
         // record TUM poses
-        std::ofstream f_pose{path_to_result_};
-        std::ofstream f_stat{path_to_result_.parent_path() / (path_to_result_.stem().string() + "_statistics.csv")};
+        std::ofstream f_pose{path_to_result_ / "output_tum.txt"};
+        std::ofstream f_stat{path_to_result_ / "statistics.csv"};
         for(auto& [header, pose, statistics] : poses_) {
             auto t = pose.translation();
             Eigen::Quaterniond q(pose.so3().unit_quaternion());
@@ -143,11 +143,13 @@ private:
             f_stat << std::fixed << std::setprecision(9)
                 << (header.stamp.sec + header.stamp.nanosec * 1e-9) << ','
                 << std::setprecision(6) 
-                << statistics.iterations << ',' << statistics.correspondences << ',' 
-                << statistics.refined << ',' 
+                << statistics.align.iterations << ',' << statistics.align.mean_correspondence_count << ','
+                << statistics.align.chi << ',' << statistics.align.refined << ',' 
                 << statistics.velocity.linear << ',' << statistics.velocity.angular
                 << std::endl;
         }
+        std::ofstream f_para{path_to_result_ / "parameters.txt"};
+        f_para << segmentation_config_.config << std::endl << odometry_config_.config << std::endl;
         RCLCPP_INFO(this->get_logger(), "saved %s [%lu poses]", path_to_result_.c_str(), poses_.size());
     }
 protected:
