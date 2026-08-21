@@ -26,7 +26,6 @@ template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
 inline Eigen::Vector<int, D> VoxelMap<D, F>::point_to_voxel(const Eigen::Vector<float, D>& point) const noexcept {
     return (point.array() / voxel_size_).floor().template cast<int>();
-    // return (point.array().floor().matrix() / voxel_size_).template cast<int>();
 }
 
 template<size_t D, typename F>
@@ -268,9 +267,11 @@ requires(DefaultFrameType<D, F>) {
     // find the closest match that respects the provided predicate
     if(map_.empty()) return std::nullopt;
     Eigen::Vector<int, D> key = VoxelMap<D, F>::point_to_voxel(query);
-    typename VoxelMap<D, F>::Neighbor best;
-    best.distance_sq = std::numeric_limits<float>::max();
-    const Voxel* voxel{nullptr};
+    struct Candidate {
+        const Eigen::Vector<float, D>* point{nullptr};
+        float distance_sq{std::numeric_limits<float>::max()};
+    };
+    Candidate best;
     for(const auto& offset : offset<D>()) {
         const Eigen::Vector<int, D> key_offset = key + offset;
         float lb_distance_sq = VoxelMap<D, F>::lower_bound_distance_sq(query, key_offset);
@@ -284,12 +285,11 @@ requires(DefaultFrameType<D, F>) {
             if(distance_sq >= correspondence_distance_sq) continue;
             if(distance_sq >= best.distance_sq) continue;
             best.point = &point;
-            best.distance_sq = distance_sq; 
-            voxel = &voxel_shifted;
+            best.distance_sq = distance_sq;
         }
     }
     if(best.distance_sq < correspondence_distance_sq) {
-        return std::make_optional(std::move(best));
+        return typename VoxelMap<D, F>::Neighbor{*best.point, best.distance_sq};
     }
     return std::nullopt;
 }
@@ -305,9 +305,12 @@ requires(!DefaultFrameType<D, F>) {
     // find the closest match that respects the provided predicate
     if(map_.empty()) return std::nullopt;
     Eigen::Vector<int, D> key = VoxelMap<D, F>::point_to_voxel(query);
-    typename VoxelMap<D, F>::Neighbor best;
-    best.distance_sq = std::numeric_limits<float>::max();
-    const Voxel* voxel{nullptr};
+    struct Candidate {
+        const Voxel* voxel{nullptr};
+        size_t index;
+        float distance_sq{std::numeric_limits<float>::max()};
+    };
+    Candidate best;
     for(const auto& offset : offset<D>()) {
         const Eigen::Vector<int, D> key_offset = key + offset;
         float lb_distance_sq = VoxelMap<D, F>::lower_bound_distance_sq(query, key_offset);
@@ -323,17 +326,22 @@ requires(!DefaultFrameType<D, F>) {
             if constexpr (!std::is_same_v<typename F::voxel_data_t, VoxelDataBase<F, typename F::point_data_t>>) {
                 if(!voxel_shifted.data_.accept(data)) continue;
             }
-            best.point = &point;
-            best.data = &voxel_shifted.point_data_[i];
-            best.distance_sq = distance_sq; 
-            voxel = &voxel_shifted;
+            best.voxel = &voxel_shifted;
+            best.index = i;
+            best.distance_sq = distance_sq;
         }
     }
     if(best.distance_sq < correspondence_distance_sq) {
+        float weight = 1.f;
         if constexpr (!std::is_same_v<typename F::voxel_data_t, VoxelDataBase<F, typename F::point_data_t>>) {
-            best.weight = voxel->data_.weight(data);
+            weight = best.voxel->data_.weight(data);
         }
-        return std::make_optional(std::move(best));
+        typename VoxelMap<D, F>::Neighbor found{
+            typename VoxelMap<D, F>::NeighborInner<D, F>{best.voxel->point_data_[best.index], weight},
+            best.voxel->points_[best.index],
+            best.distance_sq
+        };
+        return std::make_optional(std::move(found));
     }
     return std::nullopt;
 }
@@ -346,7 +354,6 @@ requires(DefaultFrameType<D, F>) {
     Eigen::Vector<int, D> key = VoxelMap<D, F>::point_to_voxel(query);
     typename VoxelMap<D, F>::Adjacency best;
     best.distance_sq = std::numeric_limits<float>::max();
-    const Voxel* voxel{nullptr};
     for(const auto& offset : offset<D>()) {
         const Eigen::Vector<int, D> key_offset = key + offset;
         float lb_distance_sq = VoxelMap<D, F>::lower_bound_distance_sq(query, key_offset);
@@ -361,8 +368,7 @@ requires(DefaultFrameType<D, F>) {
             if(distance_sq >= correspondence_distance_sq) continue;
             if(distance_sq >= best.distance_sq) continue;
             best.residual = residual;
-            best.distance_sq = distance_sq; 
-            voxel = &voxel_shifted;
+            best.distance_sq = distance_sq;
         }
     }
     if(best.distance_sq < correspondence_distance_sq) {

@@ -3,6 +3,7 @@
 // system
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <limits>
 #include <memory>
 // ros
@@ -79,7 +80,7 @@ public:
                 // compute pose and store for OfflineNode::save
                 pose = odometry_system_.register_to_map(cloud, stamp);
             }
-            poses_.emplace_back(header, pose);
+            poses_.emplace_back(header, pose, odometry_system_.statistics_);
             // publications
             if(visualize_) {
                 SemanticCloud cloud_wrapper{cloud};
@@ -128,15 +129,23 @@ private:
         if(poses_.empty()) return;
         if(path_to_result_.empty()) return;
         // record TUM poses
-        std::ofstream f{path_to_result_};
-        for(auto& [header, pose] : poses_) {
+        std::ofstream f_pose{path_to_result_};
+        std::ofstream f_stat{path_to_result_.parent_path() / (path_to_result_.stem().string() + "_statistics.csv")};
+        for(auto& [header, pose, statistics] : poses_) {
             auto t = pose.translation();
             Eigen::Quaterniond q(pose.so3().unit_quaternion());
-            f << std::fixed << std::setprecision(9)
+            f_pose << std::fixed << std::setprecision(9)
                 << (header.stamp.sec + header.stamp.nanosec * 1e-9) << " "
                 << std::setprecision(6)
                 << t.x() << " " << t.y() << " " << t.z() << " "
                 << q.x() << " " << q.y() << " " << q.z() << " " << q.w()
+                << std::endl;
+            f_stat << std::fixed << std::setprecision(9)
+                << (header.stamp.sec + header.stamp.nanosec * 1e-9) << ','
+                << std::setprecision(6) 
+                << statistics.iterations << ',' << statistics.correspondences << ',' 
+                << statistics.refined << ',' 
+                << statistics.velocity.linear << ',' << statistics.velocity.angular
                 << std::endl;
         }
         RCLCPP_INFO(this->get_logger(), "saved %s [%lu poses]", path_to_result_.c_str(), poses_.size());
@@ -161,5 +170,5 @@ private:
     size_t msg_count_{0};
     size_t msg_processed_{0};
     // pose data
-    std::vector<std::pair<std_msgs::msg::Header, Sophus::SE3f>> poses_;
+    std::vector<std::tuple<std_msgs::msg::Header, Sophus::SE3f, OdometrySystem::Statistics>> poses_;
 };

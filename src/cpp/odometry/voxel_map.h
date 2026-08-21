@@ -136,11 +136,11 @@ public:
     template<size_t _D, typename _F>
     requires(!DefaultFrameType<_D, _F>)
     struct NeighborInner<_D, _F> {
-        const typename _F::point_data_t* data;
+        const typename _F::point_data_t& data;
         float weight;
     };
     struct Neighbor : NeighborInner<D, F> {
-        const Eigen::Vector<float, D>* point;
+        const Eigen::Vector<float, D>& point;
         float distance_sq{std::numeric_limits<float>::max()};
     };
     // returns std::nullopt when no correspondence is found

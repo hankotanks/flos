@@ -32,7 +32,7 @@ private:
     // NOTE: we used a fixed voxel size for projected maps
     // because VoxelMap::closest only checks neighboring voxels, and in the refinement stage, 
     // we need to be VERY sure that any large pose errors are corrected
-    static constexpr float CORRESPONDENCE_DISTANCE{5.f};
+    static constexpr float CORRESPONDENCE_DISTANCE{2.f};
     // shared parameters with OdometrySystem
     float max_distance_;
     float max_distance_ground_;
