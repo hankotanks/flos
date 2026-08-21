@@ -91,11 +91,12 @@ protected:
             auto maybe = BufferNode::pop();
             if(!maybe) break;
             auto [cloud, header] = std::move(*maybe);
+            TimeSystem::Stamp stamp(header.stamp.sec, header.stamp.nanosec);
             // perform registration
             Sophus::SE3f pose;
             {
                 util::Profiler profiler("registration", this);
-                pose = system_.register_to_map(cloud, header.stamp.sec, header.stamp.nanosec);
+                pose = system_.register_to_map(cloud, stamp);
             }
             { // send the transformation from the lidar frame to the local map frame
                 geometry_msgs::msg::TransformStamped msg;

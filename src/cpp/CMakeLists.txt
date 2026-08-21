@@ -91,6 +91,7 @@ configure_node(segmentation_node
 
 set(ODOMETRY_SOURCES
   odometry/system.cpp
+  odometry/time_system.cpp
   odometry/adaptive_threshold.cpp
   odometry/projection.cpp
   odometry/ground_plane.cpp
@@ -98,6 +99,7 @@ set(ODOMETRY_SOURCES
 
 set(ODOMETRY_HEADERS
   odometry/system.h
+  odometry/time_system.h
   odometry/adaptive_threshold.h
   odometry/projection.h
   odometry/ground_plane.h

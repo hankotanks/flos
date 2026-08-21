@@ -1,7 +1,6 @@
 #pragma once
 
 // system
-#include <limits>
 #include <set>
 // sophus
 #include <sophus/se3.hpp>
@@ -13,6 +12,7 @@
 #include "odometry/adaptive_threshold.h"
 #include "odometry/semantic_cloud.h"
 #include "odometry/projection.h"
+#include "odometry/time_system.h"
 #include "odometry/voxel_map.h"
 // util
 #include "util/cloud.h"
@@ -59,8 +59,7 @@ public:
 public:
     // main registration function
     // NOTE: deskews and transforms points by the solution pose
-    const Sophus::SE3f& register_to_map(util::Cloud& points) noexcept; // NOTE: sets fixed_dt to true
-    const Sophus::SE3f& register_to_map(util::Cloud& points, unsigned int seconds, unsigned int nanoseconds) noexcept;
+    const Sophus::SE3f& register_to_map(util::Cloud& points, TimeSystem::Stamp stamp = TimeSystem::Stamp{}) noexcept;
     // get a view into the current map
     inline auto view() const { return map_.view(); }
 public:
@@ -81,11 +80,10 @@ private:
     Config config_;
     // statistics
     Statistics statistics_;
+    // experimental time system
+    TimeSystem time_system_;
     // frame state
     size_t frame_{0};
-    unsigned int init_seconds_{std::numeric_limits<unsigned int>::max()};
-    double last_stamp_{0.0};
-    double prev_stamp_{0.0};
     Sophus::SE3f last_pose_;
     Sophus::SE3f last_delta_;
     // voxel map
@@ -94,9 +92,6 @@ private:
     Projection projection_;
     // for correspondence_distance threshold
     AdaptiveThreshold threshold_;
-private:
-    // get the predicted delta (and handle statistics)
-    std::pair<Sophus::SE3f, double> predict(unsigned int seconds, unsigned int nanoseconds) noexcept;
 private:
     // find correspondences
     using Correspondence = std::pair<Eigen::Vector3f, VoxelMap<3, SemanticCloud>::Adjacency>;

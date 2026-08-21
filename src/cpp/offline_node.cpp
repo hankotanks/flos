@@ -33,24 +33,27 @@ public:
         progress_publisher = this->create_publisher<std_msgs::msg::Float32MultiArray>("/" PROJECT_NAME "/progress", 10);
     }
 protected:
-    virtual void publish_scan(const std_msgs::msg::Header::_stamp_type& stamp, const util::Cloud& cloud) override {
+    virtual void publish_scan(TimeSystem::Stamp stamp, const util::Cloud& cloud) override {
         std_msgs::msg::Header header;
-        header.stamp = stamp;
+        header.stamp.sec = stamp.sec;
+        header.stamp.nanosec = stamp.nanosec;
         header.frame_id = DefaultOfflineNode::LOCAL_MAP_FRAME;
         scan_publisher_->publish(std::move(cloud.message(header)));
     }
 
-    virtual void publish_local_map(const std_msgs::msg::Header::_stamp_type& stamp, const util::Cloud& cloud) override {
+    virtual void publish_local_map(TimeSystem::Stamp stamp, const util::Cloud& cloud) override {
         std_msgs::msg::Header header;
-        header.stamp = stamp;
+        header.stamp.sec = stamp.sec;
+        header.stamp.nanosec = stamp.nanosec;
         header.frame_id = DefaultOfflineNode::LOCAL_MAP_FRAME;
         local_map_publisher_->publish(std::move(cloud.message(header)));
     }
 
-    virtual void publish_pose(const std_msgs::msg::Header::_stamp_type& stamp, const std_msgs::msg::Header::_frame_id_type& frame_id, const Sophus::SE3f& pose) override {
+    virtual void publish_pose(TimeSystem::Stamp stamp, const std_msgs::msg::Header::_frame_id_type& frame_id, const Sophus::SE3f& pose) override {
         {
             geometry_msgs::msg::TransformStamped msg;
-            msg.header.stamp = stamp;
+            msg.header.stamp.sec = stamp.sec;
+            msg.header.stamp.nanosec = stamp.nanosec;
             msg.header.frame_id = DefaultOfflineNode::LOCAL_MAP_FRAME;
             msg.child_frame_id = frame_id;
             msg.transform.translation.x = pose.translation().x();
@@ -66,7 +69,8 @@ protected:
         }
         {
             nav_msgs::msg::Odometry msg;
-            msg.header.stamp = stamp;
+            msg.header.stamp.sec = stamp.sec;
+            msg.header.stamp.nanosec = stamp.nanosec;
             msg.header.frame_id = DefaultOfflineNode::LOCAL_MAP_FRAME;
             msg.child_frame_id = frame_id;
             const auto t = pose.translation();
@@ -89,7 +93,7 @@ protected:
         }
     }
 
-    virtual void publish_progress(const std_msgs::msg::Header::_stamp_type& stamp, float percent, float remaining) override {
+    virtual void publish_progress(TimeSystem::Stamp stamp, float percent, float remaining) override {
         std_msgs::msg::Float32MultiArray msg;
         msg.data.resize(2);
         msg.data[0] = percent;

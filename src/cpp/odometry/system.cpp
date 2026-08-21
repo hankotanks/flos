@@ -2,9 +2,7 @@
 
 // system
 #include <algorithm>
-#include <limits>
 #include <optional>
-#include <span>
 // tbb
 #include <tbb/parallel_for.h>
 #include <tbb/concurrent_vector.h>
@@ -13,49 +11,11 @@
 // package
 #include "odometry/adaptive_threshold.h"
 #include "odometry/projection.h"
+#include "odometry/time_system.h"
 #include "classes.h"
 // util
 #include "util/cloud.h"
 #include "util/profiler.h"
-
-namespace {
-// field names to search in get_stamp_field
-static constexpr std::array<std::string, 4> STAMPS_NAMES = {"timestamps", "time", "timestamp", "t"};
-template<typename T>
-std::optional<const std::span<T>> stamps(util::Cloud& points) noexcept {
-    for(const std::string& name : STAMPS_NAMES) {
-        try {
-            return points.field<T>(name);
-        } catch(...) {
-            continue;
-        }
-        return std::nullopt;
-    }
-    return std::nullopt;
-}
-
-template<typename T>
-void deskew_inner(util::Cloud& points, std::span<const T> field, const Sophus::SE3f& motion) noexcept {
-    const auto& [t_min, t_max] = std::minmax_element(field.begin(), field.end());
-    const auto t_norm = [&](const T t) { return (t - *t_min) / (*t_max - *t_min); };
-    const auto& omega = -motion.log();
-    tbb::parallel_for(tbb::blocked_range<size_t>{0, points.size()}, [&](const tbb::blocked_range<size_t>& range) {
-        for(size_t i = range.begin(); i < range.end(); ++i) {
-            const T stamp = t_norm(field[i]);
-            const auto pose = Sophus::SE3f::exp((static_cast<float>(stamp) - 1.f) * omega);
-            points[i] = pose * points[i];
-        };
-    });
-}
-
-void deskew(util::Cloud& points, const Sophus::SE3f& motion) noexcept {
-    if(auto field = stamps<float>(points)) {
-        deskew_inner<float>(points, *field, motion);
-    } else if(auto field = stamps<double>(points)) {
-        deskew_inner<double>(points, *field, motion);
-    }
-}
-} // private scope
 
 OdometrySystem::OdometrySystem(const Config& config) : util::Profiler("OdometrySystem"),
     config_(config),
@@ -70,22 +30,18 @@ OdometrySystem::OdometrySystem(const Config& config) : util::Profiler("OdometryS
         tbb::global_control::max_allowed_parallelism, static_cast<size_t>(max_threads)); 
 }
 
-const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points) noexcept {
-    config_.constant_scan_rate = true;
-    return OdometrySystem::register_to_map(points, 0, 0);
-}
-
-const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigned int seconds, unsigned int nanoseconds) noexcept {
+const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, TimeSystem::Stamp stamp) noexcept {
+    if(config_.constant_scan_rate) stamp = TimeSystem::Stamp{};
     // reset statistics
     statistics_ = Statistics{};
     // perform registration
     PROFILE(registration, this) {
         // compute delta
-        const auto& [delta, dt] = OdometrySystem::predict(seconds, nanoseconds);
+        const auto prior = time_system_.predict_motion(points, last_delta_, stamp);
         // deskewing
         if(config_.deskew) {
             PROFILE(deskewing, &registration) {
-                deskew(points, delta);
+                time_system_.deskew(points, prior);
             }
         }
         // downsample incoming points to obtain keypoints and the preprocessed frame
@@ -96,7 +52,7 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigne
         // get keypoints
         SemanticCloud points_kp_wrapper{points_kp};
         // prepare rough initial guess
-        Sophus::SE3f initial_guess = last_pose_ * delta;
+        Sophus::SE3f initial_guess = last_pose_ * prior.frame_delta;
         points_kp_wrapper.transform(initial_guess);
         // initial_guess refinement
         PROFILE(align, &registration) {
@@ -134,32 +90,13 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, unsigne
         PROFILE_SKIP(registration) {
             // log final velocity statistics
             Eigen::Matrix<float, 6, 1> xi = last_delta_.log();
-            statistics_.velocity.linear = xi.tail<3>().norm() / dt;
-            statistics_.velocity.angular = xi.head<3>().norm() / dt;
+            statistics_.velocity.linear = xi.tail<3>().norm() / static_cast<float>(prior.dt);
+            statistics_.velocity.angular = xi.head<3>().norm() / static_cast<float>(prior.dt);
         }
     }
     ++frame_;
     // return const ref to the computed pose, since we store it anyway
     return last_pose_;
-}
-
-std::pair<Sophus::SE3f, double> OdometrySystem::predict(unsigned int seconds, unsigned int nanoseconds) noexcept {
-    // handling depends on whether we rely on timestamps
-    if(config_.constant_scan_rate) {
-        return std::make_pair(last_delta_, 1.f);
-    } else {
-        if(init_seconds_ == std::numeric_limits<unsigned int>::max()) init_seconds_ = seconds;
-        double stamp = static_cast<double>(seconds - init_seconds_) + 1e-9 * static_cast<double>(nanoseconds);
-        double dt_prev = last_stamp_ - prev_stamp_;
-        double dt_curr = stamp - last_stamp_;
-        double scale = 1.0;
-        if(dt_prev > 1e-6) scale = static_cast<double>(dt_curr / dt_prev);
-        // update timestamp state
-        prev_stamp_ = last_stamp_;
-        last_stamp_ = stamp;
-        // compute predicted delta:
-        return std::make_pair(Sophus::SE3d::exp(scale * last_delta_.cast<double>().log()).cast<float>(), dt_curr);
-    }
 }
 
 OdometrySystem::CorrespondenceSet OdometrySystem::correspond(const SemanticCloud& points, float correspondence_distance) const noexcept {
@@ -302,6 +239,7 @@ std::ostream& operator<<(std::ostream& stream, const OdometrySystem::Config& con
         "\tcorrespondence_weighting: " << config.correspondence.weighting << "," << std::endl <<
         "\tcorrespondence_target: " << config.correspondence.target << "," << std::endl <<
         "\tprojection_enable: " << config.projection.enable << "," << std::endl <<
+        "\tprojection_iou: " << config.projection.iou << "," << std::endl <<
         "\tprojection_ground: " << format(config.projection.ground) << "," << std::endl <<
         "\tprojection_target: " << format(config.projection.target);
 }

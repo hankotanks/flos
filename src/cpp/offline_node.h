@@ -13,6 +13,7 @@
 // package
 #include "odometry/ground_plane.h"
 #include "odometry/semantic_cloud.h"
+#include "odometry/time_system.h"
 #include "segmentation_node_config.h"
 #include "segmentation/system.h"
 #include "odometry_node_config.h"
@@ -68,6 +69,7 @@ public:
         // infer lidar messages from the given bag
         while(rclcpp::ok() && !this->loader_->finished() && msg_processed_++ < msg_count_) {
             auto [cloud, header] = this->loader_->next();
+            TimeSystem::Stamp stamp(header.stamp.sec, header.stamp.nanosec);
             Sophus::SE3f pose;
             PROFILE(frame, this) {
                 // preprocess before inference
@@ -75,14 +77,14 @@ public:
                 // inference
                 model.infer(cloud);
                 // compute pose and store for OfflineNode::save
-                pose = odometry_system_.register_to_map(cloud, header.stamp.sec, header.stamp.nanosec);
+                pose = odometry_system_.register_to_map(cloud, stamp);
             }
             poses_.emplace_back(header, pose);
             // publications
             if(visualize_) {
                 SemanticCloud cloud_wrapper{cloud};
                 cloud_wrapper.transform(pose);
-                this->publish_scan(header.stamp, cloud);
+                this->publish_scan(stamp, cloud);
                 if(visualize_map_) {
                     util::Cloud out;
                     std::vector<uint8_t> prediction;
@@ -91,26 +93,25 @@ public:
                         prediction.emplace_back(semantics.prediction);
                     }
                     out.add_field<uint8_t>("prediction", prediction);
-                    this->publish_local_map(header.stamp, out);
+                    this->publish_local_map(stamp, out);
                 }
-                this->publish_pose(header.stamp, header.frame_id, pose);
-                if(projection_target_) this->publish_projection(header.stamp, *projection_target_, odometry_system_.projection_.target_);
+                this->publish_pose(stamp, header.frame_id, pose);
+                if(projection_target_) this->publish_projection(stamp, *projection_target_, odometry_system_.projection_.target_);
                 projection_target_.emplace(odometry_system_.projection_.target_);
             }
-            this->publish_statistics(header.stamp, odometry_system_.statistics_);
             const auto [percent, remaining] = OfflineNode::compute_progress();
-            this->publish_progress(header.stamp, percent, remaining);
+            this->publish_progress(stamp, percent, remaining);
+            this->publish_statistics(stamp, odometry_system_.statistics_);
         }
     }
-public:
-    using Stamp = std_msgs::msg::Header::_stamp_type;
 protected:
-    virtual void publish_scan(const Stamp& stamp, const util::Cloud& cloud) { /* STUB */ };
-    virtual void publish_local_map(const Stamp& stamp, const util::Cloud& cloud) { /* STUB */ };
-    virtual void publish_pose(const Stamp& stamp, const std_msgs::msg::Header::_frame_id_type& frame_id, const Sophus::SE3f& pose) { /* STUB */ };
-    virtual void publish_projection(const Stamp& stamp, const VoxelMap<2, BirdsEyeCloud>& previous, const VoxelMap<2, BirdsEyeCloud>& current) { /* STUB */ };
-    virtual void publish_statistics(const Stamp& stamp, const OdometrySystem::Statistics& statistics) { /* STUB */ };
-    virtual void publish_progress(const Stamp& stamp, float percent, float remaining) { /* STUB */ }
+    virtual void publish_scan(TimeSystem::Stamp stamp, const util::Cloud& cloud) { /* STUB */ };
+    virtual void publish_local_map(TimeSystem::Stamp stamp, const util::Cloud& cloud) { /* STUB */ };
+    virtual void publish_pose(TimeSystem::Stamp stamp, const std_msgs::msg::Header::_frame_id_type& frame_id, const Sophus::SE3f& pose) { /* STUB */ };
+    virtual void publish_projection(TimeSystem::Stamp stamp, const VoxelMap<2, BirdsEyeCloud>& previous, const VoxelMap<2, BirdsEyeCloud>& current) { /* STUB */ };
+    virtual void publish_progress(TimeSystem::Stamp stamp, float percent, float remaining) { /* STUB */ }
+    virtual void publish_statistics(TimeSystem::Stamp stamp, const OdometrySystem::Statistics& statistics) { /* STUB */ };
+    
 private:
     std::pair<float, float> compute_progress() {
         if(msg_count_ == 0) return std::make_pair(0.f, std::numeric_limits<float>::max());
@@ -120,7 +121,6 @@ private:
         const float percent_complete = 100.f * static_cast<float>(msg_processed_) / static_cast<float>(msg_count_);
         const float avg_time_per_msg = (msg_processed_ > 0) ? elapsed_seconds / static_cast<float>(msg_processed_) : 0.f;
         const float seconds_remaining = avg_time_per_msg * static_cast<float>(msg_count_ - msg_processed_);
-
         return std::make_pair(percent_complete, seconds_remaining);
     }
 

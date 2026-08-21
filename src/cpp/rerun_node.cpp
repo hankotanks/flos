@@ -29,17 +29,17 @@ public:
         }
     }
 protected:
-    virtual void publish_scan(const OfflineNode::Stamp& stamp, const util::Cloud& cloud) override {
+    virtual void publish_scan(TimeSystem::Stamp stamp, const util::Cloud& cloud) override {
         RerunNode::set_stamp(stamp);
         RerunNode::publish_points(cloud, "map/points");
     }
 
-    virtual void publish_local_map(const OfflineNode::Stamp& stamp, const util::Cloud& cloud) override {
+    virtual void publish_local_map(TimeSystem::Stamp stamp, const util::Cloud& cloud) override {
         RerunNode::set_stamp(stamp);
         RerunNode::publish_points(cloud, "map");
     }
 
-    virtual void publish_pose(const OfflineNode::Stamp& stamp, const std_msgs::msg::Header::_frame_id_type& frame_id, const Sophus::SE3f& pose) override {
+    virtual void publish_pose(TimeSystem::Stamp stamp, const std_msgs::msg::Header::_frame_id_type& frame_id, const Sophus::SE3f& pose) override {
         RerunNode::set_stamp(stamp);
         const auto& t = pose.translation();
         rr_.log("trajectory", rerun::Points3D().with_positions({
@@ -47,7 +47,7 @@ protected:
         }).with_radii(RerunNode::DEFAULT_POINT_RADIUS * 3.f));
     }
 
-    virtual void publish_statistics(const OfflineNode::Stamp& stamp, const OdometrySystem::Statistics& statistics) override {
+    virtual void publish_statistics(TimeSystem::Stamp stamp, const OdometrySystem::Statistics& statistics) override {
         RerunNode::set_stamp(stamp);
         rr_.log("statistics/iterations", rerun::Scalar(statistics.iterations));
         rr_.log("statistics/correspondences", rerun::Scalar(statistics.correspondences));
@@ -60,13 +60,13 @@ protected:
         rr_.log("statistics/refined/mean", rerun::Scalar(refined_mean_));
     }
 
-    virtual void publish_progress(const OfflineNode::Stamp& stamp, float percent, float remaining) override {
+    virtual void publish_progress(TimeSystem::Stamp stamp, float percent, float remaining) override {
         RerunNode::set_stamp(stamp);
         rr_.log("progress/percent", rerun::Scalar(percent));
         rr_.log("progress/remaining", rerun::Scalar(remaining));
     }
 
-    virtual void publish_projection(const OfflineNode::Stamp& stamp, const VoxelMap<2, BirdsEyeCloud>& previous, const VoxelMap<2, BirdsEyeCloud>& current) override {
+    virtual void publish_projection(TimeSystem::Stamp stamp, const VoxelMap<2, BirdsEyeCloud>& previous, const VoxelMap<2, BirdsEyeCloud>& current) override {
         RerunNode::set_stamp(stamp);
         // previous
         std::vector<rerun::Vec2D> points_previous;
@@ -98,7 +98,7 @@ private:
         }
     }
 
-    void set_stamp(const OfflineNode::Stamp& stamp) {
+    void set_stamp(TimeSystem::Stamp stamp) {
         const int64_t ns = static_cast<int64_t>(stamp.sec) * 1'000'000'000LL + static_cast<int64_t>(stamp.nanosec);
         rr_.set_time_nanos("ros_ws", ns);
     }
