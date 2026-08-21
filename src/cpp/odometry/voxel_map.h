@@ -2,14 +2,15 @@
 
 // system
 #include <limits>
-#include <tbb/blocked_range.h>
 #include <optional>
+#include <ranges>
+#include <span>
 // eigen
 #include <Eigen/Dense>
 // tsl
-#include <ranges>
-#include <span>
 #include <tsl/robin_map.h>
+// tbb
+#include <tbb/blocked_range.h>
 // sophus
 #include <sophus/se2.hpp>
 #include <sophus/se3.hpp>
@@ -78,9 +79,14 @@ requires(ValidVoxelMap<D, F>)
 struct VoxelMap {
     explicit VoxelMap(float max_distance, float voxel_size, size_t voxel_capacity) : 
         max_distance_(max_distance), 
-        voxel_size_(voxel_size), 
-        voxel_resolution_(voxel_size * voxel_size / static_cast<float>(voxel_capacity)), 
-        voxel_capacity_(voxel_capacity) { /* STUB */ }
+        voxel_size_(voxel_size),  
+        voxel_capacity_(voxel_capacity),
+        voxel_resolution_sq_(voxel_size_ * voxel_size_ / static_cast<float>(voxel_capacity_)) { /* STUB */ }
+    explicit VoxelMap(float max_distance, float voxel_size) : 
+        max_distance_(max_distance), 
+        voxel_size_(voxel_size),  
+        voxel_capacity_(0),
+        voxel_resolution_sq_(std::numeric_limits<float>::lowest()) { /* STUB */ }
     VoxelMap(const VoxelMap&) = default;
     VoxelMap(VoxelMap&&) = default;
     VoxelMap& operator=(const VoxelMap&) = delete; // NOTE: copy assignment is explicitly deleted to avoid unintended allocations
@@ -124,16 +130,17 @@ public:
     void extend(const Eigen::Vector<int, D>& voxel, const Eigen::Vector<float, D>& point, const typename T::point_data_t& data)
     requires(!DefaultFrameType<D, F>);
 public:
+    // find the closest neighbor within the map
     template<size_t _D, typename _F>
     struct NeighborInner { /* STUB */ };
     template<size_t _D, typename _F>
     requires(!DefaultFrameType<_D, _F>)
     struct NeighborInner<_D, _F> {
-        typename _F::point_data_t data;
+        const typename _F::point_data_t* data;
         float weight;
     };
     struct Neighbor : NeighborInner<D, F> {
-        Eigen::Vector<float, D> point;
+        const Eigen::Vector<float, D>* point;
         float distance_sq{std::numeric_limits<float>::max()};
     };
     // returns std::nullopt when no correspondence is found
@@ -141,6 +148,24 @@ public:
     requires(DefaultFrameType<D, F>);
     template<typename T = F>
     std::optional<Neighbor> closest(const Eigen::Vector<float, D>& query, const typename T::point_data_t& data, float correspondence_distance_sq) const
+    requires(!DefaultFrameType<D, F>);
+public:
+    // find the adjacency of a point within a map
+    template<size_t _D, typename _F>
+    struct AdjacencyInner { /* STUB */ };
+    template<size_t _D, typename _F>
+    requires(!DefaultFrameType<_D, _F>)
+    struct AdjacencyInner<_D, _F> {
+        float weight;
+    };
+    struct Adjacency : AdjacencyInner<D, F> {
+        Eigen::Vector<float, D> residual;
+        float distance_sq{std::numeric_limits<float>::max()};
+    };
+    std::optional<Adjacency> adjacency(const Eigen::Vector<float, D>& query, float correspondence_distance_sq) const
+    requires(DefaultFrameType<D, F>);
+    template<typename T = F>
+    std::optional<Adjacency> adjacency(const Eigen::Vector<float, D>& query, const typename T::point_data_t& data, float correspondence_distance_sq) const
     requires(!DefaultFrameType<D, F>);
 private:
     template<size_t _D, typename _F>
@@ -164,10 +189,10 @@ private:
         Voxel& operator=(Voxel&&) = default;
         ~Voxel() = default;
     private:
-        void add(const Eigen::Vector<float, D>& point, float voxel_resolution) noexcept
+        void add(const Eigen::Vector<float, D>& point, float voxel_resolution_sq) noexcept
         requires(DefaultFrameType<D, F>);
         template<typename T = F>
-        void add(const Eigen::Vector<float, D>& point, typename T::point_data_t data, float voxel_resolution) noexcept
+        void add(const Eigen::Vector<float, D>& point, typename T::point_data_t data, float voxel_resolution_sq) noexcept
         requires(!DefaultFrameType<D, F>);
     private:
         std::vector<Eigen::Vector<float, D>> points_;
@@ -178,8 +203,8 @@ private:
     // configuration options
     float max_distance_;
     float voxel_size_;
-    float voxel_resolution_;
     size_t voxel_capacity_;
+    float voxel_resolution_sq_;
     // underlying map structure
     tsl::robin_map<Eigen::Vector<int, D>, Voxel> map_;
 public:

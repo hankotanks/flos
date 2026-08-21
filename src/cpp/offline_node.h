@@ -83,12 +83,10 @@ public:
                 SemanticCloud cloud_wrapper{cloud};
                 cloud_wrapper.transform(pose);
                 this->publish_scan(header.stamp, cloud);
-                // TODO: removed visualize_map, it needs to be added back
                 if(visualize_map_) {
                     util::Cloud out;
                     std::vector<uint8_t> prediction;
-                    prediction.reserve(odometry_system_.map_.size() * odometry_system_.config_.voxel_capacity);
-                    for(const auto& [point, semantics] : odometry_system_.map_.view()) {
+                    for(const auto& [point, semantics] : odometry_system_.view()) {
                         out.add_point(point);
                         prediction.emplace_back(semantics.prediction);
                     }

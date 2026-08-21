@@ -18,8 +18,8 @@ public:
         voxel_capacity_(voxel_capacity),
         pred_ground_(pred_ground),
         pred_target_(pred_target),
-        target_(max_distance, voxel_size, voxel_capacity),
-        source_(max_distance, voxel_size, voxel_capacity) { /* STUB */ }
+        target_(max_distance, Projection::CORRESPONDENCE_DISTANCE),
+        source_(max_distance, Projection::CORRESPONDENCE_DISTANCE) { /* STUB */ }
     Projection(const Projection&) = delete;
     Projection(Projection&&) = delete;
     Projection& operator=(const Projection&) = delete;
@@ -33,7 +33,7 @@ public:
 private:
     // NOTE: dependent on the accuracy of the model
     // at 73% mean IOU on the validation data, 50 is plenty
-    static constexpr float RANSAC_ITERATIONS{50};
+    static constexpr float CORRESPONDENCE_DISTANCE{5.f};
     // shared parameters with OdometrySystem
     float max_distance_;
     float max_distance_ground_;

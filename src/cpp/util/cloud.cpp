@@ -259,7 +259,6 @@ template py::object Cloud::field_as_py_object<f8>(const std::string&) const;
 #endif // GENERATE_CLOUD_PYBIND_MODULE
 
 void Cloud::downsample(float voxel_size) {
-    // TODO: Could this be static to prevent allocation every frame??
     tsl::robin_map<Eigen::Vector3i, size_t> grid;
     grid.reserve(Cloud::size());
     size_t i_write = 0;
@@ -511,7 +510,6 @@ template std::span<f8> Cloud::add_field_from_py_object<f8>(const std::string&, p
 
 // binding code here still works because it just needs to be visible in the final binary
 PYBIND11_EMBEDDED_MODULE(cloud_bindings, m) {
-    // TODO: ENSURE THIS DOESN'T COPY!
     pybind11::bind_vector<FieldI1>(m, "FieldI1");
     pybind11::bind_vector<FieldU1>(m, "FieldU1");
     pybind11::bind_vector<FieldI2>(m, "FieldI2");

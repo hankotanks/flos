@@ -36,17 +36,9 @@ SegmentationSystem::Model::Model(const SegmentationSystem::Config& config, const
     helper_(module_.attr("InferenceHelper")(path_to_model.string())),
     infer_(helper_.attr("infer")) { /* STUB */ }
 
-void preprocess_inner(const SegmentationSystem::Config& config, util::Cloud& cloud) {
-    double voxel_size = config.voxel_size_inference;
-    cloud.downsample(voxel_size);
-    double max_distance = config.max_distance * SegmentationSystem::MAX_DISTANCE_SCALAR;
-    cloud.filter_by_distance(Eigen::Vector3f::Zero(), 0.f, max_distance);
-}
-
 void SegmentationSystem::preprocess(util::Cloud& cloud) {
-    PROFILE(preprocessing, this) {
-        preprocess_inner(config_, cloud);
-    }
+    cloud.downsample(config_.voxel_size_inference);
+    cloud.filter_by_distance(Eigen::Vector3f::Zero(), 0.f, config_.max_distance);
 }
 
 SegmentationSystem::Model SegmentationSystem::load(const std::filesystem::path& path_to_model) {
@@ -71,25 +63,16 @@ void SegmentationSystem::Model::infer(util::Cloud& cloud) {
         } catch(const py::cast_error&) {
             throw std::runtime_error("inference failed");
         }
-        // argmax
-        std::span<uint8_t> prediction = cloud.add_field<uint8_t>("prediction", 0);
-        predict(prediction, fields);
         // postprocessing
         PROFILE(postprocessing, &inference) {
-            // remove ignored classes
-            cloud.filter<uint8_t>("prediction", [this](const uint8_t& scalar) {
-                return this->config_.semantics.ignore.count(scalar) == 0;
-            });
-            // downsample only if the inference resolution was different from the output resolution
-            if(std::abs(config_.voxel_size * SegmentationSystem::VOXEL_SIZE_SCALAR - config_.voxel_size_inference) > 0.01f) {
-                double voxel_size = config_.voxel_size * SegmentationSystem::VOXEL_SIZE_SCALAR;
-                cloud.downsample(voxel_size);
-            }
+            // argmax
+            std::span<uint8_t> prediction = cloud.add_field<uint8_t>("prediction", 0);
+            predict(prediction, fields);
             // remap semantic classes...
             if(!config_.semantics.remap.empty()) {
                 cloud.transform<uint8_t>("prediction", [this](const uint8_t& prediction) {
                     if(this->config_.semantics.remap.contains(prediction)) {
-                        return static_cast<uint8_t>(this->config_.semantics.remap[static_cast<size_t>(prediction)]);
+                        return static_cast<uint8_t>(this->config_.semantics.remap.at(static_cast<size_t>(prediction)));
                     } else {
                         return prediction;
                     }
@@ -102,14 +85,22 @@ void SegmentationSystem::Model::infer(util::Cloud& cloud) {
                     std::fill(from.begin(), from.end(), 0.f);
                 }
             }
+            // remove ignored classes
+            cloud.filter<uint8_t>("prediction", [this](const uint8_t& scalar) {
+                return this->config_.semantics.ignore.count(scalar) == 0;
+            });
+            // downsample only if the inference resolution was different from the output resolution
+            if(std::abs(config_.voxel_size * SegmentationSystem::VOXEL_SIZE_SCALAR - config_.voxel_size_inference) > 0.01f) {
+                double voxel_size = config_.voxel_size * SegmentationSystem::VOXEL_SIZE_SCALAR;
+                cloud.downsample(voxel_size);
+            }
         }
     }
 }
 
 void SegmentationSystem::Model::preprocess(util::Cloud& cloud) {
-    PROFILE(preprocessing, profiler_) {
-        preprocess_inner(config_, cloud);
-    }
+    cloud.downsample(config_.voxel_size_inference);
+    cloud.filter_by_distance(Eigen::Vector3f::Zero(), 0.f, config_.max_distance);
 }
 
 std::ostream& operator<<(std::ostream& stream, const SegmentationSystem::Config& config) {

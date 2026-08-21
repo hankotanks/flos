@@ -1,5 +1,3 @@
-// system
-#include <optional>
 // rerun
 #include <rerun.hpp>
 // package
@@ -44,7 +42,6 @@ protected:
     virtual void publish_pose(const OfflineNode::Stamp& stamp, const std_msgs::msg::Header::_frame_id_type& frame_id, const Sophus::SE3f& pose) override {
         RerunNode::set_stamp(stamp);
         const auto& t = pose.translation();
-        // TODO: I would prefer this be a LineStrips3D
         rr_.log("trajectory", rerun::Points3D().with_positions({
             rerun::Position3D(t.x(), t.y(), t.z())
         }).with_radii(RerunNode::DEFAULT_POINT_RADIUS * 3.f));
@@ -56,6 +53,11 @@ protected:
         rr_.log("statistics/correspondences", rerun::Scalar(statistics.correspondences));
         rr_.log("statistics/velocity/linear", rerun::Scalar(statistics.velocity.linear));
         rr_.log("statistics/velocity/angular", rerun::Scalar(statistics.velocity.angular));
+        float refined = statistics.refined ? 1.f : 0.f;
+        rr_.log("statistics/refined", rerun::Scalar(refined));
+        refined_mean_ = (static_cast<float>(count_) * refined_mean_ + refined) / static_cast<float>(count_ + 1.f);
+        count_++;
+        rr_.log("statistics/refined/mean", rerun::Scalar(refined_mean_));
     }
 
     virtual void publish_progress(const OfflineNode::Stamp& stamp, float percent, float remaining) override {
@@ -101,9 +103,13 @@ private:
         rr_.set_time_nanos("ros_ws", ns);
     }
 private:
+    // rerun
     static constexpr float DEFAULT_POINT_RADIUS{0.2f};
     static constexpr size_t MEMORY_LIMIT{4};
     rerun::RecordingStream rr_;
+private:
+    size_t count_{0};
+    float refined_mean_{0.f};
 };
 
 

@@ -148,7 +148,6 @@ set(OFFLINE_SOURCES
   ${ODOMETRY_SOURCES}
   dataloader/dataloader.cpp
   dataloader/bag.cpp
-  dataloader/wild_scenes.cpp
   util/cloud.cpp
   util/rosarg.cpp
   util/rosbag.cpp 
