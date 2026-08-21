@@ -49,11 +49,11 @@ protected:
 
     virtual void publish_statistics(TimeSystem::Stamp stamp, const OdometrySystem::Statistics& statistics) override {
         RerunNode::set_stamp(stamp);
-        rr_.log("statistics/iterations", rerun::Scalar(statistics.iterations));
-        rr_.log("statistics/correspondences", rerun::Scalar(statistics.correspondences));
+        rr_.log("statistics/iterations", rerun::Scalar(statistics.align.iterations));
+        rr_.log("statistics/mean_correspondence_count", rerun::Scalar(statistics.align.mean_correspondence_count));
         rr_.log("statistics/velocity/linear", rerun::Scalar(statistics.velocity.linear));
         rr_.log("statistics/velocity/angular", rerun::Scalar(statistics.velocity.angular));
-        float refined = statistics.refined ? 1.f : 0.f;
+        float refined = statistics.align.refined ? 1.f : 0.f;
         rr_.log("statistics/refined", rerun::Scalar(refined));
         refined_mean_ = (static_cast<float>(count_) * refined_mean_ + refined) / static_cast<float>(count_ + 1.f);
         count_++;
