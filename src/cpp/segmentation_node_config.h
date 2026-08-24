@@ -15,6 +15,7 @@ struct SegmentationNodeConfig {
         util::param_opt(node, "max_distance", config.max_distance);
         util::param_opt(node, "voxel_size", config.voxel_size);
         util::param_opt(node, "voxel_size_inference", config.voxel_size_inference);
+        util::param_opt(node, "double_downsample", config.double_downsample);
         // DONE: I would like my system to be class-name agnostic, so I've moved these parameters here
         // however, the actual class numbers should not be hard-coded...
         // this is a problem for a different day

@@ -90,8 +90,8 @@ void SegmentationSystem::Model::infer(util::Cloud& cloud) {
                 return this->config_.semantics.ignore.count(scalar) == 0;
             });
             // downsample only if the inference resolution was different from the output resolution
-            if(std::abs(config_.voxel_size * SegmentationSystem::VOXEL_SIZE_SCALAR - config_.voxel_size_inference) > 0.01f) {
-                double voxel_size = config_.voxel_size * SegmentationSystem::VOXEL_SIZE_SCALAR;
+            float voxel_size = config_.double_downsample ? config_.voxel_size * SegmentationSystem::VOXEL_SIZE_SCALAR : config_.voxel_size;
+            if(std::abs(voxel_size - config_.voxel_size_inference) > 0.01f) {
                 cloud.downsample(voxel_size);
             }
         }
@@ -148,6 +148,7 @@ std::ostream& operator<<(std::ostream& stream, const SegmentationSystem::Config&
         "\tmax_distance: " << config.max_distance << "," << std::endl << 
         "\tvoxel_size: " << config.voxel_size << "," << std::endl << 
         "\tvoxel_size_inference: " << config.voxel_size_inference << "," << std::endl << 
+        "\tdouble_downsample: " << config.double_downsample << "," << std::endl <<
         "\tsemantics_ignore: " << format_ignore(config.semantics.ignore) << "," << std::endl <<
         "\tsemantics_remap: " << format_remap(config.semantics.remap);
 }

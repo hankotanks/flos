@@ -16,6 +16,7 @@ public:
         float max_distance{50.f};
         float voxel_size{1.f};
         float voxel_size_inference{0.1f};
+        bool double_downsample{false};
         struct {
             std::set<size_t> ignore{0};
             std::map<size_t, size_t> remap;

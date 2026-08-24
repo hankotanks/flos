@@ -31,6 +31,7 @@ public:
             float motion{0.1f};
         } threshold;
         bool deskew{true};
+        bool double_downsample{false};
         bool constant_scan_rate{false};
         size_t max_iterations{500};
         size_t max_threads{0};

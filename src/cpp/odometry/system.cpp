@@ -20,7 +20,8 @@
 OdometrySystem::OdometrySystem(const Config& config) : util::Profiler("OdometrySystem"),
     config_(config),
     map_(config_.max_distance, config_.voxel_size, config_.voxel_capacity),
-    projection_(config_.max_distance, config_.max_distance_ground, config_.projection.iou, std::sqrt(config_.voxel_size * config_.voxel_size / static_cast<float>(config_.voxel_capacity)),
+    projection_(config_.max_distance, config_.max_distance_ground, config_.voxel_size, config_.projection.iou, 
+        std::sqrt(config_.voxel_size * config_.voxel_size / static_cast<float>(config_.voxel_capacity)),
         [this](const Semantics& semantics) { return this->config_.projection.ground.count(semantics.prediction) > 0; },
         [this](const Semantics& semantics) { return this->config_.projection.target.count(semantics.prediction) > 0; }),
     threshold_(config_.max_distance, config_.threshold.initial, config_.threshold.motion) {
@@ -46,8 +47,10 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, TimeSys
         }
         // downsample incoming points to obtain keypoints and the preprocessed frame
         util::Cloud points_kp{points};
-        PROFILE(downsample, &registration) {
-            points_kp.downsample(config_.voxel_size * OdometrySystem::VOXEL_SIZE_SCALAR);
+        if(config_.double_downsample) {
+            PROFILE(downsample, &registration) {
+                points_kp.downsample(config_.voxel_size * OdometrySystem::VOXEL_SIZE_SCALAR);
+            }
         }
         // get keypoints
         SemanticCloud points_kp_wrapper{points_kp};
@@ -233,6 +236,7 @@ std::ostream& operator<<(std::ostream& stream, const OdometrySystem::Config& con
         "\tthreshold_initial: " << config.threshold.initial << "," << std::endl <<
         "\tthreshold_motion: " << config.threshold.motion << "," << std::endl <<
         "\tdeskew: " << config.deskew << "," << std::endl << 
+        "\tdouble_downsample: " << config.double_downsample << "," << std::endl <<
         "\tconstant_scan_rate: " << config.constant_scan_rate << "," << std::endl <<
         "\tmax_iterations: " << config.max_iterations << "," << std::endl <<
         "\tmax_threads: " << config.max_threads << "," << std::endl <<

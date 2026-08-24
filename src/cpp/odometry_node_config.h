@@ -18,6 +18,7 @@ struct OdometryNodeConfig {
         util::param_opt(node, "threshold_motion", config.threshold.motion);
         // registration
         util::param_opt(node, "deskew", config.deskew);
+        util::param_opt(node, "double_downsample", config.double_downsample);
         util::param_opt(node, "constant_scan_rate", config.constant_scan_rate);
         util::param_opt(node, "max_iterations", config.max_iterations);
         util::param_opt(node, "max_threads", config.max_threads);

@@ -144,10 +144,12 @@ public:
         float distance_sq{std::numeric_limits<float>::max()};
     };
     // returns std::nullopt when no correspondence is found
-    std::optional<Neighbor> closest(const Eigen::Vector<float, D>& query, float correspondence_distance_sq) const
+    std::optional<Neighbor> closest(const Eigen::Vector<float, D>& query, 
+        float correspondence_distance_sq = std::numeric_limits<float>::max()) const
     requires(DefaultFrameType<D, F>);
     template<typename T = F>
-    std::optional<Neighbor> closest(const Eigen::Vector<float, D>& query, const typename T::point_data_t& data, float correspondence_distance_sq) const
+    std::optional<Neighbor> closest(const Eigen::Vector<float, D>& query, const typename T::point_data_t& data, 
+        float correspondence_distance_sq = std::numeric_limits<float>::max()) const
     requires(!DefaultFrameType<D, F>);
 public:
     // find the adjacency of a point within a map
@@ -162,10 +164,12 @@ public:
         Eigen::Vector<float, D> residual;
         float distance_sq{std::numeric_limits<float>::max()};
     };
-    std::optional<Adjacency> adjacency(const Eigen::Vector<float, D>& query, float correspondence_distance_sq) const
+    std::optional<Adjacency> adjacency(const Eigen::Vector<float, D>& query, 
+        float correspondence_distance_sq = std::numeric_limits<float>::max()) const
     requires(DefaultFrameType<D, F>);
     template<typename T = F>
-    std::optional<Adjacency> adjacency(const Eigen::Vector<float, D>& query, const typename T::point_data_t& data, float correspondence_distance_sq) const
+    std::optional<Adjacency> adjacency(const Eigen::Vector<float, D>& query, const typename T::point_data_t& data, 
+        float correspondence_distance_sq = std::numeric_limits<float>::max()) const
     requires(!DefaultFrameType<D, F>);
 private:
     template<size_t _D, typename _F>

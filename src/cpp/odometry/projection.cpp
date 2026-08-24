@@ -1,8 +1,29 @@
 #include "odometry/projection.h"
+#include "odometry/ground_plane.h"
 
 // system
 #include <tuple>
 #include <utility>
+
+namespace {
+void correspond(const VoxelMap<2, BirdsEyeCloud>& source, const VoxelMap<2, BirdsEyeCloud>& target, std::vector<std::tuple<const Eigen::Vector2f&, const Eigen::Vector2f&, float>>& correspondences) {
+    correspondences.clear();
+    tbb::enumerable_thread_specific<std::vector<std::tuple<const Eigen::Vector2f&, const Eigen::Vector2f&, float>>> correspondence_pool;
+    tbb::parallel_for(source.view(), [&target, &correspondence_pool](auto& range) {
+        for(const auto& [query, data] : range) {
+            auto neighbor = target.closest(query, data);
+            if(!neighbor) continue;
+            auto& local = correspondence_pool.local();
+            local.emplace_back(query, neighbor->point, neighbor->distance_sq);
+        }
+    });
+    for(auto& local : correspondence_pool) {
+        for(auto& [query, point, distance_sq] : local) {
+            correspondences.emplace_back(query, point, distance_sq);
+        }
+    }
+}
+} // private scope
 
 void Projection::fit(const VoxelMap<3, SemanticCloud>& map, const Sophus::SE3f& pose, const Sophus::SE3f& T) {
     // update projection
@@ -28,7 +49,6 @@ std::optional<Sophus::SE3f> Projection::align(const SemanticCloud& source, size_
     source_.extend(points);
     // chi termination criterion
     float chi = -1.f;
-    float correspondence_distance_sq = Projection::CORRESPONDENCE_DISTANCE * Projection::CORRESPONDENCE_DISTANCE;
     // preallocate correspondence vector
     std::vector<std::tuple<const Eigen::Vector2f&, const Eigen::Vector2f&, float>> correspondences;
     // build transform
@@ -36,26 +56,7 @@ std::optional<Sophus::SE3f> Projection::align(const SemanticCloud& source, size_
     size_t iter;
     for(iter = 0; iter < max_iterations; ++iter) {
         // build bidirectional correspondences
-        correspondences.clear();
-        tbb::enumerable_thread_specific<std::vector<std::tuple<const Eigen::Vector2f&, const Eigen::Vector2f&, float>>> correspondence_pool;
-        tbb::parallel_for(source_.view(), [this, correspondence_distance_sq, &correspondence_pool](auto& range) {
-            for(const auto& [query, data] : range) {
-                auto neighbor = this->target_.closest(query, data, correspondence_distance_sq);
-                if(!neighbor) continue;
-                // {
-                //     auto other = this->source_.closest(neighbor->point, neighbor->data, correspondence_distance_sq);
-                //     if(!other) continue;
-                //     if((query - other->point).squaredNorm() > 0.2) continue;
-                // }
-                auto& local = correspondence_pool.local();
-                local.emplace_back(query, neighbor->point, neighbor->distance_sq);
-            }
-        });
-        for(auto& local : correspondence_pool) {
-            for(auto& [query, point, distance_sq] : local) {
-                correspondences.emplace_back(query, point, distance_sq);
-            }
-        }
+        correspond(source_, target_, correspondences);
         if(correspondences.size() < 3) {
             target_.clear();
             target_.extend(points);
@@ -94,7 +95,21 @@ std::optional<Sophus::SE3f> Projection::align(const SemanticCloud& source, size_
         if(chi > 0.f && std::abs(chi - chi_i) <= convergence_criterion * chi) break;
         chi = chi_i;
     }
-    if(iter == max_iterations) {
+    // determine ratio of inliers (bidirectional)
+    // correspond(source_, target_, correspondences);
+    // const size_t source_inlier_count = std::count_if(correspondences.begin(), correspondences.end(),
+    //     [inlier_distance_sq](const auto& correspondence) {
+    //         const auto& [source_point, target_point, distance_sq] = correspondence;
+    //         return distance_sq <= inlier_distance_sq;
+    //     });
+    // correspond(target_, source_, correspondences);
+    // const size_t target_inlier_count = std::count_if(correspondences.begin(), correspondences.end(),
+    //     [inlier_distance_sq](const auto& correspondence) {
+    //         const auto& [target_point, source_point, distance_sq] = correspondence;
+    //         return distance_sq <= inlier_distance_sq;
+    //     });
+    // reject the solution if it required max_iterations OR there was a bad fit
+    if(iter == max_iterations || correspondences.size() * 2 < std::ranges::distance(source_.view())) { // || target_inlier_count * 2 < std::ranges::distance(target_.view())) {
         target_.clear();
         target_.extend(points);
         return std::nullopt;

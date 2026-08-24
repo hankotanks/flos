@@ -266,6 +266,7 @@ requires(DefaultFrameType<D, F>) {
     // static constexpr auto offsets = offset<D>();
     // find the closest match that respects the provided predicate
     if(map_.empty()) return std::nullopt;
+    correspondence_distance_sq = std::min(correspondence_distance_sq, voxel_size_ * voxel_size_ * 1.5f * 1.5f);
     Eigen::Vector<int, D> key = VoxelMap<D, F>::point_to_voxel(query);
     struct Candidate {
         const Eigen::Vector<float, D>* point{nullptr};
@@ -304,6 +305,7 @@ requires(!DefaultFrameType<D, F>) {
     // static constexpr auto offsets = ;
     // find the closest match that respects the provided predicate
     if(map_.empty()) return std::nullopt;
+    correspondence_distance_sq = std::min(correspondence_distance_sq, voxel_size_ * voxel_size_ * 1.5f * 1.5f);
     Eigen::Vector<int, D> key = VoxelMap<D, F>::point_to_voxel(query);
     struct Candidate {
         const Voxel* voxel{nullptr};
@@ -351,6 +353,7 @@ requires(ValidVoxelMap<D, F>)
 std::optional<typename VoxelMap<D, F>::Adjacency> VoxelMap<D, F>::adjacency(const Eigen::Vector<float, D>& query, float correspondence_distance_sq) const 
 requires(DefaultFrameType<D, F>) {
     if(map_.empty()) return std::nullopt;
+    correspondence_distance_sq = std::min(correspondence_distance_sq, voxel_size_ * voxel_size_ * 1.5f * 1.5f);
     Eigen::Vector<int, D> key = VoxelMap<D, F>::point_to_voxel(query);
     typename VoxelMap<D, F>::Adjacency best;
     best.distance_sq = std::numeric_limits<float>::max();
@@ -383,6 +386,7 @@ template<typename T>
 std::optional<typename VoxelMap<D, F>::Adjacency> VoxelMap<D, F>::adjacency(const Eigen::Vector<float, D>& query, const typename T::point_data_t& data, float correspondence_distance_sq) const 
 requires(!DefaultFrameType<D, F>) {
     if(map_.empty()) return std::nullopt;
+    correspondence_distance_sq = std::min(correspondence_distance_sq, voxel_size_ * voxel_size_ * 1.5f * 1.5f);
     Eigen::Vector<int, D> key = VoxelMap<D, F>::point_to_voxel(query);
     typename VoxelMap<D, F>::Adjacency best;
     best.distance_sq = std::numeric_limits<float>::max();
