@@ -158,21 +158,22 @@ std::pair<Eigen::Matrix<float, 6, 1>, float> OdometrySystem::solve(const Odometr
 }
 
 Sophus::SE3f OdometrySystem::refine(SemanticCloud& points, Sophus::SE3f& initial_guess, float correspondence_distance) {
-    if(std::optional<Sophus::SE3f> T_bev = projection_.align(points, config_.max_iterations, config_.convergence_criterion)) {
+    if(auto result = projection_.align(points, config_.max_iterations, config_.convergence_criterion)) {
+        auto T_bev = *result;
         // ensure that the refined residual is smaller than the initial
         CorrespondenceSet correspondences_initial = OdometrySystem::correspond(points, correspondence_distance);
         const auto [dx_initial, chi_initial] = OdometrySystem::solve(correspondences_initial);
-        points.transform(*T_bev);
+        points.transform(T_bev);
         CorrespondenceSet correspondences_refined = OdometrySystem::correspond(points, correspondence_distance);
         const auto [dx_refined, chi_refined] = OdometrySystem::solve(correspondences_refined);
         // we are essentially sacrificing 2 icp iterations under the assumption that the refinement will reduce the total ICP count by more than 2
         if(chi_refined > chi_initial) {
-            points.transform(T_bev->inverse());
+            points.transform(T_bev.inverse());
             return {};
         } else {
-            initial_guess = (*T_bev) * initial_guess;
+            initial_guess = T_bev * initial_guess;
             statistics_.align.refined = true;
-            return *T_bev;
+            return T_bev;
         }
     }
     return {};

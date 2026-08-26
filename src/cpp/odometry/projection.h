@@ -14,9 +14,10 @@ public:
         max_distance_(max_distance),
         max_distance_ground_(max_distance_ground),
         voxel_size_(voxel_size * Projection::VOXEL_SIZE_SCALAR),
+        inlier_distance_(inlier_distance),
         pred_ground_(pred_ground),
         pred_target_(pred_target),
-        ground_(max_distance_ground_, inlier_ratio, inlier_distance),
+        ground_(max_distance_ground_, inlier_ratio, inlier_distance_),
         target_(max_distance_, voxel_size_),
         source_(max_distance_, voxel_size_) { /* STUB */ }
     Projection(const Projection&) = delete;
@@ -39,6 +40,7 @@ private:
     float max_distance_;
     float max_distance_ground_;
     float voxel_size_;
+    float inlier_distance_;
 private:
     std::function<bool(const Semantics&)> pred_ground_;
     std::function<bool(const Semantics&)> pred_target_;

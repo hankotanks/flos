@@ -3,6 +3,7 @@
 
 // system
 #include <tuple>
+#include <unordered_set>
 #include <utility>
 
 namespace {
@@ -40,13 +41,17 @@ void Projection::fit(const VoxelMap<3, SemanticCloud>& map, const Sophus::SE3f& 
 
 std::optional<Sophus::SE3f> Projection::align(const SemanticCloud& source, size_t max_iterations, float convergence_criterion) {
     BirdsEyeCloud points{source, ground_, pred_target_};
-    if(target_.empty()) {
+    if(target_.empty() || target_.size() <= 1) {
         target_.extend(points);
         return std::nullopt;
     }
     // construct source map (current frame)
     source_.clear();
     source_.extend(points);
+    if(source_.size() <= 1) {
+        target_ = std::move(source_);
+        return std::nullopt;
+    }
     // chi termination criterion
     float chi = -1.f;
     // preallocate correspondence vector
@@ -95,21 +100,18 @@ std::optional<Sophus::SE3f> Projection::align(const SemanticCloud& source, size_
         if(chi > 0.f && std::abs(chi - chi_i) <= convergence_criterion * chi) break;
         chi = chi_i;
     }
-    // determine ratio of inliers (bidirectional)
-    // correspond(source_, target_, correspondences);
-    // const size_t source_inlier_count = std::count_if(correspondences.begin(), correspondences.end(),
-    //     [inlier_distance_sq](const auto& correspondence) {
-    //         const auto& [source_point, target_point, distance_sq] = correspondence;
-    //         return distance_sq <= inlier_distance_sq;
-    //     });
-    // correspond(target_, source_, correspondences);
-    // const size_t target_inlier_count = std::count_if(correspondences.begin(), correspondences.end(),
-    //     [inlier_distance_sq](const auto& correspondence) {
-    //         const auto& [target_point, source_point, distance_sq] = correspondence;
-    //         return distance_sq <= inlier_distance_sq;
-    //     });
-    // reject the solution if it required max_iterations OR there was a bad fit
-    if(iter == max_iterations || correspondences.size() * 2 < std::ranges::distance(source_.view())) { // || target_inlier_count * 2 < std::ranges::distance(target_.view())) {
+#if 0
+    std::unordered_set<Eigen::Vector2i> coverage;
+    for(auto [source_point, target_point, distance_sq] : correspondences) {
+        coverage.emplace(target_.point_to_voxel(target_point));
+    }
+    if(iter == max_iterations || coverage.size() * 3 < target_.size()) {
+        target_.clear();
+        target_.extend(points);
+        return std::nullopt;
+    }
+#endif
+    if(iter == max_iterations || correspondences.size() * 2 < std::ranges::distance(source_.view())) {
         target_.clear();
         target_.extend(points);
         return std::nullopt;
