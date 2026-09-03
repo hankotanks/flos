@@ -10,7 +10,7 @@ namespace {
 void correspond(const VoxelMap<2, BirdsEyeCloud>& source, const VoxelMap<2, BirdsEyeCloud>& target, std::vector<std::tuple<const Eigen::Vector2f*, const Eigen::Vector2f*, float>>& correspondences) {
     correspondences.clear();
     tbb::enumerable_thread_specific<std::vector<std::tuple<const Eigen::Vector2f*, const Eigen::Vector2f*, float>>> correspondence_pool;
-    tbb::parallel_for(source.view(), [&target, &correspondence_pool](auto& range) {
+    tbb::parallel_for(source.points(), [&target, &correspondence_pool](auto& range) {
         for(const auto& [query, data] : range) {
             auto neighbor = target.closest(query, data);
             if(!neighbor) continue;

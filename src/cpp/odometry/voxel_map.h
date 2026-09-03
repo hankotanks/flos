@@ -265,17 +265,17 @@ public:
         typename tsl::robin_map<Eigen::Vector<int, D>, Voxel>::const_iterator end_;
     };
 public:
-    class view_local : public std::ranges::view_interface<view_local> {
+    class view_radius : public std::ranges::view_interface<view_radius> {
         friend class VoxelMap<D, F>;
-        view_local(const VoxelMap<D, F>& map, const Eigen::Vector<float, D>& origin, float radius);
+        view_radius(const VoxelMap<D, F>& map, const Eigen::Vector<float, D>& origin, float radius);
     public:
-        view_local(view_local& other, tbb::split);
+        view_radius(view_radius& other, tbb::split);
         // helpers
         inline bool empty() const noexcept { return begin_ == end_; }
         inline bool is_divisible() const noexcept { return end_ - begin_ > 1; }
         // iterator inner class
         class iterator {
-            friend class view_local;
+            friend class view_radius;
         public:
             // proxy for the reference type (unable to construct the pair of pointers without getting local copies)
             struct proxy {
@@ -300,10 +300,10 @@ public:
             friend bool operator==(const iterator& lhs, const iterator& rhs) noexcept { return lhs.range_ == rhs.range_ && lhs.i_ == rhs.i_ && lhs.j_ == rhs.j_; }
             friend bool operator!=(const iterator& lhs, const iterator& rhs) noexcept { return !(lhs == rhs); }
         private:
-            iterator(const view_local* range, size_t i);
+            iterator(const view_radius* range, size_t i);
             void satisfy();
         private:
-            const view_local* range_{nullptr};
+            const view_radius* range_{nullptr};
             size_t i_{0};
             size_t j_{0};
             const Voxel* voxel_{nullptr};
@@ -321,11 +321,60 @@ public:
         size_t end_{1};
     };
 public:
-    view_global view() const {
-        return {*this};
+    class view_voxels : public std::ranges::view_interface<view_voxels> {
+        friend class VoxelMap<D, F>;
+        using map_iterator = typename tsl::robin_map<Eigen::Vector<int, D>, Voxel>::const_iterator;
+        view_voxels(const VoxelMap<D, F>& map) : begin_(map.map_.cbegin()), end_(map.map_.cend()) { /* STUB */ }
+    public:
+        bool empty() const noexcept { return begin_ == end_; }
+        // iterator inner class
+        class iterator {
+            friend class view_voxels;
+        public:
+            // proxy for reference type
+            struct proxy {
+                const Eigen::Vector<int, D>& first;
+                const typename F::voxel_data_t& second;
+                const proxy* operator->() const noexcept { return this; }
+            };
+            // iterator descriptor
+            using iterator_concept = std::forward_iterator_tag;
+            using iterator_category = std::forward_iterator_tag;
+            using value_type = std::conditional_t<DefaultFrameType<D, F> || std::is_same_v<typename F::voxel_data_t, VoxelDataBase<F, typename F::point_data_t>>, 
+                Eigen::Vector<int, D>, std::pair<Eigen::Vector<int, D>, typename F::voxel_data_t>>;
+            using difference_type = std::ptrdiff_t;
+            using reference = std::conditional_t<DefaultFrameType<D, F> || std::is_same_v<typename F::voxel_data_t, VoxelDataBase<F, typename F::point_data_t>>, const Eigen::Vector<int, D>&, proxy>;
+            using pointer = std::conditional_t<DefaultFrameType<D, F> || std::is_same_v<typename F::voxel_data_t, VoxelDataBase<F, typename F::point_data_t>>, const Eigen::Vector<int, D>*, proxy>;
+            // default constructor
+            iterator() = default;
+            // operators
+            reference operator*() const noexcept;
+            pointer operator->() const noexcept;
+            iterator& operator++() noexcept;
+            iterator operator++(int) noexcept;
+            friend bool operator==(const iterator& lhs, const iterator& rhs) noexcept { return lhs.voxel_ == rhs.voxel_; }
+            friend bool operator!=(const iterator& lhs, const iterator& rhs) noexcept { return !(lhs == rhs); }
+        private:
+            explicit iterator(map_iterator voxel) : voxel_(voxel) { /* STUB */ }
+        private:
+            map_iterator voxel_{};
+        };
+        // iterator initializers
+        iterator begin() const { return iterator{begin_}; }
+        iterator end() const { return iterator{end_}; }
+    private:
+        map_iterator begin_;
+        map_iterator end_;
+    };
+public:
+    view_global points() const { 
+        return {*this}; 
     }
-    view_local view_within_radius(const Eigen::Vector<float, D>& origin, float radius) const {
-        return {*this, origin, radius};
+    view_radius points_within_radius(const Eigen::Vector<float, D>& origin, float radius) const { 
+        return {*this, origin, radius}; 
+    }
+    view_voxels voxels() const { 
+        return {*this}; 
     }
 };
 

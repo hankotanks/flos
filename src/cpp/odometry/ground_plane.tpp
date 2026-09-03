@@ -13,7 +13,7 @@ template<typename Predicate>
 std::function<void(Eigen::Vector2f&, float&)> GroundPlane::update(const VoxelMap<3, SemanticCloud>& map, const Eigen::Vector3f& origin, Predicate&& pred) {
     // point candidates
     tbb::enumerable_thread_specific<std::vector<Eigen::Vector3f>> point_pool([] { return std::vector<Eigen::Vector3f>{}; });
-    tbb::parallel_for(map.view_within_radius(origin, max_distance_), [&pred, &point_pool](auto& range) {
+    tbb::parallel_for(map.points_within_radius(origin, max_distance_), [&pred, &point_pool](auto& range) {
         auto& local = point_pool.local();
         for(const auto& [point, data] : range) {
             if(!pred(data)) continue;

@@ -62,7 +62,7 @@ public:
     // NOTE: deskews and transforms points by the solution pose
     const Sophus::SE3f& register_to_map(util::Cloud& points, TimeSystem::Stamp stamp = TimeSystem::Stamp{}) noexcept;
     // get a view into the current map
-    inline auto view() const { return map_.view(); }
+    inline auto points() const { return map_.points(); }
 public:
     struct Statistics {
         struct {

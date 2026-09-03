@@ -39,6 +39,26 @@ protected:
         RerunNode::publish_points(cloud, "map");
     }
 
+    virtual void publish_local_map_belief(TimeSystem::Stamp stamp, const VoxelMap<3, SemanticCloud>::view_voxels& voxels, float voxel_size) override {
+        RerunNode::set_stamp(stamp);
+        std::map<uint8_t, std::vector<rerun::datatypes::Vec3D>> centers;
+        std::map<uint8_t, std::vector<rerun::datatypes::Vec3D>> sizes;
+        for(const auto& [voxel, belief] : voxels) {
+            if(belief.confidence_[belief.prediction_] < 0.5f) continue;
+            centers[belief.prediction_].emplace_back(
+                (static_cast<float>(voxel[0]) + 0.5f) * voxel_size,
+                (static_cast<float>(voxel[1]) + 0.5f) * voxel_size,
+                (static_cast<float>(voxel[2]) + 0.5f) * voxel_size);
+            sizes[belief.prediction_].emplace_back(voxel_size, voxel_size, voxel_size);
+        }
+        for(const auto& [semantics, class_centers] : centers) {
+            if(class_centers.empty()) continue;
+            const auto& class_sizes = sizes.at(semantics);
+            auto msg = rerun::archetypes::Boxes3D::from_centers_and_sizes(class_centers, class_sizes);
+            rr_.log("map/belief/" + std::to_string(semantics), msg);
+        }
+    }
+
     virtual void publish_pose(TimeSystem::Stamp stamp, const std_msgs::msg::Header::_frame_id_type& frame_id, const Sophus::SE3f& pose) override {
         RerunNode::set_stamp(stamp);
         const auto& t = pose.translation();
@@ -97,13 +117,13 @@ protected:
         RerunNode::set_stamp(stamp);
         // previous
         std::vector<rerun::Vec2D> points_previous;
-        for(const auto& [point, data] : previous.view()) {
+        for(const auto& [point, data] : previous.points()) {
             points_previous.emplace_back(point.x(), point.y());
         }
         rr_.log("scan/projection/previous", rerun::Points2D(points_previous));
         // current
         std::vector<rerun::Vec2D> points_current;
-        for(const auto& [point, data] : current.view()) {
+        for(const auto& [point, data] : current.points()) {
             points_current.emplace_back(point.x(), point.y());
         }
         rr_.log("scan/projection/current", rerun::Points2D(points_current));

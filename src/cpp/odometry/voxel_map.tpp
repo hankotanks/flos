@@ -563,7 +563,7 @@ void VoxelMap<D, F>::view_global::iterator::satisfy() {
 
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
-VoxelMap<D, F>::view_local::view_local(const VoxelMap<D, F>& map, const Eigen::Vector<float, D>& origin, float radius) : 
+VoxelMap<D, F>::view_radius::view_radius(const VoxelMap<D, F>& map, const Eigen::Vector<float, D>& origin, float radius) : 
     map_(&map), 
     origin_(origin), 
     radius_sq_(radius * radius), 
@@ -574,7 +574,7 @@ VoxelMap<D, F>::view_local::view_local(const VoxelMap<D, F>& map, const Eigen::V
 
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
-VoxelMap<D, F>::view_local::view_local(view_local& other, tbb::split) : 
+VoxelMap<D, F>::view_radius::view_radius(view_radius& other, tbb::split) : 
     map_(other.map_), 
     origin_(other.origin_), 
     radius_sq_(other.radius_sq_), 
@@ -588,7 +588,7 @@ VoxelMap<D, F>::view_local::view_local(view_local& other, tbb::split) :
 
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
-VoxelMap<D, F>::view_local::iterator::reference VoxelMap<D, F>::view_local::iterator::operator*() const noexcept { 
+VoxelMap<D, F>::view_radius::iterator::reference VoxelMap<D, F>::view_radius::iterator::operator*() const noexcept { 
     if constexpr (DefaultFrameType<D, F>) {
         return voxel_->points_[j_];
     } else {
@@ -601,7 +601,7 @@ VoxelMap<D, F>::view_local::iterator::reference VoxelMap<D, F>::view_local::iter
 
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
-VoxelMap<D, F>::view_local::iterator::pointer VoxelMap<D, F>::view_local::iterator::operator->() const noexcept { 
+VoxelMap<D, F>::view_radius::iterator::pointer VoxelMap<D, F>::view_radius::iterator::operator->() const noexcept { 
     if constexpr (DefaultFrameType<D, F>) {
         return std::addressof(voxel_->points_[j_]);
     } else {
@@ -611,15 +611,15 @@ VoxelMap<D, F>::view_local::iterator::pointer VoxelMap<D, F>::view_local::iterat
 
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
-VoxelMap<D, F>::view_local::iterator& VoxelMap<D, F>::view_local::iterator::operator++() {
+VoxelMap<D, F>::view_radius::iterator& VoxelMap<D, F>::view_radius::iterator::operator++() {
     ++j_;
-    VoxelMap<D, F>::view_local::iterator::satisfy();
+    VoxelMap<D, F>::view_radius::iterator::satisfy();
     return *this;
 }
 
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
-VoxelMap<D, F>::view_local::iterator VoxelMap<D, F>::view_local::iterator::operator++(int) {
+VoxelMap<D, F>::view_radius::iterator VoxelMap<D, F>::view_radius::iterator::operator++(int) {
     auto copy = *this;
     ++(*this);
     return copy;
@@ -627,13 +627,13 @@ VoxelMap<D, F>::view_local::iterator VoxelMap<D, F>::view_local::iterator::opera
 
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
-VoxelMap<D, F>::view_local::iterator::iterator(const typename VoxelMap<D, F>::view_local* range, size_t i) : range_(range), i_(i) {
-    VoxelMap<D, F>::view_local::iterator::satisfy();
+VoxelMap<D, F>::view_radius::iterator::iterator(const typename VoxelMap<D, F>::view_radius* range, size_t i) : range_(range), i_(i) {
+    VoxelMap<D, F>::view_radius::iterator::satisfy();
 }
 
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
-void VoxelMap<D, F>::view_local::iterator::satisfy() {
+void VoxelMap<D, F>::view_radius::iterator::satisfy() {
     while(i_ < range_->end_) {
         if(voxel_ != nullptr) {
             while(j_ < voxel_->points_.size()) {
@@ -658,4 +658,39 @@ void VoxelMap<D, F>::view_local::iterator::satisfy() {
     }
     voxel_ = nullptr;
     j_ = 0;
+}
+
+template<size_t D, typename F>
+requires(ValidVoxelMap<D, F>)
+VoxelMap<D, F>::view_voxels::iterator::reference VoxelMap<D, F>::view_voxels::iterator::operator*() const noexcept {
+    if constexpr (DefaultFrameType<D, F> || std::is_same_v<typename F::voxel_data_t, VoxelDataBase<F, typename F::point_data_t>>) {
+        return voxel_->first;
+    } else {
+        return {voxel_->first, voxel_->second.data_};
+    }
+}
+
+template<size_t D, typename F>
+requires(ValidVoxelMap<D, F>)
+VoxelMap<D, F>::view_voxels::iterator::pointer VoxelMap<D, F>::view_voxels::iterator::operator->() const noexcept {
+    if constexpr (DefaultFrameType<D, F> || std::is_same_v<typename F::voxel_data_t, VoxelDataBase<F, typename F::point_data_t>>) {
+        return voxel_->first;
+    } else {
+        return {voxel_->first, voxel_->second.data_};
+    }
+}
+
+template<size_t D, typename F>
+requires(ValidVoxelMap<D, F>)
+VoxelMap<D, F>::view_voxels::iterator& VoxelMap<D, F>::view_voxels::iterator::operator++() noexcept {
+    ++voxel_;
+    return *this;
+}
+
+template<size_t D, typename F>
+requires(ValidVoxelMap<D, F>)
+VoxelMap<D, F>::view_voxels::iterator VoxelMap<D, F>::view_voxels::iterator::operator++(int) noexcept {
+    auto result = *this;
+    ++(*this);
+    return result;
 }
