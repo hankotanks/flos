@@ -65,6 +65,33 @@ protected:
         rr_.log("progress/percent", rerun::Scalar(percent));
         rr_.log("progress/remaining", rerun::Scalar(remaining));
     }
+    
+    virtual void publish_ground_plane(TimeSystem::Stamp stamp, const Eigen::Vector3f& centroid, const Eigen::Vector3f& normal, float radius) override {
+        RerunNode::set_stamp(stamp);
+        // plane
+        const Eigen::Vector3f n = normal.normalized();
+        // orthonormal vectors
+        const Eigen::Vector3f ref = (std::abs(n.z()) < 0.9f) ? Eigen::Vector3f::UnitZ() : Eigen::Vector3f::UnitX();
+        const Eigen::Vector3f t1 = n.cross(ref).normalized();
+        const Eigen::Vector3f t2 = n.cross(t1).normalized();
+        // vertices
+        static constexpr size_t SEGMENTS{64}; // triangle fan 'resolution'
+        std::vector<rerun::Position3D> vertices;
+        vertices.reserve(SEGMENTS + 1);
+        vertices.emplace_back(centroid.x(), centroid.y(), centroid.z());
+        for(uint32_t i = 0; i < SEGMENTS; ++i) {
+            const float theta = 2.f * static_cast<float>(M_PI) * static_cast<float>(i) / static_cast<float>(SEGMENTS);
+            const Eigen::Vector3f p = centroid + radius * (std::cos(theta) * t1 + std::sin(theta) * t2);
+            vertices.emplace_back(p.x(), p.y(), p.z());
+        }
+        // indices
+        std::vector<rerun::components::TriangleIndices> triangles;
+        triangles.reserve(SEGMENTS);
+        for(uint32_t i = 0; i < SEGMENTS; ++i) {
+            triangles.emplace_back(std::array<uint32_t, 3>{0, 1 + i, static_cast<uint32_t>((i + 1) % SEGMENTS) + 1});
+        }
+        rr_.log("map/ground_plane", rerun::archetypes::Mesh3D(vertices).with_triangle_indices(triangles));
+    };
 
     virtual void publish_projection(TimeSystem::Stamp stamp, const VoxelMap<2, BirdsEyeCloud>& previous, const VoxelMap<2, BirdsEyeCloud>& current) override {
         RerunNode::set_stamp(stamp);

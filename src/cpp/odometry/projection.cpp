@@ -3,19 +3,19 @@
 
 // system
 #include <tuple>
-#include <unordered_set>
+#include <algorithm>
 #include <utility>
 
 namespace {
-void correspond(const VoxelMap<2, BirdsEyeCloud>& source, const VoxelMap<2, BirdsEyeCloud>& target, std::vector<std::tuple<const Eigen::Vector2f&, const Eigen::Vector2f&, float>>& correspondences) {
+void correspond(const VoxelMap<2, BirdsEyeCloud>& source, const VoxelMap<2, BirdsEyeCloud>& target, std::vector<std::tuple<const Eigen::Vector2f*, const Eigen::Vector2f*, float>>& correspondences) {
     correspondences.clear();
-    tbb::enumerable_thread_specific<std::vector<std::tuple<const Eigen::Vector2f&, const Eigen::Vector2f&, float>>> correspondence_pool;
+    tbb::enumerable_thread_specific<std::vector<std::tuple<const Eigen::Vector2f*, const Eigen::Vector2f*, float>>> correspondence_pool;
     tbb::parallel_for(source.view(), [&target, &correspondence_pool](auto& range) {
         for(const auto& [query, data] : range) {
             auto neighbor = target.closest(query, data);
             if(!neighbor) continue;
             auto& local = correspondence_pool.local();
-            local.emplace_back(query, neighbor->point, neighbor->distance_sq);
+            local.emplace_back(&query, &neighbor->point, neighbor->distance_sq);
         }
     });
     for(auto& local : correspondence_pool) {
@@ -55,13 +55,21 @@ std::optional<Sophus::SE3f> Projection::align(const SemanticCloud& source, size_
     // chi termination criterion
     float chi = -1.f;
     // preallocate correspondence vector
-    std::vector<std::tuple<const Eigen::Vector2f&, const Eigen::Vector2f&, float>> correspondences;
+    std::vector<std::tuple<const Eigen::Vector2f*, const Eigen::Vector2f*, float>> correspondences;
     // build transform
     Sophus::SE2f T{};
     size_t iter;
     for(iter = 0; iter < max_iterations; ++iter) {
         // build bidirectional correspondences
         correspond(source_, target_, correspondences);
+        std::sort(correspondences.begin(), correspondences.end(), [](const auto& a, const auto& b) {
+                const auto* ta = std::get<1>(a);
+                const auto* tb = std::get<1>(b);
+                if(ta != tb) return ta < tb;
+                return std::get<2>(a) < std::get<2>(b); });
+        correspondences.erase(std::unique(correspondences.begin(), correspondences.end(), 
+            [](const auto& a, const auto& b) { return std::get<1>(a) == std::get<1>(b); }),
+            correspondences.end());
         if(correspondences.size() < 3) {
             target_.clear();
             target_.extend(points);
@@ -72,8 +80,8 @@ std::optional<Sophus::SE3f> Projection::align(const SemanticCloud& source, size_
         Eigen::Vector2f target_mean = Eigen::Vector2f::Zero();
         float chi_i = 0.f;
         for(const auto& [source_point, target_point, distance_sq] : correspondences) {
-            source_mean += source_point;
-            target_mean += target_point;
+            source_mean += *source_point;
+            target_mean += *target_point;
             chi_i += distance_sq;
         }
         const float count_inv = 1.f / static_cast<float>(correspondences.size());
@@ -84,8 +92,8 @@ std::optional<Sophus::SE3f> Projection::align(const SemanticCloud& source, size_
         float dot = 0.f;
         float cross = 0.f;
         for(const auto& [source_point, target_point, distance_sq] : correspondences) {
-            const Eigen::Vector2f source_norm = source_point - source_mean;
-            const Eigen::Vector2f target_norm = target_point - target_mean;
+            const Eigen::Vector2f source_norm = *source_point - source_mean;
+            const Eigen::Vector2f target_norm = *target_point - target_mean;
             dot += source_norm.dot(target_norm);
             cross += source_norm.x() * target_norm.y() - source_norm.y() * target_norm.x();
         }
@@ -111,7 +119,7 @@ std::optional<Sophus::SE3f> Projection::align(const SemanticCloud& source, size_
         return std::nullopt;
     }
 #endif
-    if(iter == max_iterations || correspondences.size() * 2 < std::ranges::distance(source_.view())) {
+    if(iter == max_iterations) { // || correspondences.size() * 2 < std::ranges::distance(source_.view())) {
         target_.clear();
         target_.extend(points);
         return std::nullopt;

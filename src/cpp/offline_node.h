@@ -97,6 +97,7 @@ public:
                     this->publish_local_map(stamp, out);
                 }
                 this->publish_pose(stamp, header.frame_id, pose);
+                this->publish_ground_plane(stamp, odometry_system_.projection_.ground_.centroid_, odometry_system_.projection_.ground_.n_, odometry_config_.config.max_distance_ground);
                 if(projection_target_) this->publish_projection(stamp, *projection_target_, odometry_system_.projection_.target_);
                 projection_target_.emplace(odometry_system_.projection_.target_);
             }
@@ -109,6 +110,7 @@ protected:
     virtual void publish_scan(TimeSystem::Stamp stamp, const util::Cloud& cloud) { /* STUB */ };
     virtual void publish_local_map(TimeSystem::Stamp stamp, const util::Cloud& cloud) { /* STUB */ };
     virtual void publish_pose(TimeSystem::Stamp stamp, const std_msgs::msg::Header::_frame_id_type& frame_id, const Sophus::SE3f& pose) { /* STUB */ };
+    virtual void publish_ground_plane(TimeSystem::Stamp stamp, const Eigen::Vector3f& centroid, const Eigen::Vector3f& normal, float radius) { /* STUB */ };
     virtual void publish_projection(TimeSystem::Stamp stamp, const VoxelMap<2, BirdsEyeCloud>& previous, const VoxelMap<2, BirdsEyeCloud>& current) { /* STUB */ };
     virtual void publish_progress(TimeSystem::Stamp stamp, float percent, float remaining) { /* STUB */ }
     virtual void publish_statistics(TimeSystem::Stamp stamp, const OdometrySystem::Statistics& statistics) { /* STUB */ };

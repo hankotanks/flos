@@ -5,6 +5,7 @@
 #include "odometry/semantic_cloud.h"
 
 class GroundPlane {
+    friend class OfflineNode;
 public:
     explicit GroundPlane(float max_distance, float inlier_ratio, float inlier_distance);
     GroundPlane() = delete;
