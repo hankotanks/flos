@@ -43,8 +43,8 @@ protected:
         RerunNode::set_stamp(stamp);
         std::map<uint8_t, std::vector<rerun::datatypes::Vec3D>> centers;
         std::map<uint8_t, std::vector<rerun::datatypes::Vec3D>> sizes;
-        for(const auto& [voxel, belief] : voxels) {
-            if(belief.confidence_[belief.prediction_] < 0.5f) continue;
+        for(const auto& [voxel, belief, fill] : voxels) {
+            if(fill < RerunNode::VOXEL_MAP_FILL_THRESHOLD) continue;
             centers[belief.prediction_].emplace_back(
                 (static_cast<float>(voxel[0]) + 0.5f) * voxel_size,
                 (static_cast<float>(voxel[1]) + 0.5f) * voxel_size,
@@ -54,7 +54,8 @@ protected:
         for(const auto& [semantics, class_centers] : centers) {
             if(class_centers.empty()) continue;
             const auto& class_sizes = sizes.at(semantics);
-            auto msg = rerun::archetypes::Boxes3D::from_centers_and_sizes(class_centers, class_sizes);
+            auto msg = rerun::archetypes::Boxes3D::from_centers_and_sizes(class_centers, class_sizes)
+                .with_fill_mode(rerun::components::FillMode::Solid);;
             rr_.log("map/belief/" + std::to_string(semantics), msg);
         }
     }
@@ -153,6 +154,7 @@ private:
     // rerun
     static constexpr float DEFAULT_POINT_RADIUS{0.2f};
     static constexpr size_t MEMORY_LIMIT{4};
+    static constexpr float VOXEL_MAP_FILL_THRESHOLD{0.5f};
     rerun::RecordingStream rr_;
 private:
     size_t count_{0};

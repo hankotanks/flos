@@ -663,20 +663,22 @@ void VoxelMap<D, F>::view_radius::iterator::satisfy() {
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
 VoxelMap<D, F>::view_voxels::iterator::reference VoxelMap<D, F>::view_voxels::iterator::operator*() const noexcept {
+    float fill = (voxel_capacity_ > 0) ? static_cast<float>(voxel_->second.points_.size()) / static_cast<float>(voxel_capacity_) : 1.f;
     if constexpr (DefaultFrameType<D, F> || std::is_same_v<typename F::voxel_data_t, VoxelDataBase<F, typename F::point_data_t>>) {
-        return voxel_->first;
+        return {voxel_->first, fill};
     } else {
-        return {voxel_->first, voxel_->second.data_};
+        return {voxel_->first, voxel_->second.data_, fill};
     }
 }
 
 template<size_t D, typename F>
 requires(ValidVoxelMap<D, F>)
 VoxelMap<D, F>::view_voxels::iterator::pointer VoxelMap<D, F>::view_voxels::iterator::operator->() const noexcept {
+    float fill = (voxel_capacity_ > 0) ? static_cast<float>(voxel_->second.points_.size()) / static_cast<float>(voxel_capacity_) : 1.f;
     if constexpr (DefaultFrameType<D, F> || std::is_same_v<typename F::voxel_data_t, VoxelDataBase<F, typename F::point_data_t>>) {
-        return voxel_->first;
+        return {voxel_->first, fill};
     } else {
-        return {voxel_->first, voxel_->second.data_};
+        return {voxel_->first, voxel_->second.data_, fill};
     }
 }
 

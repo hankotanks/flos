@@ -324,7 +324,7 @@ public:
     class view_voxels : public std::ranges::view_interface<view_voxels> {
         friend class VoxelMap<D, F>;
         using map_iterator = typename tsl::robin_map<Eigen::Vector<int, D>, Voxel>::const_iterator;
-        view_voxels(const VoxelMap<D, F>& map) : begin_(map.map_.cbegin()), end_(map.map_.cend()) { /* STUB */ }
+        view_voxels(const VoxelMap<D, F>& map) : begin_(map.map_.cbegin()), end_(map.map_.cend()), voxel_capacity_(map.voxel_capacity_) { /* STUB */ }
     public:
         bool empty() const noexcept { return begin_ == end_; }
         // iterator inner class
@@ -335,16 +335,17 @@ public:
             struct proxy {
                 const Eigen::Vector<int, D>& first;
                 const typename F::voxel_data_t& second;
+                float fill;
                 const proxy* operator->() const noexcept { return this; }
             };
             // iterator descriptor
             using iterator_concept = std::forward_iterator_tag;
             using iterator_category = std::forward_iterator_tag;
             using value_type = std::conditional_t<DefaultFrameType<D, F> || std::is_same_v<typename F::voxel_data_t, VoxelDataBase<F, typename F::point_data_t>>, 
-                Eigen::Vector<int, D>, std::pair<Eigen::Vector<int, D>, typename F::voxel_data_t>>;
+                std::pair<Eigen::Vector<int, D>, float>, std::tuple<Eigen::Vector<int, D>, typename F::voxel_data_t, float>>;
             using difference_type = std::ptrdiff_t;
-            using reference = std::conditional_t<DefaultFrameType<D, F> || std::is_same_v<typename F::voxel_data_t, VoxelDataBase<F, typename F::point_data_t>>, const Eigen::Vector<int, D>&, proxy>;
-            using pointer = std::conditional_t<DefaultFrameType<D, F> || std::is_same_v<typename F::voxel_data_t, VoxelDataBase<F, typename F::point_data_t>>, const Eigen::Vector<int, D>*, proxy>;
+            using reference = std::conditional_t<DefaultFrameType<D, F> || std::is_same_v<typename F::voxel_data_t, VoxelDataBase<F, typename F::point_data_t>>, std::pair<const Eigen::Vector<int, D>&, float>, proxy>;
+            using pointer = std::conditional_t<DefaultFrameType<D, F> || std::is_same_v<typename F::voxel_data_t, VoxelDataBase<F, typename F::point_data_t>>, std::pair<const Eigen::Vector<int, D>*, float>, proxy>;
             // default constructor
             iterator() = default;
             // operators
@@ -355,16 +356,19 @@ public:
             friend bool operator==(const iterator& lhs, const iterator& rhs) noexcept { return lhs.voxel_ == rhs.voxel_; }
             friend bool operator!=(const iterator& lhs, const iterator& rhs) noexcept { return !(lhs == rhs); }
         private:
-            explicit iterator(map_iterator voxel) : voxel_(voxel) { /* STUB */ }
+            explicit iterator(map_iterator voxel, size_t voxel_capacity) : voxel_(voxel), voxel_capacity_(voxel_capacity) { /* STUB */ }
         private:
             map_iterator voxel_{};
+            size_t voxel_capacity_;
         };
         // iterator initializers
-        iterator begin() const { return iterator{begin_}; }
-        iterator end() const { return iterator{end_}; }
+        iterator begin() const { return iterator{begin_, voxel_capacity_}; }
+        iterator end() const { return iterator{end_, voxel_capacity_}; }
     private:
         map_iterator begin_;
         map_iterator end_;
+        // used for determing a voxel's 'fill level'
+        size_t voxel_capacity_;
     };
 public:
     view_global points() const { 
