@@ -17,7 +17,9 @@
 #include "util/cloud.h"
 #include "util/profiler.h"
 
-OdometrySystem::OdometrySystem(const Config& config) : util::Profiler("OdometrySystem"),
+OdometrySystem::OdometrySystem(const Config& config) : OdometrySystem(config, nullptr) { /* STUB */ }
+
+OdometrySystem::OdometrySystem(const Config& config, util::Profiler* profiler) : util::Profiler("OdometrySystem", profiler),
     config_(config),
     map_(config_.max_distance, config_.voxel_size, config_.voxel_capacity),
     projection_(config_.max_distance, config_.max_distance_ground, config_.voxel_size, config_.projection.iou, 

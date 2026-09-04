@@ -51,6 +51,7 @@ public:
     };
 public:
     explicit OdometrySystem(const Config& config);
+    explicit OdometrySystem(const Config& config, util::Profiler* profiler);
     OdometrySystem() = delete;
     OdometrySystem(const OdometrySystem&) = delete;
     OdometrySystem(OdometrySystem&&) = delete;

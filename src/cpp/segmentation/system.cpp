@@ -29,6 +29,10 @@ void predict(std::span<uint8_t> prediction, const std::span<std::span<const floa
 }
 } // private scope
 
+SegmentationSystem::SegmentationSystem(const Config& config) : SegmentationSystem(config, nullptr) { /* STUB */ }
+SegmentationSystem::SegmentationSystem(const Config& config, util::Profiler* profiler) : 
+    util::Profiler("SegmentationSystem", profiler), config_(config) { /* STUB */ }
+
 SegmentationSystem::Model::Model(const SegmentationSystem::Config& config, const std::filesystem::path& path_to_model, util::Profiler* profiler) :
     profiler_(profiler),
     config_(config),

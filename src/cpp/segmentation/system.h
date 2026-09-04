@@ -25,6 +25,15 @@ public:
         friend std::ostream& operator<<(std::ostream& stream, const Config& config);
     };
 public:
+    explicit SegmentationSystem(const Config& config);
+    explicit SegmentationSystem(const Config& config, util::Profiler* profiler);
+    SegmentationSystem() = delete;
+    SegmentationSystem(const SegmentationSystem&) = delete;
+    SegmentationSystem(SegmentationSystem&&) = delete;
+    SegmentationSystem& operator=(const SegmentationSystem&) = delete;
+    SegmentationSystem& operator=(SegmentationSystem&&) = delete;
+    ~SegmentationSystem() = default;
+public:
     class Model {
         friend SegmentationSystem;
         explicit Model(const SegmentationSystem::Config& config, const std::filesystem::path& path_to_model, util::Profiler* profiler);
@@ -46,15 +55,10 @@ public:
         const SegmentationSystem::Config& config_;
     };
 public:
-    explicit SegmentationSystem(const Config& config) : util::Profiler("SegmentationSystem"), config_(config) { /* STUB */ }
-    SegmentationSystem() = delete;
-    SegmentationSystem(const SegmentationSystem&) = delete;
-    SegmentationSystem(SegmentationSystem&&) = delete;
-    SegmentationSystem& operator=(const SegmentationSystem&) = delete;
-    SegmentationSystem& operator=(SegmentationSystem&&) = delete;
-    ~SegmentationSystem() = default;
-public:
+    // depending on the usage of SegmentationSystem,
+    // you might want to preprocess using the system itself or SegmentationSystem::Model
     void preprocess(util::Cloud& cloud);
+    // create the SegmentationSystem::Model
     SegmentationSystem::Model load(const std::filesystem::path& path_to_model);
 private:
     // NOTE: Config::voxel_size is scaled by this constant for unified parameter passing between segmentation and odometry

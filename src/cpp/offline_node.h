@@ -41,14 +41,16 @@ public:
     explicit OfflineNode() : rclcpp::Node(NODE_NAME), util::Profiler(NODE_NAME),
         loader_(Dataloader::choose(this)),
         segmentation_config_(this),
-        segmentation_system_(segmentation_config_.config),
+        segmentation_system_(segmentation_config_.config, this),
         odometry_config_(this),
-        odometry_system_(odometry_config_.config) {
+        odometry_system_(odometry_config_.config, this) {
         if(!rclcpp::ok()) return;
         util::param_opt_path(this, "path_to_result", path_to_result_, false, false, true);     
         util::param_opt(this, "frames", msg_count_);
         util::param_opt(this, "visualize", visualize_);
         util::param_opt(this, "visualize_map", visualize_map_);
+        // configure the output for the profiler
+        if(!path_to_result_.empty()) util::Profiler::save(path_to_result_ / "profiler.txt");
     }
     // delete extraneous constructors
     OfflineNode(const OfflineNode&) = delete;
