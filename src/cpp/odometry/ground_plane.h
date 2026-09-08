@@ -26,7 +26,7 @@ public:
     std::function<void(Eigen::Vector2f&, float&)> update(const VoxelMap<3, SemanticCloud>& map, const Eigen::Vector3f& origin, Predicate&&);
 private:
     // the desired confidence that our plane fit is correct
-    static constexpr float CONFIDENCE{0.999f};
+    static constexpr float CONFIDENCE{0.9999f};
     // RANSAC iteration count
     size_t iterations_;
     // parameters from OdometrySystem::Config
