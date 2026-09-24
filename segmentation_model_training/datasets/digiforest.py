@@ -5,8 +5,8 @@ import typing
 import numpy as np
 import torch
 
-from segmentation_model_training.utils.cloud import Cloud
-from segmentation_model_training.datasets.base import BaseDataset
+from ..utils.cloud import Cloud
+from .base import BaseDataset
 
 class Labels:
     class From(enum.Enum):
@@ -78,13 +78,13 @@ class Labels:
 
         return remapped_labels
     
-def print_label_distribution(labels, name = ""):
-    counts = np.bincount(labels, minlength = len(Labels.To))
-    proportions = counts / len(labels)
-
-    print(f"{name} ({len(labels)} points):")
-    for idx, (count, prop) in enumerate(zip(counts, proportions)):
-        print(f"  {Labels.To(idx).name:>8}: {count:>8} ({prop * 100:6.2f}%)")
+# def print_label_distribution(labels, name = ""):
+#     counts = np.bincount(labels, minlength = len(Labels.To))
+#     proportions = counts / len(labels)
+# 
+#     print(f"{name} ({len(labels)} points):")
+#     for idx, (count, prop) in enumerate(zip(counts, proportions)):
+#         print(f"  {Labels.To(idx).name:>8}: {count:>8} ({prop * 100:6.2f}%)")
 
 # CLASS_WEIGHTS = np.ones(len(Labels.To), dtype = np.float32)
 
@@ -249,7 +249,7 @@ class DigiForestDataset(BaseDataset):
             if instance_v.shape[0] != pos.shape[0]:
                 raise ValueError(f"instance_v shape {instance_v.shape}, pos shape {pos.shape}, unequal points")
             
-        print_label_distribution(semantics, name = "before")
+        # print_label_distribution(semantics, name = "before")
         if self.voxel_size is not None:
             pos, intensity, semantics, instance_v = voxel_down_sample(
                 pos,
@@ -259,7 +259,7 @@ class DigiForestDataset(BaseDataset):
                 instance_v,
             )
 
-        print_label_distribution(semantics, name = "after")
+        # print_label_distribution(semantics, name = "after")
             
         pos_t = torch.from_numpy(pos)
         data = {"pos": pos_t}

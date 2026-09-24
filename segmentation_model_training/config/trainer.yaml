@@ -1,7 +1,7 @@
 ## standard
 # use as the initial seed for everything
 seed: 42
-max_epochs: 1199
+max_epochs: 750
 checkpoint_metric_key: val/Mean_IOU
 # runs n val batches, set to -1 to run all batches
 num_sanity_val_steps: 2

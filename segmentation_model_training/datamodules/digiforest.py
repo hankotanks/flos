@@ -3,8 +3,8 @@ import typing
 
 import torch
 
-from segmentation_model_training.datasets.digiforest import DigiForestDataset
-from segmentation_model_training.datamodules.base import BaseDataModule
+from ..datasets.digiforest import DigiForestDataset
+from .base import BaseDataModule
 
 def collate_fn(batch: typing.List[typing.Dict[str, torch.Tensor]]):
     """

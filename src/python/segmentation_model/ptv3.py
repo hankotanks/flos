@@ -18,7 +18,7 @@ import collections
 
 flash_attn = None
 
-from segmentation_model.serialization import encode
+from .serialization import encode
 
 @torch.inference_mode()
 def offset2bincount(offset):

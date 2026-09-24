@@ -4,8 +4,8 @@ import torch.nn as nn
 import torchmetrics
 import torchmetrics.classification
 
-from segmentation_model.classwise_wrapper import ClasswiseWrapper
-from segmentation_model.ptv3 import PointTransformerV3
+from .classwise_wrapper import ClasswiseWrapper
+from .ptv3 import PointTransformerV3
 
 # from softgroup
 class MLP(nn.Sequential):

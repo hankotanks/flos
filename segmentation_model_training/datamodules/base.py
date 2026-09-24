@@ -6,7 +6,7 @@ import torch.utils.data
 
 import lightning.pytorch as pl
 
-from segmentation_model_training.datasets.base import BaseDataset
+from ..datasets.base import BaseDataset
 
 class BaseDataModule(pl.LightningDataModule):
     def __init__(self,

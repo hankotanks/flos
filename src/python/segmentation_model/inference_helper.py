@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from segmentation_model.segmentation_model import PointTransformerV3Lightning
+from .segmentation_model import PointTransformerV3Lightning
 
 import cloud_bindings
 

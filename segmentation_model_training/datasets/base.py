@@ -6,8 +6,8 @@ import functools
 import torch
 import torch.utils.data
 
-from segmentation_model_training.utils.io import load_yaml_or_json
-from segmentation_model_training.utils.serialize import TorchSerializedList
+from ..utils.io import load_yaml_or_json
+from ..utils.serialize import TorchSerializedList
 
 class BaseDataset(torch.utils.data.Dataset):
     """

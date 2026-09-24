@@ -8,7 +8,7 @@ import numpy as np
 import open3d as o3d
 import open3d.core as o3c
 
-from segmentation_model_training.utils.math import lmap
+from .math import lmap
 
 class Cloud:
     """A wrapper around o3d.t.geometry.PointCloud."""
