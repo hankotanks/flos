@@ -8,7 +8,7 @@ import launch_ros
 sys.path.append(str(pathlib.Path(__file__).resolve().parent))
 from util.config import Config
 
-PACKAGE_NAME = 'forest_segmentation'
+PACKAGE_NAME = 'flos'
 
 LOGGER = launch.logging.get_logger(pathlib.Path(__file__).name)
 

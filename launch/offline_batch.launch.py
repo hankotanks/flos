@@ -3,7 +3,7 @@ import pathlib
 import launch
 import ament_index_python
 
-PACKAGE_NAME = 'forest_segmentation'
+PACKAGE_NAME = 'flos'
 
 LOGGER = launch.logging.get_logger(pathlib.Path(__file__).name)
 

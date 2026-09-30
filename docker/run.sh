@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 MOUNT_FLAGS=(
-  -v "${SCRIPT_DIR}/../:/root/ros_ws/src/forest_segmentation"
+  -v "${SCRIPT_DIR}/../:/root/ros_ws/src/flos"
   -v "${SCRIPT_DIR}/.zsh_history:/root/.zsh_history"
 )
 
@@ -32,4 +32,4 @@ podman run -it \
   --device nvidia.com/gpu=all \
   "${MOUNT_FLAGS[@]}" \
   --security-opt label=disable \
-  forest_segmentation_devkit
+  flos_devkit

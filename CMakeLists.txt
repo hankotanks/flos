@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(forest_segmentation VERSION 0.0.1 LANGUAGES CXX)
+project(flos VERSION 0.0.1 LANGUAGES CXX)
 
 if(POLICY CMP0148)
   cmake_policy(SET CMP0148 OLD)

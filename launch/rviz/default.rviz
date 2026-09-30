@@ -89,7 +89,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /forest_segmentation/odometry
+        Value: /flos/odometry
       Value: true
     - Alpha: 1
       Autocompute Intensity Bounds: true
@@ -120,7 +120,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /forest_segmentation/map
+        Value: /flos/map
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
