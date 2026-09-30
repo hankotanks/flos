@@ -15,10 +15,10 @@ fi
 
 while (( $# > 0 )); do
     path_local="$1"
-    path_container="$2"
+    name="$2"
     shift 2
     mkdir -p "$path_local"
-    MOUNT_FLAGS+=(-v "${path_local}:${path_container}")
+    MOUNT_FLAGS+=(-v "${path_local}:/root/ros_ws/${name}")
 done
 
 if [[ -n "${DISPLAY:-}" ]]; then
@@ -26,7 +26,6 @@ if [[ -n "${DISPLAY:-}" ]]; then
     MOUNT_FLAGS+=(--env "QT_X11_NO_MITSHM=1")
     MOUNT_FLAGS+=(--volume /tmp/.X11-unix:/tmp/.X11-unix:rw)
 fi
-
 
 podman run -it \
   --device nvidia.com/gpu=all \
