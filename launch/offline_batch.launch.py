@@ -35,34 +35,30 @@ def resolve_path_argument(context, name, required = False, exists = False):
         return pathlib.Path(raw).resolve(strict = exists)
     except:
         raise RuntimeError(f'failed to resolve {name}: {raw}')
-    
-def resolve_bag(base_path: pathlib.Path):
-    mcap_files = list(base_path.rglob("*.mcap"))
-    if not mcap_files: return None
-    if len(mcap_files) > 1:
-        LOGGER.warning(f'expected a single mcap rosbag, but found multiple: {base_path}')
-        return None
-    return mcap_files[0].resolve(), base_path.name
 
 def setup(context, *args, **kwargs):
     try:
-        path_to_bags = resolve_path_argument(context, 'path_to_bags', required = True, exists = True)
+        path_to_data = resolve_path_argument(context, 'path_to_data', required = True, exists = True)
         path_to_config = resolve_path_argument(context, 'path_to_config', required = True, exists = True)
         path_to_result = resolve_path_argument(context, 'path_to_result', required = True, exists = False)
     except RuntimeError as e:
         LOGGER.error(e.args[0])
         exit(1)
 
-    path_to_bags = [resolve_bag(p) for p in path_to_bags.iterdir() if p.is_dir() and p not in path_to_result.parents]
-    path_to_bags = list(filter(lambda p: p is not None, path_to_bags))
+    path_to_data = [(p, p.stem) for p in path_to_data.iterdir() if p.is_dir() and p not in path_to_result.parents]
+    path_to_data = list(filter(lambda p: p is not None, path_to_data))
 
     path_to_launch = ament_index_python.packages.get_package_share_directory(PACKAGE_NAME)
     path_to_launch = pathlib.Path(path_to_launch).resolve(strict = True)
-    path_to_launch = path_to_launch / 'launch' / 'offline.launch.py'
+    path_to_launch = path_to_launch / 'launch' / 'offline_rerun.launch.py'
+
+    dataset = launch.substitutions.LaunchConfiguration('dataset').perform(context)
 
     name = launch.substitutions.LaunchConfiguration('name').perform(context)
     if name is None or len(name) == 0:
         name = path_to_config.stem
+
+    visualize = launch.substitutions.LaunchConfiguration('visualize').perform(context)
 
     configs = []
     if path_to_config.is_dir():
@@ -85,14 +81,15 @@ def setup(context, *args, **kwargs):
             launch.actions.ExecuteProcess(
                 cmd = [
                     'ros2', 'launch', str(path_to_launch),
-                    'visualize:=false',
-                    f'path_to_bag:={str(bag)}',
-                    f'path_to_result:={str(path_to_result_inner / "digiforests" / bag_name)}',
-                    f'path_to_config:={str(config)}'
+                    f'visualize:={visualize}',
+                    'visualize_map:=false',
+                    f'path_to_data:={data}',
+                    f'path_to_result:={path_to_result_inner / dataset / data_name}',
+                    f'path_to_config:={config}'
                 ],
                 output = 'screen',
                 emulate_tty = True,
-            ) for bag, bag_name in path_to_bags
+            ) for data, data_name in path_to_data
         ]
     
     actions = []
@@ -107,9 +104,11 @@ def setup(context, *args, **kwargs):
 
 def generate_launch_description():
     return launch.LaunchDescription([
-        launch.actions.DeclareLaunchArgument('path_to_bags'),
+        launch.actions.DeclareLaunchArgument('path_to_data'),
         launch.actions.DeclareLaunchArgument('path_to_config'),
         launch.actions.DeclareLaunchArgument('path_to_result'),
+        launch.actions.DeclareLaunchArgument('dataset'),
         launch.actions.DeclareLaunchArgument('name', default_value = ''),
+        launch.actions.DeclareLaunchArgument('visualize', default_value = 'false'),
         launch.actions.OpaqueFunction(function = setup)
     ])

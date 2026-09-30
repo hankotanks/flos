@@ -8,8 +8,7 @@ Please cite our work if the code is helpful to you.
 
 import torch
 
-
-def right_shift(binary, k=1, axis=-1):
+def right_shift(binary, k = 1, axis = -1):
     """Right shift an array of binary values.
 
     Parameters:
@@ -37,13 +36,13 @@ def right_shift(binary, k=1, axis=-1):
     slicing = [slice(None)] * len(binary.shape)
     slicing[axis] = slice(None, -k)
     shifted = torch.nn.functional.pad(
-        binary[tuple(slicing)], (k, 0), mode="constant", value=0
+        binary[tuple(slicing)], (k, 0), mode = "constant", value = 0
     )
 
     return shifted
 
 
-def binary2gray(binary, axis=-1):
+def binary2gray(binary, axis = -1):
     """Convert an array of binary values into Gray codes.
 
     This uses the classic X ^ (X >> 1) trick to compute the Gray code.
@@ -58,7 +57,7 @@ def binary2gray(binary, axis=-1):
     --------
      Returns an ndarray of Gray codes.
     """
-    shifted = right_shift(binary, axis=axis)
+    shifted = right_shift(binary, axis = axis)
 
     # Do the X ^ (X >> 1) trick.
     gray = torch.logical_xor(binary, shifted)
@@ -66,7 +65,7 @@ def binary2gray(binary, axis=-1):
     return gray
 
 
-def gray2binary(gray, axis=-1):
+def gray2binary(gray, axis = -1):
     """Convert an array of Gray codes back into binary values.
 
     Parameters:
@@ -84,7 +83,8 @@ def gray2binary(gray, axis=-1):
     shift = 2 ** (torch.Tensor([gray.shape[axis]]).log2().ceil().int() - 1)
     while shift > 0:
         gray = torch.logical_xor(gray, right_shift(gray, shift))
-        shift = torch.div(shift, 2, rounding_mode="floor")
+        shift = torch.div(shift, 2, rounding_mode = "floor")
+        
     return gray
 
 
@@ -120,37 +120,29 @@ def encode(locs, num_dims, num_bits):
     bitpack_mask_rev = bitpack_mask.flip(-1)
 
     if orig_shape[-1] != num_dims:
-        raise ValueError(
-            """
-      The shape of locs was surprising in that the last dimension was of size
-      %d, but num_dims=%d.  These need to be equal.
-      """
-            % (orig_shape[-1], num_dims)
-        )
+        raise ValueError("""
+            The shape of locs was surprising in that the last dimension was of size
+            %d, but num_dims=%d.  These need to be equal.
+            """ % (orig_shape[-1], num_dims))
 
     if num_dims * num_bits > 63:
-        raise ValueError(
-            """
-      num_dims=%d and num_bits=%d for %d bits total, which can't be encoded
-      into a int64.  Are you sure you need that many points on your Hilbert
-      curve?
-      """
-            % (num_dims, num_bits, num_dims * num_bits)
-        )
+        raise ValueError("""
+            num_dims=%d and num_bits=%d for %d bits total, which can't be encoded
+            into a int64.  Are you sure you need that many points on your Hilbert
+            curve?
+            """ % (num_dims, num_bits, num_dims * num_bits))
 
     # Treat the location integers as 64-bit unsigned and then split them up into
     # a sequence of uint8s.  Preserve the association by dimension.
     locs_uint8 = locs.long().view(torch.uint8).reshape((-1, num_dims, 8)).flip(-1)
 
     # Now turn these into bits and truncate to num_bits.
-    gray = (
-        locs_uint8.unsqueeze(-1)
-        .bitwise_and(bitpack_mask_rev)
-        .ne(0)
-        .byte()
+    gray = locs_uint8.unsqueeze(-1) \
+        .bitwise_and(bitpack_mask_rev) \
+        .ne(0) \
+        .byte() \
         .flatten(-2, -1)[..., -num_bits:]
-    )
-
+    
     # Run the decoding process the other way.
     # Iterate forwards through the bits.
     for bit in range(0, num_bits):
@@ -160,18 +152,14 @@ def encode(locs, num_dims, num_bits):
             mask = gray[:, dim, bit]
 
             # Where this bit is on, invert the 0 dimension for lower bits.
-            gray[:, 0, bit + 1 :] = torch.logical_xor(
-                gray[:, 0, bit + 1 :], mask[:, None]
-            )
+            gray[:, 0, bit + 1 :] = torch.logical_xor(gray[:, 0, bit + 1 :], mask[:, None])
 
             # Where the bit is off, exchange the lower bits with the 0 dimension.
             to_flip = torch.logical_and(
                 torch.logical_not(mask[:, None]).repeat(1, gray.shape[2] - bit - 1),
-                torch.logical_xor(gray[:, 0, bit + 1 :], gray[:, dim, bit + 1 :]),
-            )
-            gray[:, dim, bit + 1 :] = torch.logical_xor(
-                gray[:, dim, bit + 1 :], to_flip
-            )
+                torch.logical_xor(gray[:, 0, bit + 1 :], gray[:, dim, bit + 1 :]))
+            
+            gray[:, dim, bit + 1 :] = torch.logical_xor(gray[:, dim, bit + 1 :], to_flip)
             gray[:, 0, bit + 1 :] = torch.logical_xor(gray[:, 0, bit + 1 :], to_flip)
 
     # Now flatten out.
@@ -185,18 +173,15 @@ def encode(locs, num_dims, num_bits):
     padded = torch.nn.functional.pad(hh_bin, (extra_dims, 0), "constant", 0)
 
     # Convert binary values into uint8s.
-    hh_uint8 = (
-        (padded.flip(-1).reshape((-1, 8, 8)) * bitpack_mask)
-        .sum(2)
-        .squeeze()
+    hh_uint8 = (padded.flip(-1).reshape((-1, 8, 8)) * bitpack_mask) \
+        .sum(2) \
+        .squeeze() \
         .type(torch.uint8)
-    )
 
     # Convert uint8s into uint64s.
     hh_uint64 = hh_uint8.view(torch.int64).squeeze()
 
     return hh_uint64
-
 
 def decode(hilberts, num_dims, num_bits):
     """Decode an array of Hilbert integers into locations in a hypercube.
@@ -223,14 +208,11 @@ def decode(hilberts, num_dims, num_bits):
     """
 
     if num_dims * num_bits > 64:
-        raise ValueError(
-            """
-      num_dims=%d and num_bits=%d for %d bits total, which can't be encoded
-      into a uint64.  Are you sure you need that many points on your Hilbert
-      curve?
-      """
-            % (num_dims, num_bits)
-        )
+        raise ValueError("""
+            num_dims=%d and num_bits=%d for %d bits total, which can't be encoded
+            into a uint64.  Are you sure you need that many points on your Hilbert
+            curve?
+            """  % (num_dims, num_bits))
 
     # Handle the case where we got handed a naked integer.
     hilberts = torch.atleast_1d(hilberts)
@@ -242,19 +224,15 @@ def decode(hilberts, num_dims, num_bits):
 
     # Treat each of the hilberts as a s equence of eight uint8.
     # This treats all of the inputs as uint64 and makes things uniform.
-    hh_uint8 = (
-        hilberts.ravel().type(torch.int64).view(torch.uint8).reshape((-1, 8)).flip(-1)
-    )
+    hh_uint8 = (hilberts.ravel().type(torch.int64).view(torch.uint8).reshape((-1, 8)).flip(-1))
 
     # Turn these lists of uints into lists of bits and then truncate to the size
     # we actually need for using Skilling's procedure.
-    hh_bits = (
-        hh_uint8.unsqueeze(-1)
-        .bitwise_and(bitpack_mask_rev)
-        .ne(0)
-        .byte()
+    hh_bits = hh_uint8.unsqueeze(-1) \
+        .bitwise_and(bitpack_mask_rev) \
+        .ne(0) \
+        .byte() \
         .flatten(-2, -1)[:, -num_dims * num_bits :]
-    )
 
     # Take the sequence of bits and Gray-code it.
     gray = binary2gray(hh_bits)
@@ -271,18 +249,14 @@ def decode(hilberts, num_dims, num_bits):
             mask = gray[:, dim, bit]
 
             # Where this bit is on, invert the 0 dimension for lower bits.
-            gray[:, 0, bit + 1 :] = torch.logical_xor(
-                gray[:, 0, bit + 1 :], mask[:, None]
-            )
+            gray[:, 0, bit + 1 :] = torch.logical_xor(gray[:, 0, bit + 1 :], mask[:, None])
 
             # Where the bit is off, exchange the lower bits with the 0 dimension.
             to_flip = torch.logical_and(
                 torch.logical_not(mask[:, None]),
-                torch.logical_xor(gray[:, 0, bit + 1 :], gray[:, dim, bit + 1 :]),
-            )
-            gray[:, dim, bit + 1 :] = torch.logical_xor(
-                gray[:, dim, bit + 1 :], to_flip
-            )
+                torch.logical_xor(gray[:, 0, bit + 1 :], gray[:, dim, bit + 1 :]))
+            
+            gray[:, dim, bit + 1 :] = torch.logical_xor(gray[:, dim, bit + 1 :], to_flip)
             gray[:, 0, bit + 1 :] = torch.logical_xor(gray[:, 0, bit + 1 :], to_flip)
 
     # Pad back out to 64 bits.

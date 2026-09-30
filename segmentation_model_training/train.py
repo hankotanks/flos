@@ -1,207 +1,153 @@
-import copy
-import os
-from pathlib import Path
-from typing import Optional, Dict, List
+import pathlib
+import typing
+import argparse
 
-import segmentation_model_training.utils.transforms as fAIT
 import torch
-import typer
-from segmentation_model_training.data_modules.digiforest import DigiForestDataModule
-from src.python.segmentation_model.segmentation_model import PointTransformerV3Lightning
-from segmentation_model_training.utils.config import sync_config_keys
-from lightning.pytorch import Trainer, seed_everything
-from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
-from lightning.pytorch.loggers import TensorBoardLogger, Logger
-from segmentation_model_training.utils.io import load_yaml_or_json
-from torchvision.transforms import Compose
+import torchvision.transforms as transforms
 
-cli = typer.Typer()
+import lightning.pytorch as lightning
 
-def train(
-    model_config: Dict,
-    lightning_config: Dict,
-    datamodule_config: Dict,
-    log_dir: Path,
-    data_dir: Path,
-    logger: List[Logger],
-    seed=None,
-    verbose=False
-):
-    # Data Prep
-    # ----------------------
-    # TODO: log all the transforms as well
-    pre_transfom = Compose([fAIT.CenterGlobal(verbose=verbose)])
-    batch_transform = Compose([
-        fAIT.RandomRotate(180, axis=2, verbose=verbose),
-        fAIT.RandomUniformScale((0.8, 1.2), verbose=verbose),
+import segmentation_model_training.utils as utils
+import segmentation_model_training.utils.config
+import segmentation_model_training.utils.io
+import segmentation_model_training.utils.transforms
+import segmentation_model_training.datamodules as datamodules
+import segmentation_model_training.datamodules.digiforest
+
+import src.python.segmentation_model.segmentation_model as segmentation_model
+
+TRAIN_ROOT = pathlib.Path(__file__).resolve(strict = True).parent
+MODEL_ROOT = (TRAIN_ROOT.parent / 'models').resolve(strict = True)
+
+def train(config_model: typing.Dict, config_trainer: typing.Dict, config_data: typing.Dict, 
+    log: pathlib.Path, ckpt: typing.Union[pathlib.Path, None], data: pathlib.Path, 
+    logger: typing.List[lightning.loggers.Logger], seed = None, verbose = False):
+    # data prep
+    transform_pre = transforms.Compose([utils.transforms.CenterGlobal(verbose = verbose)])
+    transform_batch = transforms.Compose([
+        utils.transforms.RandomRotate(180, axis = 2, verbose = verbose),
+        utils.transforms.RandomUniformScale((0.8, 1.2), verbose = verbose),
     ])
-    dataset_config = datamodule_config.pop("dataset")
-    if "debug_no_augmentation" in datamodule_config:
-        debug_no_augmentation = datamodule_config.pop("debug_no_augmentation")
-        batch_transform = None if debug_no_augmentation else batch_transform
-    datamodule = DigiForestDataModule(
-        data_dir=data_dir,
-        dataset_config=dataset_config,
-        transform=None,
-        batch_transform=batch_transform,
-        pre_transform=pre_transfom,
-        pre_filter=None,
-        **datamodule_config,
-    )
-    # ----------------------
-
-    # Model
-    # ----------------------
-    model = PointTransformerV3Lightning(**model_config)
+    config_dataset = config_data.pop("dataset")
+    if "debug_no_augmentation" in config_data:
+        debug_no_augmentation = config_data.pop("debug_no_augmentation")
+        transform_batch = None if debug_no_augmentation else transform_batch
+    datamodule = datamodules.digiforest.DigiForestDataModule(data_dir = data, dataset_config = config_dataset, transform = None,
+        batch_transform = transform_batch, pre_transform = transform_pre, pre_filter = None, **config_data)
+    
+    # model
+    model = segmentation_model.PointTransformerV3Lightning(**config_model)
     # sanity check model and dataset compatibility
-    assert (
-        model.hparams.num_classes == datamodule.dataset_cls.num_classes
-    ), f"model num_classes {model.hparams.num_classes} doesnt match the dataset {datamodule.dataset_cls.num_classes}"
+    assert model.hparams.num_classes == datamodule.dataset_cls.num_classes, \
+        f"model num_classes {model.hparams.num_classes} doesnt match the dataset {datamodule.dataset_cls.num_classes}"
 
-    lr_monitor = LearningRateMonitor(logging_interval="step")
-    # metric_key = "val/MulticlassAccuracy"
-    metric_key = lightning_config.pop("checkpoint_metric_key")
-    f1_ckpt = ModelCheckpoint(
-        dirpath=None,  # use the default_root_dir of trainer
-        monitor=metric_key,
-        filename=metric_key.replace("/", "_") + "_{epoch:02d}_{" + metric_key + ":.2f}",
-        auto_insert_metric_name=False,
-        mode="max",
-        save_last=True,
-        verbose=verbose,
+    # learning rate monitor
+    monitor = lightning.callbacks.LearningRateMonitor(logging_interval = "step")
+    
+    # checkpoint
+    model_ckpt_key = config_trainer.pop("checkpoint_metric_key") # metric_key = "val/MulticlassAccuracy"
+    model_ckpt = lightning.callbacks.ModelCheckpoint(
+        dirpath = None,  # use the default_root_dir of trainer
+        monitor = model_ckpt_key,
+        filename = model_ckpt_key.replace("/", "_") + "_{epoch:02d}_{" + model_ckpt_key + ":.2f}",
+        auto_insert_metric_name = False,
+        mode = "max",
+        save_last = True,
+        verbose = verbose,
     )
-    # ----------------------
-
-    # Train
-    # ----------------------
+    
+    # training
     # using a CUDA device ('NVIDIA RTX A5000') that has Tensor Cores. To properly utilize them, set
     # `torch.set_float32_matmul_precision('medium' | 'high')` which will trade-off precision for performance.
     # https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision
     torch.set_float32_matmul_precision("medium")
-    del lightning_config["seed"]
-    # profiler = PyTorchProfiler(profile_memory=True)
-    trainer = Trainer(
-        logger=logger,
-        callbacks=[lr_monitor, f1_ckpt],
-        default_root_dir=log_dir,
-        **lightning_config,
-        # resume_from_checkpoint=ckpt,
-        # profiler=profiler,
-    )
-    trainer.fit(model, datamodule=datamodule)
-    # ----------------------
+    del config_trainer["seed"]
+    # profiler = PyTorchProfiler(profile_memory = True)
+    trainer = lightning.Trainer(logger = logger, callbacks = [monitor, model_ckpt], default_root_dir = log, **config_trainer) # resume_from_checkpoint=ckpt, # profiler=profiler,
+    trainer.fit(model, datamodule = datamodule, ckpt_path = str(ckpt) if ckpt is not None else None)
+   
+    # test
+    if "test" in datamodule.prepare_splits: trainer.test(model, datamodule = datamodule)
 
-    # Test
-    # ----------------------
-    if "test" in datamodule.prepare_splits:
-        trainer.test(model, datamodule=datamodule)
+def args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data", type = pathlib.Path, required = True,
+        help = 'path to data (containing ./raw, etc)')
+    parser.add_argument("--name", type = str, required = False, 
+        default = str(max([int(p.name) for p in MODEL_ROOT.iterdir() if p.is_dir() and p.name.isdigit()], default = -1) + 1), 
+        help = 'PROJECT_ROOT/models/name')
+    parser.add_argument("--threads", type = int, 
+        default = None, 
+        help = 'number of threads to use for the data module')
+    parser.add_argument("--resume", action = "store_true",
+        help = 'resume from the last checkpoint')
+    parser.add_argument("--debug", action = "store_true",
+        help = 'enable debug')
+    return parser.parse_args()
 
+def version(args: argparse.Namespace):
+    if not args.resume:
+        return None, None
+    run_dir = MODEL_ROOT / args.name
+    if run_dir.exists():
+        v = [int(p.name.removeprefix("version_"))
+            for p in run_dir.iterdir()
+                if p.is_dir() 
+                    and p.name.startswith("version_")
+                    and p.name.removeprefix("version_").isdigit()]
+        v = max(v, default = None)
+        if v is not None:
+            ckpt = MODEL_ROOT / args.name / f'version_{v}' / 'checkpoints' / 'last.ckpt'
+            ckpt = ckpt.resolve(strict = True)
+            return v, ckpt
+    return None, None
 
-@cli.command()
-def main(
-    model_config_fp: Path = typer.Option(
-        ...,
-        "--model-conf",
-        help="path to model configuration file",
-    ),
-    lightning_config_fp: Path = typer.Option(
-        ...,
-        "--lightning-conf",
-        help="path to lightning configuration file",
-    ),
-    data_config_fp: Path = typer.Option(
-        ...,
-        "--data-conf",
-        help="path to data module configuration file",
-    ),
-    log_dir: Path = typer.Option(
-        ..., help="Root directory for log_dir/experiment_name/run_name"
-    ),
-    data_dir: Path = typer.Option(..., help="Directory of data. should have ./raw"),
-    experiment_name: str = typer.Option(
-        ..., help="The name of the experiment, e.g. kpconv"
-    ),
-    run_name: Optional[str] = typer.Option(
-        None, help="The name of a run. default will be version_#"
-    ),
-    debug: bool = typer.Option(
-        False,
-        "--debug",
-        help="Enable debug: clean run dir, activate lightning debug args, and perhaps other stuff",
-    ),
-    threads: Optional[int] = typer.Option(
-        None, help="Number of threads/workers to use for the datamodule"
-    ),
-):
-    # catch the cli args first without modification
-    cli_args = copy.deepcopy(locals())
-    cli_args["execution_dir"] = os.getcwd()
-    # first up
-    log_dir.mkdir(parents=True, exist_ok=True)
+def main(args: argparse.Namespace):    
     # set up the tb logger since that handles creation of the run dir,
     # in case no name was passed
-    tb_logger = TensorBoardLogger(
-        save_dir=log_dir,
-        name=experiment_name,
-        default_hp_metric=False,
-        version=run_name,
-    )
+    v, ckpt = version(args)
+    logger = lightning.loggers.TensorBoardLogger(save_dir = MODEL_ROOT, name = args.name, default_hp_metric = False, version = v)
     # get the actual run log dir
-    run_dir = Path(tb_logger.log_dir)
-    if debug:
-        # remove the run dir, since we dont want to bloat the runs
+    log_dir = pathlib.Path(logger.log_dir)
+    if args.debug:
         import shutil
+        shutil.rmtree(log_dir, ignore_errors = True)
+    log_dir.mkdir(parents = True, exist_ok = True)
 
-        shutil.rmtree(run_dir, ignore_errors=True)
-    run_dir.mkdir(parents=True, exist_ok=True)
-    cli_args["run_dir"] = run_dir
+    # load model config
+    path_config_model = pathlib.Path(TRAIN_ROOT / 'config' / 'model.yaml').resolve(strict = True)
+    config_model: typing.Dict = utils.io.load_yaml(path_config_model)
 
-    # Config
-    # ----------------------
-    # load confs
-    model_config = load_yaml_or_json(model_config_fp)
-    datamodule_config = load_yaml_or_json(data_config_fp)
-    lightning_config: Dict = load_yaml_or_json(lightning_config_fp)
+    # load data module config
+    path_config_data = pathlib.Path(TRAIN_ROOT / 'config' / 'data.yaml').resolve(strict = True)
+    config_data: typing.Dict = utils.io.load_yaml(path_config_data)
 
-    # process and overwrite confs
-    if "debug" in lightning_config:
-        # debug sub dicts of config should be put at top level
-        if debug:
-            lightning_config.update(lightning_config["debug"])
-        del lightning_config["debug"]
-    if "debug" in model_config:
-        if debug and model_config["debug"] is not None:
-            model_config.update(model_config["debug"])
-        del model_config["debug"]
-    if threads is not None:
-        if threads != datamodule_config["num_workers"]:
-            print(
-                f"WARN: Datamodule config num_workers = {datamodule_config['num_workers']}, overwriting with cli arg {threads}"
-            )
-        datamodule_config["num_workers"] = threads
+    # load trainer config
+    path_config_trainer = pathlib.Path(TRAIN_ROOT / 'config' / 'trainer.yaml').resolve(strict = True)
+    config_trainer: typing.Dict = utils.io.load_yaml(path_config_trainer)
+
+    if "debug" in config_trainer:
+        if args.debug:
+            config_trainer.update(config_trainer["debug"])
+        del config_trainer["debug"]
+    if "debug" in config_model:
+        if args.debug and config_model["debug"] is not None:
+            config_model.update(config_model["debug"])
+        del config_model["debug"]
+    if args.threads is not None:
+        if args.threads != config_data["num_workers"]:
+            print(f"WARN: Datamodule config num_workers = {config_data['num_workers']}, overwriting with cli arg {args.threads}")
+        config_data["num_workers"] = args.threads
     # ensure good configuration
-    sync_config_keys(
-        [cli_args, lightning_config, model_config, datamodule_config], ["batch_size"]
-    )
-
-    # ----------------------
+    utils.config.sync_config_keys([config_trainer, config_model, config_data], ["batch_size"])
 
     # sets seeds for numpy, torch and python.random.
-    seed_everything(lightning_config["seed"], workers=True)
-    # just in case
-    data_dir = data_dir.resolve()
+    lightning.seed_everything(config_trainer["seed"], workers = True)
 
-    train(
-        model_config=model_config,
-        lightning_config=lightning_config,
-        datamodule_config=datamodule_config,
-        log_dir=run_dir,
-        data_dir=data_dir,
-        logger=[tb_logger],
-        seed=lightning_config["seed"],
-        verbose=debug
-    )
-
+    # setup training
+    train(config_model = config_model, config_trainer = config_trainer, config_data = config_data,
+        log = log_dir, ckpt = ckpt, data = args.data.resolve(strict = True), 
+        logger = [logger], seed = config_trainer["seed"], verbose = args.debug)
 
 if __name__ == "__main__":
-    cli()
+    main(args())

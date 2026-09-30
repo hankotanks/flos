@@ -26,6 +26,8 @@ protected:
 protected:
     // return size of the buffer
     size_t size() const noexcept { return buffer_.size(); };
+    // start worker thread
+    void start() noexcept;
     // manual stop
     void stop() noexcept;
     // queue operations
@@ -33,6 +35,8 @@ protected:
     std::optional<Entry> pop() noexcept;
     // pure virtual function for converting `Message` to `Entry`
     virtual Entry read(const std::shared_ptr<Message>& msg) noexcept = 0;
+    // `worker` to be dispatched to a separate thread
+    virtual void loop() noexcept = 0;
 protected:
     // total capacity of the buffer
     static constexpr size_t CAPACITY{15};
@@ -44,13 +48,11 @@ private:
     std::condition_variable cv_;
     std::queue<Entry> buffer_;
     std::atomic<bool> running_{true};
+    std::thread thread_;
 };
 
 template<typename Entry, typename Message>
 BufferNode<Entry, Message>::BufferNode(const std::string& incoming_topic_name, const std::string& incoming_topic_default) : rclcpp::Node(NODE_NAME) {
-    rclcpp::on_shutdown([this]() {
-        this->stop();
-    });
     // declare parameters
     this->declare_parameter<bool>("debug", false);
     if(incoming_topic_default.empty()) {
@@ -67,12 +69,21 @@ BufferNode<Entry, Message>::BufferNode(const std::string& incoming_topic_name, c
 }
 
 template<typename Entry, typename Message>
+void BufferNode<Entry, Message>::start() noexcept {
+    // initialize thread
+    thread_ = std::thread(&BufferNode::loop, this);
+}
+
+// NOTE: this MUST be invoked in the destructor of all derived nodes
+template<typename Entry, typename Message>
 void BufferNode<Entry, Message>::stop() noexcept {
     {
         std::lock_guard lock(mutex_);
         running_ = false;
     }
     cv_.notify_all();
+    // close the worker
+    if(thread_.joinable()) thread_.join();
 }
 
 template<typename Entry, typename Message>

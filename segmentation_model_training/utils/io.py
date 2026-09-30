@@ -1,9 +1,8 @@
+import pathlib
 import json
-from pathlib import Path
-
 import yaml
 
-def load_yaml(fp: Path):
+def load_yaml(fp: pathlib.Path):
     """load yaml file at fp"""
     if not fp.exists() or not fp.is_file():
         raise Exception(f"invalid fp {fp}, check")
@@ -11,7 +10,7 @@ def load_yaml(fp: Path):
         res = yaml.safe_load(yaml_file)
     return res
 
-def load_json(fp: Path):
+def load_json(fp: pathlib.Path):
     """load json file at fp"""
     if not fp.exists() or not fp.is_file():
         raise Exception(f"invalid fp {fp}, check")
@@ -19,7 +18,7 @@ def load_json(fp: Path):
         res = json.load(json_file)
     return res
 
-def load_yaml_or_json(fp: Path):
+def load_yaml_or_json(fp: pathlib.Path):
     """loads file at fp based on extension"""
     if not fp.exists() or not fp.is_file():
         raise Exception(f"invalid fp {fp}, check")

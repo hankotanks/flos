@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from pathlib import Path
+import pathlib
+import typing
 
 import numpy as np
+
 import open3d as o3d
 import open3d.core as o3c
-from ..utils.math import lmap
-from typing import Callable, Any, Union
 
+from .math import lmap
 
 class Cloud:
     """A wrapper around o3d.t.geometry.PointCloud."""
@@ -21,9 +22,9 @@ class Cloud:
         self.tpcd = None
 
     @classmethod
-    def from_file(cls, filename: Union[str, Path]) -> Cloud:
+    def from_file(cls, filename: typing.Union[str, pathlib.Path]) -> Cloud:
         """Construct from a file."""
-        filename = Path(filename)
+        filename = pathlib.Path(filename)
         assert filename.exists(), f"{filename} doesnt exist"
         tpcd = o3d.t.io.read_point_cloud(str(filename))
         cloud = cls()
@@ -45,7 +46,7 @@ class Cloud:
 
     @classmethod
     def from_o3d(
-        cls, o3d_tensor_point_cloud: o3d.t.geometry.PointCloud, clone=True
+        cls, o3d_tensor_point_cloud: o3d.t.geometry.PointCloud, clone = True
     ) -> Cloud:
         """Construct (optionally clones) from an o3d object.
 
@@ -62,9 +63,9 @@ class Cloud:
     @classmethod
     def from_las(
         cls,
-        filename: Union[str, Path],
+        filename: typing.Union[str, pathlib.Path],
         zero_min: bool = False,
-        custom_attribute_callback: Union[Callable[[Any, Cloud], None], None] = None,
+        custom_attribute_callback: typing.Union[typing.Callable[[typing.Any, Cloud], None], None] = None,
     ) -> Cloud:
         """
         Construct from a las file.
@@ -74,17 +75,16 @@ class Cloud:
         and the Cloud object (with points) being constructed as the second. Arbitrary
         attributes be added to the cloud using Cloud.add_attribute()
         """
-        filename = Path(filename)
+        filename = pathlib.Path(filename)
         assert filename.exists(), f"{filename} doesnt exist"
 
         import laspy
-
         las = laspy.read(str(filename))
         print(f"las read from {filename}")
 
         xyz = las.xyz
         if zero_min:
-            xyz = xyz - np.min(xyz, axis=0)
+            xyz = xyz - np.min(xyz, axis = 0)
         points = xyz
 
         cloud = Cloud.from_points(points)
@@ -101,9 +101,9 @@ class Cloud:
     def from_array(
         cls,
         points: np.ndarray,
-        colors: Union[np.ndarray, None] = None,
-        instance: Union[np.ndarray, None] = None,
-        semantics: Union[np.ndarray, None] = None,
+        colors: typing.Union[np.ndarray, None] = None,
+        instance: typing.Union[np.ndarray, None] = None,
+        semantics: typing.Union[np.ndarray, None] = None,
     ) -> Cloud:
         """Construct from arrays.
 
@@ -134,7 +134,7 @@ class Cloud:
         """returns a clone."""
         return self.from_o3d(self.tpcd)
 
-    def add_attribute(self, name: str, value: Union[o3c.Tensor, np.ndarray], type=None):
+    def add_attribute(self, name: str, value: typing.Union[o3c.Tensor, np.ndarray], type = None):
         """Needs a type in case the data is ill formated.
 
         happens with las. if an ndarray, the value will be reshaped to
@@ -158,6 +158,7 @@ class Cloud:
             setattr(self.tpcd.point, name, o3c.Tensor(value.astype(type)))
         else:
             raise Exception("value was improper type.")
+        
         return self
 
     def get_attribute(self, name):
@@ -223,7 +224,7 @@ class Cloud:
         self.tpcd.point.semantics = o3c.Tensor(semantics_.reshape(-1, 1))
         assert self.check_state(), f"improper state, {self.num_points} points and semantics tensor is {self.semantics}"
 
-    def select_by_index(self, indices, invert=False, remove_duplicates=False):
+    def select_by_index(self, indices, invert = False, remove_duplicates = False):
         """Select points and associated attributes by index.
 
         wrapper around the o3d api
@@ -232,11 +233,9 @@ class Cloud:
         :param invert: (Default value = False)
         :param remove_duplicates: (Default value = False)
         """
-        return self.from_o3d(
-            self.tpcd.select_by_index(indices, invert, remove_duplicates), clone=False
-        )
+        return self.from_o3d(self.tpcd.select_by_index(indices, invert, remove_duplicates), clone = False)
 
-    def select_by_mask(self, boolean_mask: o3c.Tensor, invert=False):
+    def select_by_mask(self, boolean_mask: o3c.Tensor, invert = False):
         """Select points and associated attributes by mask of shape {n,}
 
         wrapper around the o3d api
@@ -245,16 +244,14 @@ class Cloud:
         :param invert: (Default value = False)
         :param boolean_mask: o3c.Tensor:
         """
-        return self.from_o3d(
-            self.tpcd.select_by_mask(boolean_mask, invert), clone=False
-        )
+        return self.from_o3d(self.tpcd.select_by_mask(boolean_mask, invert), clone = False)
 
     def paint_uniform_color(self, color: list):
         """wrapper around the o3d function.
 
         :param color: listlike of 3 floats [0,1] or ints
         """
-        return self.from_o3d(self.tpcd.paint_uniform_color(color), clone=False)
+        return self.from_o3d(self.tpcd.paint_uniform_color(color), clone = False)
 
     @property
     def has_colors(self) -> bool:
@@ -293,7 +290,7 @@ class Cloud:
         :param voxel_size: float:
         """
         print(f"Downsampling point cloud with voxel_size {voxel_size}")
-        return self.from_o3d(self.tpcd.voxel_down_sample(voxel_size), clone=False)
+        return self.from_o3d(self.tpcd.voxel_down_sample(voxel_size), clone = False)
 
     def check_state(self) -> bool:
         """checks if the lengths of the points, colors and semantics are the
@@ -323,7 +320,7 @@ class Cloud:
         """ """
         return int(self.points.shape[0])
 
-    def write(self, output_path: Path, verbose: bool = True) -> bool:
+    def write(self, output_path: pathlib.Path, verbose: bool = True) -> bool:
         """write cloud to disk.
         NOTE: to read custom attributes in CloudCompare, you'll need to
         take care of the types of attributes. ply doesnt support 64 bit ints.
@@ -334,12 +331,10 @@ class Cloud:
         :returns: if the write was successful or not
 
         """
-        output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path = pathlib.Path(output_path)
+        output_path.parent.mkdir(parents = True, exist_ok = True)
 
-        success: bool = o3d.t.io.write_point_cloud(
-            str(output_path), self.tpcd, print_progress=True
-        )
+        success: bool = o3d.t.io.write_point_cloud(str(output_path), self.tpcd, print_progress = True)
         if success:
             if verbose:
                 print(f"Wrote the cloud file to disk at {output_path}")
@@ -351,10 +346,10 @@ class Cloud:
     def colorize_using_attribute(
         self,
         attr: str = "instance",
-        min_valid_attr=None,
-        random=False,
-        blacken_noise=True,
-        index_callback=lambda idx, elem: elem[0],
+        min_valid_attr = None,
+        random = False,
+        blacken_noise = True,
+        index_callback = lambda idx, elem: elem[0],
     ) -> Cloud:
         """generate colors from unique values of an attribute.
 
@@ -375,9 +370,7 @@ class Cloud:
                 min_valid_attr = self.MIN_VALID_INSTANCE
             else:
                 raise ValueError("need min_valid_attr argument")
-        print(
-            f"Colorizing with {attr}, {len(np.unique(attr_val))} unique values"
-        )
+        print(f"Colorizing with {attr}, {len(np.unique(attr_val))} unique values")
 
         if random:
             random_colors = np.random.rand(len(np.unique(attr_val)), 3)
@@ -397,15 +390,13 @@ class Cloud:
             import matplotlib.pyplot as plt
 
             color_map = plt.get_cmap("tab20b")
-            color_map.set_under(color="k")
+            color_map.set_under(color = "k")
             min_attr = np.min(attr_val)
             if blacken_noise:
                 min_attr = min_valid_attr  # semantics under will get black
             max_attr = np.max(attr_val)
             max_attr = max_attr + 1 if max_attr == min_attr else max_attr
-            colors = color_map(
-                lmap(attr_val.reshape(-1), (min_attr, max_attr), (0, 1))
-            )[:, :3]
+            colors = color_map(lmap(attr_val.reshape(-1), (min_attr, max_attr), (0, 1)))[:, :3]
 
         self.colors = colors
         return self

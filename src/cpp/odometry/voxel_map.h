@@ -1,54 +1,385 @@
 #pragma once
 
 // system
-#include <functional>
+#include <limits>
+#include <optional>
+#include <ranges>
+#include <span>
 // eigen
 #include <Eigen/Dense>
 // tsl
 #include <tsl/robin_map.h>
+// tbb
+#include <tbb/blocked_range.h>
 // sophus
+#include <sophus/se2.hpp>
 #include <sophus/se3.hpp>
-// util
-#include "util/cloud.h"
-#include "util/voxel.h" // DO NOT REMOVE, required for the Eigen::Vector3i hash implementation
 
+// represents the data held in each voxel
+template<typename Derived, typename PointData>
+struct VoxelDataBase;
+
+// represents a single frame of data, which is used to update the VoxelMap
+template<typename Derived, size_t D, typename PointData, typename VoxelData>
+requires(D >= 2 && D <= 3 && std::is_default_constructible_v<VoxelData> && std::is_base_of_v<VoxelDataBase<Derived, PointData>, VoxelData>)
+struct Frame;
+
+// represents the data held in each voxel
+template<typename Derived, typename PointData>
+struct VoxelDataBase {
+    // called for every incoming point during registration
+    virtual void update(const PointData& data) noexcept { /* STUB */ }
+    // called after a Frame has been added to the map (either through VoxelMap::extend or VoxelMap::update)
+    virtual void finish() noexcept { /* STUB */ }
+    // used to reject or accept correspondences
+    virtual bool accept(const PointData& query) const noexcept { return true; }
+    // used to query the voxel with a point's data (the query point's closest neighbor is also supplied)
+    virtual float weight(const PointData& query) const noexcept { return 1.f; }
+};
+
+// represents a single frame of data, which is used to update the VoxelMap
+template<typename Derived, size_t D, typename PointData, typename VoxelData>
+requires(D >= 2 && D <= 3 && std::is_default_constructible_v<VoxelData> && std::is_base_of_v<VoxelDataBase<Derived, PointData>, VoxelData>)
+struct Frame {
+    using point_data_t = PointData;
+    using voxel_data_t = VoxelData;
+    virtual size_t size() const noexcept = 0;
+    virtual std::pair<Eigen::Vector<float, D>, point_data_t> operator[](size_t) const noexcept = 0;
+};
+
+// if F is provided to VoxelMap, it must be derived from Frame
+template<size_t D, typename F>
+concept FrameType = requires {
+    typename F::point_data_t;
+    typename F::voxel_data_t;
+    requires std::is_base_of_v<Frame<F, D, typename F::point_data_t, typename F::voxel_data_t>, F>;
+};
+
+// otherwise, the default FrameType is used
+template<size_t D, typename F>
+concept DefaultFrameType = std::is_same_v<F, std::span<const Eigen::Vector<float, D>>>;
+
+// indicates that the VoxelMap is well-defined given its template arguments
+template<size_t D, typename F>
+concept ValidVoxelMap = (D >= 2 && D <= 3) && (DefaultFrameType<D, F> || FrameType<D, F>);
+
+// rigid and affine transformations
+template<size_t D, typename T>
+concept TransformEuclid = (D == 2 && std::same_as<T, Sophus::SE2f>) || (D == 3 && std::same_as<T, Sophus::SE3f>);
+template<size_t D, typename T>
+concept TransformAffine = (D == 2 && std::same_as<T, Eigen::Affine2f>) || (D == 3 && std::same_as<T, Eigen::Affine3f>);
+// represents a transformation which accepts Eigen::Vector<float, D>& and F::point_data_t& and mutates them
+template<size_t D, typename F, typename T>
+concept TransformLambda = (
+    (DefaultFrameType<D, F> && requires(T&& fn, Eigen::Vector<float, D>& point) { { std::invoke(std::forward<T>(fn), point) } -> std::same_as<void>; }) ||
+    (!DefaultFrameType<D, F> && requires(T&& fn, Eigen::Vector<float, D>& point, typename F::point_data_t& data) { { std::invoke(std::forward<T>(fn), point, data) } -> std::same_as<void>; }));
+
+template<size_t D, typename F = std::span<const Eigen::Vector<float, D>>>
+requires(ValidVoxelMap<D, F>)
 struct VoxelMap {
-    explicit VoxelMap(double max_distance, double voxel_size, size_t voxel_capacity) : 
-        max_distance_(max_distance), voxel_size_(voxel_size), voxel_capacity_(voxel_capacity) { /* STUB */ }
-    VoxelMap(const VoxelMap&) = delete;
-    VoxelMap(VoxelMap&&) = delete;
-    VoxelMap& operator=(const VoxelMap&) = delete;
-    VoxelMap& operator=(VoxelMap&&) = delete;
+    explicit VoxelMap(float max_distance, float voxel_size, size_t voxel_capacity) : 
+        max_distance_(max_distance), 
+        voxel_size_(voxel_size),  
+        voxel_capacity_(voxel_capacity),
+        voxel_resolution_sq_(voxel_size_ * voxel_size_ / static_cast<float>(voxel_capacity_)) { /* STUB */ }
+    explicit VoxelMap(float max_distance, float voxel_size) : 
+        max_distance_(max_distance), 
+        voxel_size_(voxel_size),  
+        voxel_capacity_(0),
+        voxel_resolution_sq_(std::numeric_limits<float>::lowest()) { /* STUB */ }
+    VoxelMap(const VoxelMap&) = default;
+    VoxelMap(VoxelMap&&) = default;
+    VoxelMap& operator=(const VoxelMap&) = delete; // NOTE: copy assignment is explicitly deleted to avoid unintended allocations
+    VoxelMap& operator=(VoxelMap&&) = default;
     ~VoxelMap() = default;
 public:
-    inline void clear() { map_.clear(); }
-    inline bool empty() const { return map_.empty(); }
-    // update functions
-    void update(util::CloudView&& points, const Eigen::Vector3f& origin);
-    void update(util::CloudView&& points, const Sophus::SE3f& pose);
-    void extend(util::CloudView&& points);
-    // additional set up of update functions which replaces based on a predicate over a scalar field
-    template<typename T>
-    using Replacement = std::function<bool(const T& current, const T& replacement)>;
-    template<typename T>
-    void update(util::CloudView&& points, const Eigen::Vector3f& origin, const std::string& name, const Replacement<T>& repl);
-    template<typename T>
-    void update(util::CloudView&& points, const Sophus::SE3f& pose, const std::string& name, const Replacement<T>& repl);
-    template<typename T>
-    void extend(util::CloudView&& points, const std::string& name, const Replacement<T>& repl);
-    // get all points in the voxel map (currently for debugging)
-    const util::CloudView& cloud() const noexcept;
+    inline Eigen::Vector<int, D> point_to_voxel(const Eigen::Vector<float, D>& point) const noexcept;
+    inline Eigen::Vector<float, D> voxel_to_point(const Eigen::Vector<int, D>& voxel) const noexcept;
+public:
+    inline size_t size() const noexcept { return map_.size(); }
+    inline void clear() noexcept { map_.clear(); }
+    inline bool empty() const noexcept { return map_.empty(); }
+public:
+    // transform all points in the map
+    template<typename Transform>
+    requires(TransformEuclid<D, Transform> || TransformAffine<D, Transform>)
+    void apply(const Transform& T);
+    // transform with a lambda expression
+    template<typename Transform>
+    requires(TransformLambda<D, F, Transform>)
+    void apply(Transform&& T);
+    // update transforms points by pose, extends the map with them, then prunes by max_distance
+    template<typename Transform>
+    requires(TransformEuclid<D, Transform> || TransformAffine<D, Transform>)
+    void update(F& points, const Transform& pose);
+    // extend just adds (a) point(s) to the map directly
+    void extend(const F& points);
+    template<typename Transform>
+    requires(TransformEuclid<D, Transform>)
+    void extend(const F& points, const Transform& pose);
+    // overload for a single point
+    void extend(const Eigen::Vector<float, D>& point)
+    requires(DefaultFrameType<D, F>);
+    template<typename T = F>
+    void extend(const Eigen::Vector<float, D>& point, const typename T::point_data_t& data)
+    requires(!DefaultFrameType<D, F>);
+    // NOTE: this will not protect you if point does not fall into the given voxel
+    void extend(const Eigen::Vector<int, D>& voxel, const Eigen::Vector<float, D>& point)
+    requires(DefaultFrameType<D, F>);
+    template<typename T = F>
+    void extend(const Eigen::Vector<int, D>& voxel, const Eigen::Vector<float, D>& point, const typename T::point_data_t& data)
+    requires(!DefaultFrameType<D, F>);
+public:
+    // find the closest neighbor within the map
+    template<size_t _D, typename _F>
+    struct NeighborInner { /* STUB */ };
+    template<size_t _D, typename _F>
+    requires(!DefaultFrameType<_D, _F>)
+    struct NeighborInner<_D, _F> {
+        const typename _F::point_data_t& data;
+        float weight;
+    };
+    struct Neighbor : NeighborInner<D, F> {
+        const Eigen::Vector<float, D>& point;
+        float distance_sq{std::numeric_limits<float>::max()};
+    };
     // returns std::nullopt when no correspondence is found
-    std::optional<std::pair<util::CloudView::ConstPoint, double>> closest(const util::CloudView::ConstPoint &query) const;
-    // a predicate can be supplied taking 2 points and returning a boolean, if truthy, the point is preserved
-    using Predicate = std::function<bool(const util::CloudView::ConstPoint& point, const util::CloudView::ConstPoint& query)>;
-    std::optional<std::pair<util::CloudView::ConstPoint, double>> closest(const util::CloudView::ConstPoint &query, const Predicate& pred) const;
+    std::optional<Neighbor> closest(const Eigen::Vector<float, D>& query, 
+        float correspondence_distance_sq = std::numeric_limits<float>::max()) const
+    requires(DefaultFrameType<D, F>);
+    template<typename T = F>
+    std::optional<Neighbor> closest(const Eigen::Vector<float, D>& query, const typename T::point_data_t& data, 
+        float correspondence_distance_sq = std::numeric_limits<float>::max()) const
+    requires(!DefaultFrameType<D, F>);
+public:
+    // find the adjacency of a point within a map
+    template<size_t _D, typename _F>
+    struct AdjacencyInner { /* STUB */ };
+    template<size_t _D, typename _F>
+    requires(!DefaultFrameType<_D, _F>)
+    struct AdjacencyInner<_D, _F> {
+        float weight;
+    };
+    struct Adjacency : AdjacencyInner<D, F> {
+        Eigen::Vector<float, D> residual;
+        float distance_sq{std::numeric_limits<float>::max()};
+    };
+    std::optional<Adjacency> adjacency(const Eigen::Vector<float, D>& query, 
+        float correspondence_distance_sq = std::numeric_limits<float>::max()) const
+    requires(DefaultFrameType<D, F>);
+    template<typename T = F>
+    std::optional<Adjacency> adjacency(const Eigen::Vector<float, D>& query, const typename T::point_data_t& data, 
+        float correspondence_distance_sq = std::numeric_limits<float>::max()) const
+    requires(!DefaultFrameType<D, F>);
+private:
+    template<size_t _D, typename _F>
+    class VoxelInner { /* STUB */ };
+    template<size_t _D, typename _F>
+    requires(!DefaultFrameType<_D, _F>)
+    class VoxelInner<_D, _F> {
+    protected:
+        friend class VoxelMap<D, F>;
+        std::vector<typename _F::point_data_t> point_data_;
+        typename _F::voxel_data_t data_;
+    };
+    // internal voxel representation
+    class Voxel : VoxelInner<D, F> {
+        friend class VoxelMap<D, F>;
+    public:
+        Voxel(size_t voxel_capacity);
+        Voxel(const Voxel&) = default;
+        Voxel(Voxel&&) = default;
+        Voxel& operator=(const Voxel&) = delete; // NOTE: see voxel_map.h:77
+        Voxel& operator=(Voxel&&) = default;
+        ~Voxel() = default;
+    private:
+        void add(const Eigen::Vector<float, D>& point, float voxel_resolution_sq) noexcept
+        requires(DefaultFrameType<D, F>);
+        template<typename T = F>
+        void add(const Eigen::Vector<float, D>& point, typename T::point_data_t data, float voxel_resolution_sq) noexcept
+        requires(!DefaultFrameType<D, F>);
+    private:
+        std::vector<Eigen::Vector<float, D>> points_;
+    };
+    // get lower bound distance for pruning the search space in VoxelMap::closest
+    inline float lower_bound_distance_sq(const Eigen::Vector<float, D>& query, const Eigen::Vector<int, D>& voxel) const noexcept;
 private:
     // configuration options
-    double max_distance_;
-    double voxel_size_;
+    float max_distance_;
+    float voxel_size_;
     size_t voxel_capacity_;
-private:
-    tsl::robin_map<Eigen::Vector3i, util::CloudView> map_;
-    std::shared_ptr<const util::CloudView::Descriptor> desc_{nullptr};
+    float voxel_resolution_sq_;
+    // underlying map structure
+    tsl::robin_map<Eigen::Vector<int, D>, Voxel> map_;
+public:
+    class view_global : public std::ranges::view_interface<view_global> {
+        friend class VoxelMap<D, F>;
+        view_global(const VoxelMap<D, F>& map) : map_(&map), begin_(map.map_.cbegin()), end_(map.map_.cend()) { /* STUB */ }
+    public:
+        view_global(view_global& other, tbb::split);
+        // helpers
+        inline bool empty() const noexcept { return begin_ == end_; }
+        inline bool is_divisible() const noexcept { return std::distance(begin_, end_) > 1; }
+        // iterator inner class
+        class iterator {
+            friend class view_global;
+        public:
+            // proxy for reference type 
+            template<typename T = F>
+            struct proxy {
+                const Eigen::Vector<float, D>& first;
+                const typename T::point_data_t& second;
+                const proxy* operator->() const noexcept { return this; }
+            };
+            // iterator description
+            using iterator_concept = std::forward_iterator_tag;
+            using iterator_category = std::forward_iterator_tag;
+            template<typename T = F>
+            using value_type = std::conditional_t<DefaultFrameType<D, F>, Eigen::Vector<float, D>, std::pair<Eigen::Vector<float, D>, typename T::point_data_t>>;
+            using difference_type = std::ptrdiff_t;
+            using reference = std::conditional_t<DefaultFrameType<D, F>, const Eigen::Vector<float, D>&, proxy<>>;
+            using pointer = std::conditional_t<DefaultFrameType<D, F>, const Eigen::Vector<float, D>*, proxy<>>;
+            // default constructor
+            iterator() = default;
+            // operators
+            reference operator*() const noexcept;
+            pointer operator->() const noexcept;
+            iterator& operator++();
+            iterator operator++(int);
+            friend bool operator==(const iterator& lhs, const iterator& rhs) noexcept { return lhs.range_ == rhs.range_ && lhs.i_ == rhs.i_ && lhs.voxel_ == rhs.voxel_; }
+            friend bool operator!=(const iterator& lhs, const iterator& rhs) noexcept { return !(lhs == rhs); }
+        private:
+            iterator(const view_global* range, typename tsl::robin_map<Eigen::Vector<int, D>, Voxel>::const_iterator voxel);
+            void satisfy();
+        private:
+            const view_global* range_{nullptr};
+            size_t i_{0};
+            typename tsl::robin_map<Eigen::Vector<int, D>, Voxel>::const_iterator voxel_{};
+        };
+        // iterator initializerss
+        inline iterator begin() const { return {this, begin_}; }
+        inline iterator end() const { return {this, end_}; }
+    private:
+        const VoxelMap<D, F>* map_;
+        typename tsl::robin_map<Eigen::Vector<int, D>, Voxel>::const_iterator begin_;
+        typename tsl::robin_map<Eigen::Vector<int, D>, Voxel>::const_iterator end_;
+    };
+public:
+    class view_radius : public std::ranges::view_interface<view_radius> {
+        friend class VoxelMap<D, F>;
+        view_radius(const VoxelMap<D, F>& map, const Eigen::Vector<float, D>& origin, float radius);
+    public:
+        view_radius(view_radius& other, tbb::split);
+        // helpers
+        inline bool empty() const noexcept { return begin_ == end_; }
+        inline bool is_divisible() const noexcept { return end_ - begin_ > 1; }
+        // iterator inner class
+        class iterator {
+            friend class view_radius;
+        public:
+            // proxy for the reference type (unable to construct the pair of pointers without getting local copies)
+            struct proxy {
+                const Eigen::Vector<float, D>& first;
+                const typename F::point_data_t& second;
+                const proxy* operator->() const noexcept { return this; }
+            };
+            // iterator description
+            using iterator_concept = std::forward_iterator_tag;
+            using iterator_category = std::forward_iterator_tag;
+            using value_type = std::conditional_t<DefaultFrameType<D, F>, Eigen::Vector<float, D>, std::pair<Eigen::Vector<float, D>, typename F::point_data_t>>;
+            using difference_type = std::ptrdiff_t;
+            using reference = std::conditional_t<DefaultFrameType<D, F>, const Eigen::Vector<float, D>&, proxy>;
+            using pointer = std::conditional_t<DefaultFrameType<D, F>, const Eigen::Vector<float, D>*, proxy>;
+            // default constructor (an expectation of forward iterators)
+            iterator() = default;
+            // operators
+            reference operator*() const noexcept;
+            pointer operator->() const noexcept;
+            iterator& operator++();
+            iterator operator++(int);
+            friend bool operator==(const iterator& lhs, const iterator& rhs) noexcept { return lhs.range_ == rhs.range_ && lhs.i_ == rhs.i_ && lhs.j_ == rhs.j_; }
+            friend bool operator!=(const iterator& lhs, const iterator& rhs) noexcept { return !(lhs == rhs); }
+        private:
+            iterator(const view_radius* range, size_t i);
+            void satisfy();
+        private:
+            const view_radius* range_{nullptr};
+            size_t i_{0};
+            size_t j_{0};
+            const Voxel* voxel_{nullptr};
+        };
+        // iterator initializers
+        inline iterator begin() const { return {this, begin_}; }
+        inline iterator end() const { return {this, end_}; }
+    private:
+        const VoxelMap<D, F>* map_;
+        Eigen::Vector<float, D> origin_;
+        float radius_sq_;
+        Eigen::Vector<int, D> minima_;
+        Eigen::Vector<int, D> maxima_;
+        size_t begin_{0};
+        size_t end_{1};
+    };
+public:
+    class view_voxels : public std::ranges::view_interface<view_voxels> {
+        friend class VoxelMap<D, F>;
+        using map_iterator = typename tsl::robin_map<Eigen::Vector<int, D>, Voxel>::const_iterator;
+        view_voxels(const VoxelMap<D, F>& map) : begin_(map.map_.cbegin()), end_(map.map_.cend()), voxel_capacity_(map.voxel_capacity_) { /* STUB */ }
+    public:
+        bool empty() const noexcept { return begin_ == end_; }
+        // iterator inner class
+        class iterator {
+            friend class view_voxels;
+        public:
+            // proxy for reference type
+            struct proxy {
+                const Eigen::Vector<int, D>& first;
+                const typename F::voxel_data_t& second;
+                float fill;
+                const proxy* operator->() const noexcept { return this; }
+            };
+            // iterator descriptor
+            using iterator_concept = std::forward_iterator_tag;
+            using iterator_category = std::forward_iterator_tag;
+            using value_type = std::conditional_t<DefaultFrameType<D, F> || std::is_same_v<typename F::voxel_data_t, VoxelDataBase<F, typename F::point_data_t>>, 
+                std::pair<Eigen::Vector<int, D>, float>, std::tuple<Eigen::Vector<int, D>, typename F::voxel_data_t, float>>;
+            using difference_type = std::ptrdiff_t;
+            using reference = std::conditional_t<DefaultFrameType<D, F> || std::is_same_v<typename F::voxel_data_t, VoxelDataBase<F, typename F::point_data_t>>, std::pair<const Eigen::Vector<int, D>&, float>, proxy>;
+            using pointer = std::conditional_t<DefaultFrameType<D, F> || std::is_same_v<typename F::voxel_data_t, VoxelDataBase<F, typename F::point_data_t>>, std::pair<const Eigen::Vector<int, D>*, float>, proxy>;
+            // default constructor
+            iterator() = default;
+            // operators
+            reference operator*() const noexcept;
+            pointer operator->() const noexcept;
+            iterator& operator++() noexcept;
+            iterator operator++(int) noexcept;
+            friend bool operator==(const iterator& lhs, const iterator& rhs) noexcept { return lhs.voxel_ == rhs.voxel_; }
+            friend bool operator!=(const iterator& lhs, const iterator& rhs) noexcept { return !(lhs == rhs); }
+        private:
+            explicit iterator(map_iterator voxel, size_t voxel_capacity) : voxel_(voxel), voxel_capacity_(voxel_capacity) { /* STUB */ }
+        private:
+            map_iterator voxel_{};
+            size_t voxel_capacity_;
+        };
+        // iterator initializers
+        iterator begin() const { return iterator{begin_, voxel_capacity_}; }
+        iterator end() const { return iterator{end_, voxel_capacity_}; }
+    private:
+        map_iterator begin_;
+        map_iterator end_;
+        // used for determing a voxel's 'fill level'
+        size_t voxel_capacity_;
+    };
+public:
+    view_global points() const { 
+        return {*this}; 
+    }
+    view_radius points_within_radius(const Eigen::Vector<float, D>& origin, float radius) const { 
+        return {*this, origin, radius}; 
+    }
+    view_voxels voxels() const { 
+        return {*this}; 
+    }
 };
+
+#include "odometry/voxel_map.tpp" // IWYU pragma: keep

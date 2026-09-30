@@ -1,25 +1,22 @@
-import numpy as np
-import torch
-import torch.linalg as LA
-from torch import Tensor
+import typing
 import random
-from itertools import repeat
+import itertools
 import math
 
-from typing import Dict, List, Tuple, Union
+import torch
 
-Number = Union[int, float]
-Number_Sequence = Union[List[Number], Tuple[Number, Number]]
+Number = typing.Union[int, float]
+NumberSequence = typing.Union[typing.List[Number], typing.Tuple[Number, Number]]
 
 class Transform(object):
     def __init__(self, verbose = False):
         self.verbose = verbose
 
-    def __call__(self, data: Dict[str, Tensor]):
+    def __call__(self, data: typing.Dict[str, torch.Tensor]):
         if self.verbose: print(f"applying transform: {self.__class__.__name__}")
         return self._apply(data)
     
-    def _apply(self, data: Dict[str, Tensor]):
+    def _apply(self, data: typing.Dict[str, torch.Tensor]):
         raise NotImplementedError(f"{self.__class__.__name__} must implement _apply")
 
     def __repr__(self):
@@ -39,7 +36,7 @@ class AddOffsets(Transform):
         super().__init__(**kwargs)
         self.ignore_id = ignore_id
 
-    def _apply(self, data: Dict[str, torch.Tensor]):
+    def _apply(self, data: typing.Dict[str, torch.Tensor]):
         pos = data["pos"]
         iids = data["instance"]
         offset = torch.full_like(pos, 0.0)
@@ -48,7 +45,7 @@ class AddOffsets(Transform):
         for iid in unique_iids:
             iid_mask = (iids == iid).flatten()
             instance_pos = pos[iid_mask]
-            instance_center = instance_pos.mean(dim=-2)
+            instance_center = instance_pos.mean(dim = -2)
             instance_offset = instance_center - instance_pos
             offset[iid_mask] = instance_offset
         data["offset"] = offset
@@ -67,8 +64,8 @@ class CenterGlobal(Transform):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    def _apply(self, data: Dict[str, Tensor]):
-        data["pos"] -= data["pos"].mean(axis=-2).unsqueeze(-2)
+    def _apply(self, data: typing.Dict[str, torch.Tensor]):
+        data["pos"] -= data["pos"].mean(axis = -2).unsqueeze(-2)
         return data
 
 class RandomRotate(Transform):
@@ -84,7 +81,7 @@ class RandomRotate(Transform):
     :param rotate_vectors: rotates any vector information like `normal` and
     `offset` if they exist (with those keys).
     """
-    def __init__(self, degrees: Union[Tuple[Number], Number] = 180, axis: int = 2, rotate_vectors = True, **kwargs):
+    def __init__(self, degrees: typing.Union[typing.Tuple[Number], Number] = 180, axis: int = 2, rotate_vectors = True, **kwargs):
         super().__init__(**kwargs)
         "minkowski batch is treated differently for pos or coords rotation"
         if isinstance(degrees, (int, float)):
@@ -94,7 +91,7 @@ class RandomRotate(Transform):
         self.axis = axis
         self.rotate_vectors = rotate_vectors
 
-    def _apply(self, data: Dict[str, Tensor]):
+    def _apply(self, data: typing.Dict[str, torch.Tensor]):
         degree = math.pi * random.uniform(*self.degrees) / 180.0
         sin, cos = math.sin(degree), math.cos(degree)
         if data["pos"].shape[-1] == 2:
@@ -107,7 +104,7 @@ class RandomRotate(Transform):
             else:
                 R_matrix = [[cos, sin, 0], [-sin, cos, 0], [0, 0, 1]]
 
-        R_matrix = Tensor(R_matrix).to(data["pos"].dtype).to(data["pos"].device)
+        R_matrix = torch.Tensor(R_matrix).to(data["pos"].dtype).to(data["pos"].device)
         data["pos"][:, 1:] = torch.matmul(data["pos"][:, 1:], R_matrix.T)
         if self.rotate_vectors and "normal" in data:
             data["normal"] = torch.matmul(data["normal"], R_matrix.T)
@@ -130,14 +127,14 @@ class RandomUniformScale(Transform):
     :param scale_vectors: scales any vector information like `normal` and
     `offset` if they exist (with those keys).
     """
-    def __init__(self, scales: Number_Sequence, scale_vectors: bool = True, **kwargs):
+    def __init__(self, scales: NumberSequence, scale_vectors: bool = True, **kwargs):
         super().__init__(**kwargs)
         "minkowski batch is treated differently for pos or coords rotation"
         assert isinstance(scales, (tuple, list)) and len(scales) == 2
         self.scales = scales
         self.scale_vectors = scale_vectors
 
-    def _apply(self, data: Dict[str, Tensor]):
+    def _apply(self, data: typing.Dict[str, torch.Tensor]):
         scale = random.uniform(*self.scales)
         data["pos"][:, 1:] = data["pos"][:, 1:] * scale
         if self.scale_vectors and "normal" in data:
@@ -160,20 +157,20 @@ class RandomTranslateGlobal(Transform):
     range (-translate, +translate) per axis to sample from. If a number
     instead of a sequence, the same range is used for each dimension.
     """
-    def __init__(self, translate: Union[Number, Number_Sequence], **kwargs):
+    def __init__(self, translate: typing.Union[Number, NumberSequence], **kwargs):
         super().__init__(**kwargs)
         self.translate = translate
 
-    def _apply(self, data: Dict[str, Tensor]):
+    def _apply(self, data: typing.Dict[str, torch.Tensor]):
         euc_dim = data["pos"].shape[-1]
         translate = self.translate
         if isinstance(translate, (int, float)):
-            translate = list(repeat(translate, times=euc_dim))
+            translate = list(itertools.repeat(translate, times = euc_dim))
         assert len(translate) == euc_dim
         transform = []
         for dim in range(euc_dim):
             transform.append(data["pos"].new_empty(1).uniform_(-abs(translate[dim]), abs(translate[dim])))
-        data["pos"] = data["pos"] + torch.stack(transform, dim=-1)
+        data["pos"] = data["pos"] + torch.stack(transform, dim = -1)
         return data
 
     def __repr__(self):

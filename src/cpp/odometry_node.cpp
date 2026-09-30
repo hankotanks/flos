@@ -7,12 +7,12 @@
 #include <nav_msgs/msg/odometry.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 // package
+#include "odometry_node_config.h"
 #include "odometry/system.h"
 // util
 #include "util/buffer_node.h"
 #include "util/cloud.h"
 #include "util/profiler.h"
-#include "util/rosargs.h"
 
 // PARAMETERS
 // debug
@@ -33,59 +33,56 @@
 // TOPICS
 // sub: incoming_points_topic (default: $/inference) [PointCloud2]
 // pub: $/odometry [Odometry]
-// pub: $/local_map [PointCloud2] (if debug is truthy)
+// pub: $/map [PointCloud2] (if debug is truthy)
+// pub: $/map/points [PointCloud2] (if debug is truthy)
 // pub: /tf [TF]
 
 class OdometryNode : 
     util::Profiler, 
-    public BufferNode<std::pair<util::CloudView, std_msgs::msg::Header>, sensor_msgs::msg::PointCloud2> {
+    public BufferNode<std::pair<util::Cloud, std_msgs::msg::Header>, sensor_msgs::msg::PointCloud2> {
 public:
     explicit OdometryNode() : util::Profiler(NODE_NAME),
         BufferNode("incoming_points_topic", "/" PROJECT_NAME "/inference"),
         config_(this),
         system_(config_.config) {
+        if(!rclcpp::ok()) return;
         if(debug_) { // initialize map publisher
-            local_map_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/local_map", 10);
+            local_map_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/map", 10);
+            outgoing_points_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/" PROJECT_NAME "/map/points", 10);
         }
         // initialize odometry publisher
         odom_publisher_ = this->create_publisher<nav_msgs::msg::Odometry>("/" PROJECT_NAME "/odometry", 10);
         // broadcaster for poses
         tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
-        // spin up thread for odometry
-        odometry_thread_ = std::thread(&OdometryNode::loop, this);
+        // start worker thread
+        BufferNode::start();
     }
 public:
     OdometryNode(const OdometryNode&) = delete;
     OdometryNode(OdometryNode&&) = delete;
     OdometryNode& operator=(const OdometryNode&) = delete;
     OdometryNode& operator=(OdometryNode&&) = delete;
-    ~OdometryNode() {
-        if(odometry_thread_.joinable()) odometry_thread_.join();
+    ~OdometryNode() { 
+        BufferNode::stop(); 
     }
 protected:
-    struct Config {
-        OdometrySystem::Config config;
-        Config(rclcpp::Node* node);
-    };
-protected:
     // output frame_id
-    static constexpr std::string LOCAL_MAP_FRAME = "odom_frame"; 
+    static constexpr std::string LOCAL_MAP_FRAME{"odom_frame"}; 
     // number of seconds between map publications
-    static constexpr double LOCAL_MAP_RATE = 2.0; 
+    static constexpr float LOCAL_MAP_RATE{5.f}; 
     // config
-    Config config_;
+    OdometryNodeConfig config_;
     // core
     OdometrySystem system_;
     // publisher for local map
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr local_map_publisher_{nullptr};
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr outgoing_points_publisher_{nullptr};
     // odometry publisher
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher_;
     // pose broadcaster
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
-    // separate thread for processing
-    std::thread odometry_thread_;
 protected:
-    void loop() {
+    virtual void loop() noexcept override final {
         using steady_clock = std::chrono::steady_clock;
         using time_point = steady_clock::time_point;
         steady_clock::time_point local_map_last_publication = steady_clock::now();
@@ -94,12 +91,12 @@ protected:
             auto maybe = BufferNode::pop();
             if(!maybe) break;
             auto [cloud, header] = std::move(*maybe);
+            TimeSystem::Stamp stamp(header.stamp.sec, header.stamp.nanosec);
             // perform registration
             Sophus::SE3f pose;
-            {   
-                util::Profiler* this_profiler = this;
-                util::Profiler profiler("registration", this_profiler);
-                pose = system_.register_to_map(std::move(cloud));
+            {
+                util::Profiler profiler("registration", this);
+                pose = system_.register_to_map(cloud, stamp);
             }
             { // send the transformation from the lidar frame to the local map frame
                 geometry_msgs::msg::TransformStamped msg;
@@ -140,21 +137,30 @@ protected:
                 odom_publisher_->publish(std::move(msg));
             }
             if(debug_) {
+                // localized points publication
+                outgoing_points_publisher_->publish(std::move(cloud.message(header)));
+                // local map publication
                 auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(steady_clock::now() - local_map_last_publication);
                 if(elapsed.count() >= OdometryNode::LOCAL_MAP_RATE * 1000) {
                     std_msgs::msg::Header local_map_header;
                     local_map_header.stamp = header.stamp;
                     local_map_header.frame_id = OdometryNode::LOCAL_MAP_FRAME;
-                    const util::CloudView& cloud = system_.cloud();
-                    local_map_publisher_->publish(std::move(cloud.message(local_map_header)));
+                    util::Cloud out;
+                    std::vector<uint8_t> prediction;
+                    for(const auto& [point, semantics] : system_.points()) {
+                        out.add_point(point);
+                        prediction.emplace_back(semantics.prediction);
+                    }
+                    out.add_field<uint8_t>("prediction", prediction);
+                    local_map_publisher_->publish(std::move(out.message(local_map_header)));
                     local_map_last_publication = steady_clock::now();
                 }
             }
         }
     }
 
-    virtual std::pair<util::CloudView, std_msgs::msg::Header> read(const std::shared_ptr<sensor_msgs::msg::PointCloud2>& msg) noexcept final override {
-        util::CloudView cloud{msg};
+    virtual std::pair<util::Cloud, std_msgs::msg::Header> read(const std::shared_ptr<sensor_msgs::msg::PointCloud2>& msg) noexcept final override {
+        util::Cloud cloud{msg};
         return std::make_pair(std::move(cloud), msg->header);
     }
 };
@@ -165,35 +171,4 @@ int main(int argc, char* argv[]) {
     rclcpp::spin(std::static_pointer_cast<rclcpp::Node>(node));
     rclcpp::shutdown();
     return 0;
-}
-
-OdometryNode::Config::Config(rclcpp::Node* node) {
-    util::opt_param<bool>(node, config.map.confidence_based_insertion, "confidence_based_insertion");
-    util::opt_param<double>(node, config.map.max_distance, "max_distance");
-    util::opt_param<double>(node, config.map.voxel_size, "voxel_size");
-    util::opt_param<size_t>(node, config.map.voxel_capacity, "voxel_capacity");
-    // threshold
-    util::opt_param<double>(node, config.threshold.threshold_initial, "threshold_initial");
-    util::opt_param<double>(node, config.threshold.min_motion, "min_motion");
-    // registration
-    util::opt_param<bool>(node, config.registration.confidence_weighting, "confidence_weighting");
-    util::opt_param<bool>(node, config.registration.correspondence_restriction, "correspondence_restriction");
-    util::opt_param<size_t>(node, config.registration.max_iterations, "max_iterations");
-    util::opt_param<size_t>(node, config.registration.max_threads, "max_threads");
-    util::opt_param<double>(node, config.registration.convergence_criterion, "convergence_criterion");
-    util::opt_param<double>(node, config.registration.correspondence_multiplier, "correspondence_distance_multiplier");
-    // log parameters
-    RCLCPP_INFO_STREAM(node->get_logger(), std::boolalpha << "OdometrySystem::Config" << std::endl <<
-        "\tconfidence_based_insertion: " << config.map.confidence_based_insertion << "," << std::endl <<
-        "\tmax_distance: " << config.map.max_distance << "," << std::endl <<
-        "\tvoxel_size: " << config.map.voxel_size << "," << std::endl <<
-        "\tvoxel_capacity: " << config.map.voxel_capacity << "," << std::endl <<
-        "\tthreshold_initial: " << config.threshold.threshold_initial << "," << std::endl <<
-        "\tmin_motion: " << config.threshold.min_motion << "," << std::endl <<
-        "\tconfidence_weighting: " << config.registration.confidence_weighting << "," << std::endl <<
-        "\tcorrespondence_restriction: " << config.registration.correspondence_restriction << "," << std::endl <<
-        "\tmax_iterations: " << config.registration.max_iterations << "," << std::endl <<
-        "\tmax_threads: " << config.registration.max_threads << "," << std::endl <<
-        "\tconvergence_criterion: " << config.registration.convergence_criterion << "," << std::endl <<
-        "\tcorrespondence_multiplier: " << config.registration.correspondence_multiplier);
 }

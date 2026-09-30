@@ -1,60 +1,79 @@
-#include "cloud.h"
+#include "util/cloud.h"
 
 // system
 #include <memory>
 #include <set>
 #include <regex>
 #include <stdexcept>
+// robin_map
+#include <tsl/robin_map.h>
+
+using i1 = int8_t;
+using u1 = uint8_t;
+using i2 = int16_t;
+using u2 = uint16_t;
+using i4 = int32_t;
+using u4 = uint32_t;
+using f4 = float;
+using f8 = double;
+
+template<>
+struct std::hash<Eigen::Vector3i> {
+    size_t operator()(const Eigen::Vector3i& voxel) const {
+        const uint32_t *vec = reinterpret_cast<const uint32_t *>(voxel.data());
+        return (vec[0] * 73856093 ^ vec[1] * 19349669 ^ vec[2] * 83492791);
+    }
+};
 
 namespace {
 inline std::string fix_frame_id(const std::string &frame_id) {
     return std::regex_replace(frame_id, std::regex("^/"), "");
 }
 
-// this algorithm is sourced from Potatoswatter on StackOverflow: https://stackoverflow.com/a/1267878
-template<typename order_iterator, typename value_iterator>
-void reorder(order_iterator order_begin, order_iterator order_end, value_iterator v)  {   
-    typedef typename std::iterator_traits<value_iterator>::value_type value_t;
-    typedef typename std::iterator_traits<order_iterator>::value_type index_t;
-    typedef typename std::iterator_traits<order_iterator>::difference_type diff_t;
-    
-    diff_t remaining = order_end - 1 - order_begin;
-    for(index_t s = index_t(), d; remaining > 0; ++s) {
-        for(d = order_begin[s]; d > s; d = order_begin[d]);
-        if(d == s) {
-            --remaining;
-            value_t temp = v[s];
-            while(d = order_begin[d], d != s) {
-                std::swap(temp, v[d]);
-                --remaining;
-            }
-            v[s] = temp;
-        }
-    }
+inline Eigen::Vector3i point_to_voxel(const Eigen::Vector3f& point, double voxel_size) {
+    return {
+        static_cast<int>(std::floor(point.x() / voxel_size)),
+        static_cast<int>(std::floor(point.y() / voxel_size)),
+        static_cast<int>(std::floor(point.z() / voxel_size))
+    };
 }
 } // private scope
 
 namespace util {
-void CloudView::Descriptor::add_field(uint8_t datatype, const std::string& name) {
+Cloud::Descriptor::Descriptor(const Descriptor& other) : attrs_(other.attrs_) {
+    for(size_t i = 0; i < attrs_.size(); ++i) {
+        names_.emplace(std::string_view(attrs_[i].second), i);
+    }
+}
+
+Cloud::Descriptor& Cloud::Descriptor::operator=(const Descriptor& other) {
+    if(this == &other) return *this;
+    attrs_ = other.attrs_;
+    names_.clear();
+    for(size_t i = 0; i < attrs_.size(); ++i) {
+        names_.emplace(std::string_view(attrs_[i].second), i);
+    }
+    return *this;
+}
+
+void Cloud::Descriptor::add_field(uint8_t datatype, const std::string& name) {
     size_t field_count = attrs_.size();
     attrs_.emplace_back(datatype, name);
     const std::string& name_ref = attrs_.back().second;
     names_.emplace(std::string_view(name_ref), field_count);
 }
 
-bool CloudView::Descriptor::operator==(const Descriptor& other) const noexcept {
+bool Cloud::Descriptor::operator==(const Descriptor& other) const noexcept {
     return attrs_ == other.attrs_ && names_ == other.names_;
 }
 
-bool CloudView::Descriptor::operator!=(const Descriptor& other) const noexcept {
+bool Cloud::Descriptor::operator!=(const Descriptor& other) const noexcept {
     return !(*this == other);
 }
 
-CloudView::CloudView(const std::shared_ptr<const Descriptor>& desc) noexcept : desc_(desc) {
-    assert(desc_->attrs_.size() == desc_->names_.size());
-    for(size_t i = 0; i < desc_->attrs_.size(); ++i) {
-        fields_.emplace_back(desc_->attrs_[i].first);
-    }
+Cloud::Cloud(std::span<const Eigen::Vector3f> points) noexcept : Cloud::Cloud() {
+    points_.reserve(points.size());
+    points_.insert(points_.end(), points.begin(), points.end());
 }
 
 struct FieldReader {
@@ -73,19 +92,19 @@ struct FieldReader {
         using namespace sensor_msgs;
         using namespace sensor_msgs::msg;
         switch(datatype) {
-        case PointField::INT8:    return It { PointCloud2ConstIterator<int8_t>(*msg, name) };
-        case PointField::UINT8:   return It { PointCloud2ConstIterator<uint8_t>(*msg, name) };
-        case PointField::INT16:   return It { PointCloud2ConstIterator<int16_t>(*msg, name) };
-        case PointField::UINT16:  return It { PointCloud2ConstIterator<uint16_t>(*msg, name) };
-        case PointField::INT32:   return It { PointCloud2ConstIterator<int32_t>(*msg, name) };
-        case PointField::UINT32:  return It { PointCloud2ConstIterator<uint32_t>(*msg, name) };
-        case PointField::FLOAT32: return It { PointCloud2ConstIterator<float>(*msg, name) };
-        case PointField::FLOAT64: return It { PointCloud2ConstIterator<double>(*msg, name) };
+        case PointField::INT8:    return It { PointCloud2ConstIterator<i1>(*msg, name) };
+        case PointField::UINT8:   return It { PointCloud2ConstIterator<u1>(*msg, name) };
+        case PointField::INT16:   return It { PointCloud2ConstIterator<i2>(*msg, name) };
+        case PointField::UINT16:  return It { PointCloud2ConstIterator<u2>(*msg, name) };
+        case PointField::INT32:   return It { PointCloud2ConstIterator<i4>(*msg, name) };
+        case PointField::UINT32:  return It { PointCloud2ConstIterator<u4>(*msg, name) };
+        case PointField::FLOAT32: return It { PointCloud2ConstIterator<f4>(*msg, name) };
+        case PointField::FLOAT64: return It { PointCloud2ConstIterator<f8>(*msg, name) };
         default: throw std::logic_error("unsupported field type");
         }
     }()) { /* STUB */ }
 
-    void read(CloudView::Field& field) noexcept {
+    void read(Cloud::Field& field) noexcept {
         std::visit([&field](auto&& it) {
             using T = typename FieldReader::Type<std::decay_t<decltype(it)>>::type;
             std::get<std::vector<T>>(field.data_).emplace_back(*it);
@@ -94,13 +113,11 @@ struct FieldReader {
     }
 };
 
-CloudView::CloudView(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg) noexcept {
+Cloud::Cloud(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg) noexcept {
     assert(msg->fields.size() >= 3);
     assert(msg->fields[0].name == "x");
     assert(msg->fields[1].name == "y");
     assert(msg->fields[2].name == "z");
-
-    std::unique_ptr<CloudView::Descriptor> desc = std::make_unique<CloudView::Descriptor>();
 
     sensor_msgs::PointCloud2ConstIterator<float> msg_x(*msg, "x");
     sensor_msgs::PointCloud2ConstIterator<float> msg_y(*msg, "y");
@@ -112,17 +129,17 @@ CloudView::CloudView(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg) n
 
     std::vector<FieldReader> msg_it;
     std::for_each(it, msg->fields.cend(), [&](const auto& field) {
-        desc->add_field(field.datatype, field.name);
+        desc_.add_field(field.datatype, field.name);
         fields_.emplace_back(field.datatype);
         msg_it.emplace_back(msg, field.datatype, field.name);
     });
-    desc_ = std::move(desc);
 
     size_t point_count = msg->height * msg->width;
     points_.reserve(point_count);
 
     size_t field_count = msg_it.size();
-    assert(field_count == desc_->size());
+    assert(field_count == desc_.attrs_.size());
+    assert(field_count == desc_.names_.size());
     for(auto& field : fields_) {
         std::visit([point_count](auto& it) { it.reserve(point_count); }, field.data_);
     }
@@ -133,206 +150,156 @@ CloudView::CloudView(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg) n
     }
 }
 
-CloudView::CloudView(const sensor_msgs::msg::PointCloud2::SharedPtr& msg) noexcept :
-        CloudView(std::const_pointer_cast<const sensor_msgs::msg::PointCloud2>(msg)) { /* STUB */ }
+Cloud::Cloud(const sensor_msgs::msg::PointCloud2::SharedPtr& msg) noexcept :
+        Cloud(std::const_pointer_cast<const sensor_msgs::msg::PointCloud2>(msg)) { /* STUB */ }
 
-CloudView::CloudView(CloudView&& other) noexcept : desc_(std::move(other.desc_)), 
+Cloud::Cloud(Cloud&& other) noexcept : desc_(other.desc_), 
     points_(std::move(other.points_)), fields_(std::move(other.fields_)) {
-    other.desc_ = std::make_shared<CloudView::Descriptor>(*desc_);
     other.points_.clear();
     other.fields_.clear();
     for(size_t i = 0; i < fields_.size(); ++i) {
-        other.fields_.emplace_back(other.desc_->attrs_[i].first);
+        other.fields_.emplace_back(other.desc_.attrs_[i].first);
     }
 }
 
-CloudView& CloudView::operator=(CloudView&& other) noexcept {
+Cloud& Cloud::operator=(Cloud&& other) noexcept {
     if(this == &other) return *this;
-    desc_ = std::make_shared<CloudView::Descriptor>(*(other.desc_));
+    desc_ = other.desc_;
     points_ = std::move(other.points_);
     fields_ = std::move(other.fields_);
     other.points_.clear();
     other.fields_.clear();
     for(size_t i = 0; i < fields_.size(); ++i) {
-        other.fields_.emplace_back(other.desc_->attrs_[i].first);
+        other.fields_.emplace_back(other.desc_.attrs_[i].first);
     }
     return *this;
 }
 
-size_t CloudView::size() const noexcept { 
-    assert(desc_->attrs_.size() == desc_->names_.size());
-    assert(desc_->attrs_.size() == points_.size());
-    return points_.size(); 
-}
-
-bool CloudView::empty() const noexcept { 
-    return CloudView::size() == 0;
-}
-
-void CloudView::clear() noexcept {
+void Cloud::clear() noexcept {
     points_.clear();
     for(auto& field : fields_) field.clear();
 }
 
-void CloudView::reserve(size_t new_cap) {
+void Cloud::reserve(size_t new_cap) {
     points_.reserve(new_cap);
     for(auto& field : fields_) field.reserve(new_cap);
 }
 
-void CloudView::resize(size_t count) {
+void Cloud::resize(size_t count) {
     points_.resize(count);
     for(Field& field : fields_) field.resize(count);
 }
 
-std::shared_ptr<const CloudView::Descriptor> CloudView::descriptor() const noexcept {
-    return desc_;
-}
-
-std::span<const Eigen::Vector3f> CloudView::points() const noexcept { 
+std::span<const Eigen::Vector3f> Cloud::points() const noexcept { 
     return points_; 
 }
 
-std::span<Eigen::Vector3f> CloudView::points() noexcept { 
+std::span<Eigen::Vector3f> Cloud::points() noexcept { 
     return points_; 
 }
 
 template<typename T>
-std::span<const T> CloudView::field(const std::string& name) const {
+std::span<const T> Cloud::field(const std::string& name) const {
     try {
-        return std::get<std::vector<T>>(fields_[desc_->names_.at(name)].data_);
+        return std::get<std::vector<T>>(fields_[desc_.names_.at(name)].data_);
     } catch(const std::out_of_range& e) {
         throw std::runtime_error("field not found in cloud");
     }
 }
 
-template std::span<const int8_t>  CloudView::field(const std::string&) const;
-template std::span<const uint8_t> CloudView::field(const std::string&) const;
-template std::span<const int16_t> CloudView::field(const std::string&) const;
-template std::span<const uint16_t> CloudView::field(const std::string&) const;
-template std::span<const int32_t> CloudView::field(const std::string&) const;
-template std::span<const uint32_t> CloudView::field(const std::string&) const;
-template std::span<const float> CloudView::field(const std::string&) const;
-template std::span<const double> CloudView::field(const std::string&) const;
+template std::span<const i1> Cloud::field(const std::string&) const;
+template std::span<const u1> Cloud::field(const std::string&) const;
+template std::span<const i2> Cloud::field(const std::string&) const;
+template std::span<const u2> Cloud::field(const std::string&) const;
+template std::span<const i4> Cloud::field(const std::string&) const;
+template std::span<const u4> Cloud::field(const std::string&) const;
+template std::span<const f4> Cloud::field(const std::string&) const;
+template std::span<const f8> Cloud::field(const std::string&) const;
 
 template<typename T>
-std::span<T> CloudView::field(const std::string& name) {
+std::span<T> Cloud::field(const std::string& name) {
     try {
-        return std::get<std::vector<T>>(fields_[desc_->names_.at(name)].data_);
+        return std::get<std::vector<T>>(fields_[desc_.names_.at(name)].data_);
     } catch(const std::out_of_range& e) {
         throw std::runtime_error("field not found in cloud");
     }
 }
 
-template std::span<int8_t>  CloudView::field(const std::string&);
-template std::span<uint8_t> CloudView::field(const std::string&);
-template std::span<int16_t> CloudView::field(const std::string&);
-template std::span<uint16_t> CloudView::field(const std::string&);
-template std::span<int32_t> CloudView::field(const std::string&);
-template std::span<uint32_t> CloudView::field(const std::string&);
-template std::span<float> CloudView::field(const std::string&);
-template std::span<double> CloudView::field(const std::string&);
-
-CloudView::Point CloudView::add_point(const CloudView::ConstPoint& point) noexcept {
-    assert(desc_ == point.owner_->desc_);
-    assert(fields_.size() == point.owner_->fields_.size());
-    size_t index = CloudView::size();    
-    points_.emplace_back(point.owner_->points_[point.index]);
-    for(size_t j = 0; j < fields_.size(); ++j) {
-        std::visit([&](auto& vec) {
-            using T = typename std::decay_t<decltype(vec)>;
-            vec.emplace_back(std::get<T>(point.owner_->fields_[j].data_)[point.index]);
-        }, fields_[j].data_);
-    }
-    return CloudView::Point{this, index};
-}
+template std::span<i1> Cloud::field(const std::string&);
+template std::span<u1> Cloud::field(const std::string&);
+template std::span<i2> Cloud::field(const std::string&);
+template std::span<u2> Cloud::field(const std::string&);
+template std::span<i4> Cloud::field(const std::string&);
+template std::span<u4> Cloud::field(const std::string&);
+template std::span<f4> Cloud::field(const std::string&);
+template std::span<f8> Cloud::field(const std::string&);
 
 #ifdef GENERATE_CLOUD_PYBIND_MODULE
-py::object CloudView::points_as_py_object() const noexcept {
+py::object Cloud::points_as_py_object() const noexcept {
     return py::cast(points_, py::return_value_policy::reference);
 }
 
 template<typename T>
-py::object CloudView::field_as_py_object(const std::string& name) const {
+py::object Cloud::field_as_py_object(const std::string& name) const {
     try {
-        return py::cast(std::get<std::vector<T>>(fields_[desc_->names_.at(name)].data_), py::return_value_policy::reference);
+        return py::cast(std::get<std::vector<T>>(fields_[desc_.names_.at(name)].data_), py::return_value_policy::reference);
     } catch(const std::out_of_range& e) {
         throw std::runtime_error("field not found in cloud");
     }
 }
 
-template py::object CloudView::field_as_py_object<int8_t>(const std::string&) const;
-template py::object CloudView::field_as_py_object<uint8_t>(const std::string&) const;
-template py::object CloudView::field_as_py_object<int16_t>(const std::string&) const;
-template py::object CloudView::field_as_py_object<uint16_t>(const std::string&) const;
-template py::object CloudView::field_as_py_object<int32_t>(const std::string&) const;
-template py::object CloudView::field_as_py_object<uint32_t>(const std::string&) const;
-template py::object CloudView::field_as_py_object<float>(const std::string&) const;
-template py::object CloudView::field_as_py_object<double>(const std::string&) const;
+template py::object Cloud::field_as_py_object<i1>(const std::string&) const;
+template py::object Cloud::field_as_py_object<u1>(const std::string&) const;
+template py::object Cloud::field_as_py_object<i2>(const std::string&) const;
+template py::object Cloud::field_as_py_object<u2>(const std::string&) const;
+template py::object Cloud::field_as_py_object<i4>(const std::string&) const;
+template py::object Cloud::field_as_py_object<u4>(const std::string&) const;
+template py::object Cloud::field_as_py_object<f4>(const std::string&) const;
+template py::object Cloud::field_as_py_object<f8>(const std::string&) const;
 #endif // GENERATE_CLOUD_PYBIND_MODULE
 
-template<typename T>
-void CloudView::filter(const std::string& name, const std::function<bool(const T&)>& pred) {
-    std::span<const T> field = CloudView::field<T>(name);
-    for(size_t i = CloudView::size(); i-- > 0;) {
-        if(!(pred)(field[i])) {
-            points_.erase(points_.begin() + i);
-            for(Field& field : fields_) {
-                std::visit([i](auto& vec) { 
-                    vec.erase(vec.begin() + i); 
-                }, field.data_);
+void Cloud::downsample(float voxel_size) {
+    tsl::robin_map<Eigen::Vector3i, size_t> grid;
+    grid.reserve(Cloud::size());
+    size_t i_write = 0;
+    for(size_t i_read = 0; i_read < Cloud::size(); ++i_read) {
+        const Eigen::Vector3i voxel = point_to_voxel(points_[i_read], voxel_size);
+        if(!grid.contains(voxel)) {
+            grid.insert({voxel, i_write});
+            points_[i_write] = points_[i_read];
+            for(size_t i = 0; i < fields_.size(); ++i) {
+                // fields_[i].copy(fields_[i], other.index, index);
+                std::visit([i_read, i_write](auto& vec) {
+                    vec[i_write] = vec[i_read];
+                }, fields_[i].data_);
+            }
+            ++i_write;
+        }
+    }
+    Cloud::resize(i_write);
+}
+
+void Cloud::filter_by_distance(const Eigen::Vector3f& origin, float minima, float maxima) {
+    float minima_sq = minima * minima;
+    float maxima_sq = maxima * maxima;
+    const size_t n = points_.size();
+    size_t i_write = 0;
+    for(size_t i_read = 0; i_read < n; ++i_read) {
+        const float d_sq = (points_[i_read] - origin).squaredNorm();
+        if(d_sq < minima_sq || d_sq > maxima_sq) continue;
+        if(i_write != i_read) {
+            points_[i_write] = points_[i_read];
+            for(Field& f : fields_) {
+                std::visit([i_write, i_read](auto& vec) { vec[i_write] = vec[i_read]; }, f.data_);
             }
         }
+        ++i_write;
+    }
+    points_.resize(i_write);
+    for(Field& f : fields_) {
+        std::visit([i_write](auto& vec) { vec.resize(i_write); }, f.data_);
     }
 }
-
-template void CloudView::filter<int8_t>(const std::string&, const std::function<bool(const int8_t&)>&);
-template void CloudView::filter<uint8_t>(const std::string&, const std::function<bool(const uint8_t&)>&);
-template void CloudView::filter<int16_t>(const std::string&, const std::function<bool(const int16_t&)>&);
-template void CloudView::filter<uint16_t>(const std::string&, const std::function<bool(const uint16_t&)>&);
-template void CloudView::filter<int32_t>(const std::string&, const std::function<bool(const int32_t&)>&);
-template void CloudView::filter<uint32_t>(const std::string&, const std::function<bool(const uint32_t&)>&);
-template void CloudView::filter<float>(const std::string&, const std::function<bool(const float&)>&);
-template void CloudView::filter<double>(const std::string&, const std::function<bool(const double&)>&);
-
-void CloudView::filter_by_distance(const Eigen::Vector3f& origin, float distance) {
-    for(size_t i = CloudView::size(); i-- > 0;) {
-        if((points_[i] - origin).norm() <= distance) continue; 
-        points_.erase(points_.begin() + i);
-        for(Field& field : fields_) {
-            std::visit([i](auto& vec) { 
-                vec.erase(vec.begin() + i); 
-            }, field.data_);
-        }
-    }
-}
-
-template<typename T>
-void CloudView::sort(const std::string& name, const std::function<bool(const T&, const T&)>& comp) {
-    std::span<const T> scalars = CloudView::field<T>(name);
-    // build a list of sorted indices
-    std::vector<size_t> indices(CloudView::size());
-    std::iota(indices.begin(), indices.end(), 0);
-    std::sort(indices.begin(), indices.end(), [&scalars, &comp](size_t fst, size_t snd) {
-        return (comp)(scalars[fst], scalars[snd]);
-    });
-    // reorder points
-    reorder(indices.begin(), indices.end(), points_.begin());
-    // reorder fields
-    for(Field& field : fields_) {
-        std::visit([&indices](auto& vec) { 
-            reorder(indices.begin(), indices.end(), vec.begin());
-        }, field.data_);
-    }
-}
-
-template void CloudView::sort(const std::string& name, const std::function<bool(const int8_t&, const int8_t&)>&);
-template void CloudView::sort(const std::string& name, const std::function<bool(const uint8_t&, const uint8_t&)>&);
-template void CloudView::sort(const std::string& name, const std::function<bool(const int16_t&, const int16_t&)>&);
-template void CloudView::sort(const std::string& name, const std::function<bool(const uint16_t&, const uint16_t&)>&);
-template void CloudView::sort(const std::string& name, const std::function<bool(const int32_t&, const int32_t&)>&);
-template void CloudView::sort(const std::string& name, const std::function<bool(const uint32_t&, const uint32_t&)>&);
-template void CloudView::sort(const std::string& name, const std::function<bool(const float&, const float&)>&);
-template void CloudView::sort(const std::string& name, const std::function<bool(const double&, const double&)>&);
 
 struct FieldWriter {
     template<typename... T>
@@ -350,14 +317,14 @@ struct FieldWriter {
         using namespace sensor_msgs;
         using namespace sensor_msgs::msg;
         switch(datatype) {
-        case PointField::INT8:    return It { PointCloud2Iterator<int8_t>(msg, name) };
-        case PointField::UINT8:   return It { PointCloud2Iterator<uint8_t>(msg, name) };
-        case PointField::INT16:   return It { PointCloud2Iterator<int16_t>(msg, name) };
-        case PointField::UINT16:  return It { PointCloud2Iterator<uint16_t>(msg, name) };
-        case PointField::INT32:   return It { PointCloud2Iterator<int32_t>(msg, name) };
-        case PointField::UINT32:  return It { PointCloud2Iterator<uint32_t>(msg, name) };
-        case PointField::FLOAT32: return It { PointCloud2Iterator<float>(msg, name) };
-        case PointField::FLOAT64: return It { PointCloud2Iterator<double>(msg, name) };
+        case PointField::INT8:    return It { PointCloud2Iterator<i1>(msg, name) };
+        case PointField::UINT8:   return It { PointCloud2Iterator<u1>(msg, name) };
+        case PointField::INT16:   return It { PointCloud2Iterator<i2>(msg, name) };
+        case PointField::UINT16:  return It { PointCloud2Iterator<u2>(msg, name) };
+        case PointField::INT32:   return It { PointCloud2Iterator<i4>(msg, name) };
+        case PointField::UINT32:  return It { PointCloud2Iterator<u4>(msg, name) };
+        case PointField::FLOAT32: return It { PointCloud2Iterator<f4>(msg, name) };
+        case PointField::FLOAT64: return It { PointCloud2Iterator<f8>(msg, name) };
         default: throw std::logic_error("unsupported field type");
         }
     }()) { /* STUB */ }
@@ -371,7 +338,7 @@ struct FieldWriter {
     }
 };
 
-sensor_msgs::msg::PointCloud2 CloudView::message(const std_msgs::msg::Header& header) const noexcept {
+sensor_msgs::msg::PointCloud2 Cloud::message(const std_msgs::msg::Header& header) const noexcept {
     sensor_msgs::msg::PointCloud2 msg;
     sensor_msgs::PointCloud2Modifier modifier(msg);
     msg.header = header;
@@ -383,27 +350,27 @@ sensor_msgs::msg::PointCloud2 CloudView::message(const std_msgs::msg::Header& he
     offset = addPointField(msg, "y", 1, sensor_msgs::msg::PointField::FLOAT32, offset);
     offset = addPointField(msg, "z", 1, sensor_msgs::msg::PointField::FLOAT32, offset);
     // generic fields
-    for(const auto& [datatype, name] : desc_->attrs_) {
+    for(const auto& [datatype, name] : desc_.attrs_) {
         offset = addPointField(msg, name, 1, datatype, offset);
     }
     msg.point_step = offset;
     msg.row_step = msg.width * msg.point_step;
     msg.data.resize(static_cast<size_t>(msg.height) * msg.row_step);
-    modifier.resize(CloudView::size());
+    modifier.resize(Cloud::size());
     // position iterators
     sensor_msgs::PointCloud2Iterator<float> msg_x(msg, "x");
     sensor_msgs::PointCloud2Iterator<float> msg_y(msg, "y");
     sensor_msgs::PointCloud2Iterator<float> msg_z(msg, "z");
     // build iterators for each field
     std::vector<FieldWriter> msg_it;
-    for(const auto& [datatype, name] : desc_->attrs_) {
+    for(const auto& [datatype, name] : desc_.attrs_) {
         msg_it.emplace_back(msg, datatype, name);
     }
     size_t field_count = msg_it.size();
-    assert(field_count == cloud_desc_->attrs.size());
-    assert(field_count == cloud_desc_->names.size());
+    assert(field_count == desc_.attrs_.size());
+    assert(field_count == desc_.names_.size());
     // populate the message
-    for(size_t i = 0; i < CloudView::size(); ++i, ++msg_x, ++msg_y, ++msg_z) {
+    for(size_t i = 0; i < Cloud::size(); ++i, ++msg_x, ++msg_y, ++msg_z) {
         const Eigen::Vector3f& point = points_[i];
         *msg_x = static_cast<float>(point.x());
         *msg_y = static_cast<float>(point.y());
@@ -417,115 +384,124 @@ sensor_msgs::msg::PointCloud2 CloudView::message(const std_msgs::msg::Header& he
     return msg;
 }
 
-CloudView::Field::Field(uint8_t datatype) : data_([&]() -> CloudView::Field::Data {
+Cloud::Field::Field(uint8_t datatype) : data_([&]() -> Cloud::Field::Data {
     using namespace sensor_msgs::msg;
     switch(datatype) {
-    case PointField::INT8:    return Data { std::vector<int8_t>(0) };
-    case PointField::UINT8:   return Data { std::vector<uint8_t>(0) };
-    case PointField::INT16:   return Data { std::vector<int16_t>(0) };
-    case PointField::UINT16:  return Data { std::vector<uint16_t>(0) };
-    case PointField::INT32:   return Data { std::vector<int32_t>(0) };
-    case PointField::UINT32:  return Data { std::vector<uint32_t>(0) };
-    case PointField::FLOAT32: return Data { std::vector<float>(0) };
-    case PointField::FLOAT64: return Data { std::vector<double>(0) };
+    case PointField::INT8:    return Data { std::vector<i1>(0) };
+    case PointField::UINT8:   return Data { std::vector<u1>(0) };
+    case PointField::INT16:   return Data { std::vector<i2>(0) };
+    case PointField::UINT16:  return Data { std::vector<u2>(0) };
+    case PointField::INT32:   return Data { std::vector<i4>(0) };
+    case PointField::UINT32:  return Data { std::vector<u4>(0) };
+    case PointField::FLOAT32: return Data { std::vector<f4>(0) };
+    case PointField::FLOAT64: return Data { std::vector<f8>(0) };
     default: throw std::logic_error("unsupported field type");
     }
 }()) { /* STUB */ }
 
-void CloudView::Field::clear() noexcept {
+void Cloud::Field::clear() noexcept {
     std::visit([](auto& vec) { vec.clear(); }, data_);
 }
 
-void CloudView::Field::reserve(size_t new_cap) {
+void Cloud::Field::reserve(size_t new_cap) {
     std::visit([new_cap](auto& vec) { vec.reserve(new_cap); }, data_);
 }
 
-void CloudView::Field::resize(size_t count) {
+void Cloud::Field::resize(size_t count) {
     std::visit([count](auto& vec) { vec.resize(count); }, data_);
 }
 
 template<typename T>
-T& CloudView::Field::operator[](size_t index) {
+T& Cloud::Field::operator[](size_t index) {
     return std::get<std::vector<T>>(data_)[index];
 }
 
-template int8_t& CloudView::Field::operator[](size_t index);
-template uint8_t& CloudView::Field::operator[](size_t index);
-template int16_t& CloudView::Field::operator[](size_t index);
-template uint16_t& CloudView::Field::operator[](size_t index);
-template int32_t& CloudView::Field::operator[](size_t index);
-template uint32_t& CloudView::Field::operator[](size_t index);
-template float& CloudView::Field::operator[](size_t index);
-template double& CloudView::Field::operator[](size_t index);
+template i1& Cloud::Field::operator[](size_t index);
+template u1& Cloud::Field::operator[](size_t index);
+template i2& Cloud::Field::operator[](size_t index);
+template u2& Cloud::Field::operator[](size_t index);
+template i4& Cloud::Field::operator[](size_t index);
+template u4& Cloud::Field::operator[](size_t index);
+template f4& Cloud::Field::operator[](size_t index);
+template f8& Cloud::Field::operator[](size_t index);
 
 template<typename T>
-const T& CloudView::Field::operator[](size_t index) const {
+const T& Cloud::Field::operator[](size_t index) const {
     return std::get<std::vector<T>>(data_)[index];
 }
 
-template const int8_t& CloudView::Field::operator[](size_t index) const;
-template const uint8_t& CloudView::Field::operator[](size_t index) const;
-template const int16_t& CloudView::Field::operator[](size_t index) const;
-template const uint16_t& CloudView::Field::operator[](size_t index) const;
-template const int32_t& CloudView::Field::operator[](size_t index) const;
-template const uint32_t& CloudView::Field::operator[](size_t index) const;
-template const float& CloudView::Field::operator[](size_t index) const;
-template const double& CloudView::Field::operator[](size_t index) const;
+template const i1& Cloud::Field::operator[](size_t index) const;
+template const u1& Cloud::Field::operator[](size_t index) const;
+template const i2& Cloud::Field::operator[](size_t index) const;
+template const u2& Cloud::Field::operator[](size_t index) const;
+template const i4& Cloud::Field::operator[](size_t index) const;
+template const u4& Cloud::Field::operator[](size_t index) const;
+template const f4& Cloud::Field::operator[](size_t index) const;
+template const f8& Cloud::Field::operator[](size_t index) const;
 
-void CloudView::Field::copy(const CloudView::Field& other, size_t from, size_t to) {
-    std::visit([from, to](auto& vec_to, const auto& vec_from) {
-        vec_to[to] = vec_from[from];
-    }, data_, other.data_);
+void Cloud::add_point(const Eigen::Vector3f& point) {
+    assert(fields_.size() == 0);
+    points_.emplace_back(point);
 }
 
 template<typename T>
-void Cloud::add_field(const std::string& name, const std::vector<T>& scalars) noexcept {
-    assert(CloudView::size() == scalars.size());
-    std::shared_ptr<CloudView::Descriptor> desc = std::const_pointer_cast<CloudView::Descriptor>(desc_);
-    assert(!desc->names_.contains(name));
+std::span<T> Cloud::add_field(const std::string& name, const std::vector<T>& scalars) noexcept {
+    assert(Cloud::size() == scalars.size());
+    assert(!desc_.names_.contains(name));
     uint8_t datatype;
-    if constexpr (std::is_same_v<T, int8_t>)        datatype = sensor_msgs::msg::PointField::INT8;
-    else if constexpr (std::is_same_v<T, uint8_t>)  datatype = sensor_msgs::msg::PointField::UINT8;
-    else if constexpr (std::is_same_v<T, int16_t>)  datatype = sensor_msgs::msg::PointField::INT16;
-    else if constexpr (std::is_same_v<T, uint16_t>) datatype = sensor_msgs::msg::PointField::UINT16;
-    else if constexpr (std::is_same_v<T, int32_t>)  datatype = sensor_msgs::msg::PointField::INT32;
-    else if constexpr (std::is_same_v<T, uint32_t>) datatype = sensor_msgs::msg::PointField::UINT32;
-    else if constexpr (std::is_same_v<T, float>)    datatype = sensor_msgs::msg::PointField::FLOAT32;
-    else if constexpr (std::is_same_v<T, double>)   datatype = sensor_msgs::msg::PointField::FLOAT64;
-    else static_assert(CloudView::False<T>, "unsupported field type");
-    desc->add_field(datatype, name);
+    if      constexpr (std::is_same_v<T, i1>) datatype = sensor_msgs::msg::PointField::INT8;
+    else if constexpr (std::is_same_v<T, u1>) datatype = sensor_msgs::msg::PointField::UINT8;
+    else if constexpr (std::is_same_v<T, i2>) datatype = sensor_msgs::msg::PointField::INT16;
+    else if constexpr (std::is_same_v<T, u2>) datatype = sensor_msgs::msg::PointField::UINT16;
+    else if constexpr (std::is_same_v<T, i4>) datatype = sensor_msgs::msg::PointField::INT32;
+    else if constexpr (std::is_same_v<T, u4>) datatype = sensor_msgs::msg::PointField::UINT32;
+    else if constexpr (std::is_same_v<T, f4>) datatype = sensor_msgs::msg::PointField::FLOAT32;
+    else if constexpr (std::is_same_v<T, f8>) datatype = sensor_msgs::msg::PointField::FLOAT64;
+    else static_assert(Cloud::False<T>, "unsupported field type");
+    desc_.add_field(datatype, name);
+    size_t n = fields_.size();
     fields_.emplace_back(scalars);
+    return std::get<std::vector<T>>(fields_[n].data_);
 }
 
-template void Cloud::add_field<int8_t>(const std::string&, const std::vector<int8_t>&) noexcept;
-template void Cloud::add_field<uint8_t>(const std::string&, const std::vector<uint8_t>&) noexcept;
-template void Cloud::add_field<int16_t>(const std::string&, const std::vector<int16_t>&) noexcept;
-template void Cloud::add_field<uint16_t>(const std::string&, const std::vector<uint16_t>&) noexcept;
-template void Cloud::add_field<int32_t>(const std::string&, const std::vector<int32_t>&) noexcept;
-template void Cloud::add_field<uint32_t>(const std::string&, const std::vector<uint32_t>&) noexcept;
-template void Cloud::add_field<float>(const std::string&, const std::vector<float>&) noexcept;
-template void Cloud::add_field<double>(const std::string&, const std::vector<double>&) noexcept;
+template std::span<i1> Cloud::add_field<i1>(const std::string&, const std::vector<i1>&) noexcept;
+template std::span<u1> Cloud::add_field<u1>(const std::string&, const std::vector<u1>&) noexcept;
+template std::span<i2> Cloud::add_field<i2>(const std::string&, const std::vector<i2>&) noexcept;
+template std::span<u2> Cloud::add_field<u2>(const std::string&, const std::vector<u2>&) noexcept;
+template std::span<i4> Cloud::add_field<i4>(const std::string&, const std::vector<i4>&) noexcept;
+template std::span<u4> Cloud::add_field<u4>(const std::string&, const std::vector<u4>&) noexcept;
+template std::span<f4> Cloud::add_field<f4>(const std::string&, const std::vector<f4>&) noexcept;
+template std::span<f8> Cloud::add_field<f8>(const std::string&, const std::vector<f8>&) noexcept;
 
 template<typename T>
-void Cloud::add_field(const std::string& name, const T& scalar) noexcept {
-    std::vector<T> scalars{CloudView::size(), scalar};
-    Cloud::add_field(name, scalars);
+std::span<T> Cloud::add_field(const std::string& name, const T& scalar) noexcept {
+    std::vector<T> scalars(Cloud::size(), scalar);
+    return Cloud::add_field(name, scalars);
 }
+
+template std::span<i1> Cloud::add_field<i1>(const std::string&, const i1&) noexcept;
+template std::span<u1> Cloud::add_field<u1>(const std::string&, const u1&) noexcept;
+template std::span<i2> Cloud::add_field<i2>(const std::string&, const i2&) noexcept;
+template std::span<u2> Cloud::add_field<u2>(const std::string&, const u2&) noexcept;
+template std::span<i4> Cloud::add_field<i4>(const std::string&, const i4&) noexcept;
+template std::span<u4> Cloud::add_field<u4>(const std::string&, const u4&) noexcept;
+template std::span<f4> Cloud::add_field<f4>(const std::string&, const f4&) noexcept;
+template std::span<f8> Cloud::add_field<f8>(const std::string&, const f8&) noexcept;
 
 #ifdef GENERATE_CLOUD_PYBIND_MODULE
 template<typename T>
-void Cloud::add_field_from_py_object(const std::string& name, py::object obj) noexcept {
-    Cloud::add_field(name, obj.cast<std::vector<T>>());
+std::span<T> Cloud::add_field_from_py_object(const std::string& name, py::object obj) noexcept {
+    return Cloud::add_field(name, obj.cast<std::vector<T>>());
 }
 
-template void Cloud::add_field_from_py_object<int8_t>(const std::string&, py::object) noexcept;
-template void Cloud::add_field_from_py_object<uint8_t>(const std::string&, py::object) noexcept;
-template void Cloud::add_field_from_py_object<int16_t>(const std::string&, py::object) noexcept;
-template void Cloud::add_field_from_py_object<uint16_t>(const std::string&, py::object) noexcept;
-template void Cloud::add_field_from_py_object<int32_t>(const std::string&, py::object) noexcept;
-template void Cloud::add_field_from_py_object<uint32_t>(const std::string&, py::object) noexcept;
-template void Cloud::add_field_from_py_object<float>(const std::string&, py::object) noexcept;
-template void Cloud::add_field_from_py_object<double>(const std::string&, py::object) noexcept;
+template std::span<i1> Cloud::add_field_from_py_object<i1>(const std::string&, py::object) noexcept;
+template std::span<u1> Cloud::add_field_from_py_object<u1>(const std::string&, py::object) noexcept;
+template std::span<i2> Cloud::add_field_from_py_object<i2>(const std::string&, py::object) noexcept;
+template std::span<u2> Cloud::add_field_from_py_object<u2>(const std::string&, py::object) noexcept;
+template std::span<i4> Cloud::add_field_from_py_object<i4>(const std::string&, py::object) noexcept;
+template std::span<u4> Cloud::add_field_from_py_object<u4>(const std::string&, py::object) noexcept;
+template std::span<f4> Cloud::add_field_from_py_object<f4>(const std::string&, py::object) noexcept;
+template std::span<f8> Cloud::add_field_from_py_object<f8>(const std::string&, py::object) noexcept;
 #endif // GENERATE_CLOUD_PYBIND_MODULE
 } // namespace util
 
@@ -534,15 +510,14 @@ template void Cloud::add_field_from_py_object<double>(const std::string&, py::ob
 
 // binding code here still works because it just needs to be visible in the final binary
 PYBIND11_EMBEDDED_MODULE(cloud_bindings, m) {
-    // TODO: ENSURE THIS DOESN'T COPY!
-    pybind11::bind_vector<FieldInt8>(m, "FieldInt8");
-    pybind11::bind_vector<FieldUInt8>(m, "FieldUInt8");
-    pybind11::bind_vector<FieldInt16>(m, "FieldInt16");
-    pybind11::bind_vector<FieldUInt16>(m, "FieldUInt16");
-    pybind11::bind_vector<FieldInt32>(m, "FieldInt32");
-    pybind11::bind_vector<FieldUInt32>(m, "FieldUInt32");
-    pybind11::bind_vector<FieldFloat32>(m, "FieldFloat32");
-    pybind11::bind_vector<FieldFloat64>(m, "FieldFloat64");
+    pybind11::bind_vector<FieldI1>(m, "FieldI1");
+    pybind11::bind_vector<FieldU1>(m, "FieldU1");
+    pybind11::bind_vector<FieldI2>(m, "FieldI2");
+    pybind11::bind_vector<FieldU2>(m, "FieldU2");
+    pybind11::bind_vector<FieldI4>(m, "FieldI4");
+    pybind11::bind_vector<FieldU4>(m, "FieldU4");
+    pybind11::bind_vector<FieldF4>(m, "FieldF4");
+    pybind11::bind_vector<FieldF8>(m, "FieldF8");
     // (n, 3) numpy array
     pybind_eigen_vector_of_vector<Eigen::Vector3f>(m, "Points", "Points", pybind11::py_array_to_vectors<Eigen::Vector3f>);
 }

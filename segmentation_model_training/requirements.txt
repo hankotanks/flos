@@ -1,0 +1,6 @@
+# NOTE: I'm assuming that training is done from the same container where offline experiments are performed
+# as a result, src/python/requirements.txt will handle most of the more specific dependencies,
+# while this lists everything that isn't required for online inference (and thus exclusive to training)
+lightning
+tensorboard
+open3d

@@ -9,6 +9,10 @@ if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
   cmake_policy(SET CMP0135 NEW)
 endif()
 
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(StandardProjectOptions)
@@ -16,6 +20,7 @@ include(dependencies)
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclpy REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
@@ -25,18 +30,10 @@ find_package(tf2_ros REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
 find_package(rosbag2_storage REQUIRED)
 
-add_custom_target(python_requirements ALL
-  COMMAND python3 -m pip install --root-user-action=ignore -r ${CMAKE_CURRENT_SOURCE_DIR}/src/python/requirements.txt
-  COMMENT "${PROJECT_NAME}: Installing Python dependencies..."
-  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-
-add_custom_target(python_package ALL 
-  COMMAND pip3 install --root-user-action=ignore ${CMAKE_CURRENT_SOURCE_DIR}/src/python
-  COMMENT "${PROJECT_NAME}: Installing Python package..." 
-  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-
 add_subdirectory(src/cpp)
+add_subdirectory(src/python)
+add_subdirectory(src/scripts)
 
-install(DIRECTORY models launch rviz DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY models launch DESTINATION share/${PROJECT_NAME})
 
 ament_package()
