@@ -14,20 +14,19 @@
   <em>Ongoing subject of my MSc Geodetic Engineering thesis at the University of Bonn</em>
 </p>
 
-== About
+## About
 
 FLOS achieves pose accuracy comparable to unspecialized LIO methods without an IMU!
-Our system employs a lightweight segmentation model based on the https://github.com/Pointcept/PointTransformerV3[PTv3] architecture,
+Our system employs a lightweight segmentation model based on the [PTv3](https://github.com/Pointcept/PointTransformerV3) architecture,
 enabling sensor-rate ground and tree stem detection.
 As a prelude to scan-to-map registration, we generate a strong pose hypothesis from these features,
 greatly increasing our system's robustness in heavily-vegetated environments.
 
-== Quick Start
+## Quick Start
 
 For now, our devkit is the fastest way to get started.
 
-[source,sh]
-----
+```bash
 #!/bin/bash
 git clone https://github.com/hankotanks/flos && cd flos
 
@@ -38,7 +37,7 @@ colcon build
 
 # run the mounted bag
 ros2 launch flos offline.launch.py path_to_data:=bag
-----
+```
 
-The offline system spawns https://rerun.io/[Rerun],
+The offline system spawns [Rerun](https://rerun.io),
 which provides an in-depth visualization of the environment.
