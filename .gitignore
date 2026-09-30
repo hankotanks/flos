@@ -1,6 +1,4 @@
-# dev
-.clangd
-.cache/*
-.devcontainer.json
 __pycache__/
-compile_commands.json
+/.cache
+/.devcontainer.json
+/docker/.zsh_history

@@ -32,7 +32,6 @@ find_package(rosbag2_storage REQUIRED)
 
 add_subdirectory(src/cpp)
 add_subdirectory(src/python)
-add_subdirectory(src/scripts)
 
 install(DIRECTORY models launch DESTINATION share/${PROJECT_NAME})
 

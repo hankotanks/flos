@@ -50,7 +50,7 @@ RUN python3 -m pip install --break-system-packages --no-cache-dir torch-scatter 
 RUN python3 -m pip install --no-cache-dir catkin-pkg 
 # other python deps
 RUN python3 -m pip install --no-cache-dir \
-    spconv-cu126 "scipy==1.16.0" addict lightning tensorboard typer open3d evo
+    spconv-cu126 "scipy==1.16.0" addict lightning tensorboard typer open3d evo "rerun-sdk==0.22.1"
 
 # once it gets merged in, use the master
 RUN sh -c "$(curl -L https://raw.githubusercontent.com/balancedscorpion/zsh-in-docker/new_user/zsh-in-docker.sh)" -- \

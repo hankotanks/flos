@@ -192,10 +192,10 @@ configure_node(offline_node
   DEFINITIONS
     ${OFFLINE_DEFINITIONS})
 
-add_executable(rerun_node)
-configure_node(rerun_node
+add_executable(offline_rerun_node)
+configure_node(offline_rerun_node
   SOURCES
-    rerun_node.cpp
+    offline_rerun_node.cpp
     ${OFFLINE_SOURCES}
   HEADERS
     ${OFFLINE_HEADERS}
@@ -211,5 +211,5 @@ configure_node(rerun_node
 # INSTALLATION
 #
 
-install(TARGETS segmentation_node odometry_node offline_node rerun_node
+install(TARGETS segmentation_node odometry_node offline_node offline_rerun_node
   DESTINATION lib/${PROJECT_NAME})

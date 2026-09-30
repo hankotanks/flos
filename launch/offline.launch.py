@@ -1,3 +1,4 @@
+# system
 import pathlib
 import sys
 
@@ -5,6 +6,7 @@ import sys
 import launch
 import launch_ros
 
+# package
 sys.path.append(str(pathlib.Path(__file__).resolve().parent))
 from util.config import Config
 
@@ -19,11 +21,15 @@ def setup(context, *args, **kwargs):
         LOGGER.error(e.args[0])
         exit(1)
 
+    gdb = launch.substitutions.LaunchConfiguration('gdb').perform(context)
+    gdb = True if gdb is not None and gdb == 'true' else False
+
     node_offline = launch_ros.actions.Node(
         package = PACKAGE_NAME,
-        executable = 'offline_node',
+        executable = 'offline_rerun_node' if config[Config.Component.OFFLINE]['visualize'] else 'offline_node',
         emulate_tty = True,
         output = 'screen',
+        prefix = [f'gdb -batch -x {pathlib.Path(__file__).parent / "util" / "debug.gdb"} --args'] if gdb else None,
         parameters = [
             {
                 'use_sim_time': True,
@@ -49,21 +55,12 @@ def setup(context, *args, **kwargs):
         )
     ]
 
-    if 'visualize' in config[Config.Component.OFFLINE] and config[Config.Component.OFFLINE]['visualize']:
-        description.append(launch_ros.actions.Node(
-            package = 'rviz2',
-            executable = 'rviz2',
-            output = 'screen',
-            arguments = ['-d', launch.substitutions.PathJoinSubstitution([
-                launch_ros.substitutions.FindPackageShare(PACKAGE_NAME), 'launch', 'rviz', 'default.rviz'])],
-            parameters = [{ 'use_sim_time': True }]
-        ))
-
     return description
 
 def generate_launch_description():
     return launch.LaunchDescription([
         launch.actions.SetEnvironmentVariable('RMW_IMPLEMENTATION', 'rmw_zenoh_cpp'),
+        launch.actions.DeclareLaunchArgument('gdb', default_value = 'false'),
         *Config.declare_launch_arguments(),
         launch.actions.OpaqueFunction(function = setup)
     ])

@@ -49,7 +49,7 @@ class Config:
     def __init__(self, context):
         path_to_config = launch.substitutions.LaunchConfiguration('path_to_config').perform(context)
 
-        self.param = {component: {} for component in Config.Component}
+        self.param = {component: {} for component in self.__class__.Component}
 
         def parse(ty, val, key, cwd = pathlib.Path.cwd()):
             if val is None: return None
@@ -117,7 +117,7 @@ class Config:
             except Exception:
                 raise RuntimeError(f'path_to_config does not exist: {path_to_config}')
 
-            for component in Config.Component:
+            for component in self.__class__.Component:
                 for key in component.value.keys():
                     ty, _ = component.value[key]
                     if (p := parse(ty, param_from_config.get(key), key, path_to_config.parent)) is not None:
@@ -128,7 +128,7 @@ class Config:
                         else:
                             self.param[component][key] = p
 
-        for component in Config.Component:
+        for component in self.__class__.Component:
             for key in component.value.keys():
                 ty, req = component.value[key]
                 val = launch.substitutions.LaunchConfiguration(key).perform(context)
@@ -144,12 +144,13 @@ class Config:
                 elif req and self.param[component].get(key) is None:
                     raise RuntimeError(f'missing required parameter: {key} [{ty}]')
                         
-    def declare_launch_arguments():
+    @classmethod
+    def declare_launch_arguments(cls):
         processed = set()
         arguments = [
             launch.actions.DeclareLaunchArgument('path_to_config', default_value = '')
         ]
-        for component in Config.Component:
+        for component in cls.Component:
             for key in component.value.keys():
                 if key in processed:
                     continue
@@ -159,6 +160,6 @@ class Config:
         return arguments
     
     def __getitem__(self, component: Component):
-        if not isinstance(component, Config.Component):
+        if not isinstance(component, self.__class__.Component):
             raise IndexError(f'invalid index')
         return self.param[component]

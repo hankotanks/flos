@@ -1,5 +1,7 @@
+# system
 import pathlib
 
+# ros
 import launch
 import ament_index_python
 
@@ -50,7 +52,7 @@ def setup(context, *args, **kwargs):
 
     path_to_launch = ament_index_python.packages.get_package_share_directory(PACKAGE_NAME)
     path_to_launch = pathlib.Path(path_to_launch).resolve(strict = True)
-    path_to_launch = path_to_launch / 'launch' / 'offline_rerun.launch.py'
+    path_to_launch = path_to_launch / 'launch' / 'offline.launch.py'
 
     dataset = launch.substitutions.LaunchConfiguration('dataset').perform(context)
 
