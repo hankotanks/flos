@@ -14,7 +14,6 @@ struct OdometryNodeConfig {
         util::param_opt(node, "voxel_size", config.voxel_size);
         util::param_opt(node, "voxel_capacity", config.voxel_capacity);
         // threshold
-        util::param_opt(node, "threshold_initial", config.threshold.initial);
         util::param_opt(node, "threshold_motion", config.threshold.motion);
         // registration
         util::param_opt(node, "deskew", config.deskew);

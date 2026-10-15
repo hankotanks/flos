@@ -44,7 +44,7 @@ public:
     // get the motion prediction based on the previous delta
     MotionPrior predict_motion(const util::Cloud& points, const Sophus::SE3f& last_delta, Stamp stamp);
     // perform deskewing
-    void deskew(util::Cloud& points, const MotionPrior& prior) const noexcept;
+    void deskew(util::Cloud& points, const MotionPrior& prior, const Sophus::SE3f& correction) const noexcept;
 private:
     // retrive the timestamp field
     template<typename T>

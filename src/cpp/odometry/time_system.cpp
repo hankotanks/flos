@@ -55,12 +55,14 @@ TimeSystem::MotionPrior TimeSystem::predict_motion(const util::Cloud& points, co
     return {frame_delta, sweep_delta, sweep_period, prev_dt_};
 }
 
-void TimeSystem::deskew(util::Cloud& points, const MotionPrior& prior) const noexcept {
+void TimeSystem::deskew(util::Cloud& points, const MotionPrior& prior, const Sophus::SE3f& correction) const noexcept {
     if(!prior.sweep_period) return;
+    Sophus::SE3f correction_scaled = Sophus::SE3<long double>::exp(correction.cast<long double>().log() * (prior.sweep_period->end - prior.sweep_period->start) / prior.dt).cast<float>();
+    Sophus::SE3f delta = correction_scaled * prior.sweep_delta;
     if(auto field = TimeSystem::stamps<float>(points)) {
-        TimeSystem::deskew_inner(points, *field, prior.sweep_delta, *(prior.sweep_period));
+        TimeSystem::deskew_inner(points, *field, delta, *(prior.sweep_period));
     } else if(auto field = TimeSystem::stamps<double>(points)) {
-        TimeSystem::deskew_inner(points, *field, prior.sweep_delta, *(prior.sweep_period));
+        TimeSystem::deskew_inner(points, *field, delta, *(prior.sweep_period));
     }
 }
 

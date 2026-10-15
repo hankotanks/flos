@@ -97,8 +97,8 @@ public:
                     }
                     out.add_field<uint8_t>("prediction", prediction);
                     this->publish_local_map(stamp, out);
+                    this->publish_local_map_belief(stamp, odometry_system_.map_.voxels(), odometry_config_.config.voxel_size);
                 }
-                this->publish_local_map_belief(stamp, odometry_system_.map_.voxels(), odometry_config_.config.voxel_size);
                 this->publish_pose(stamp, header.frame_id, pose);
                 this->publish_ground_plane(stamp, odometry_system_.projection_.ground_.centroid_, odometry_system_.projection_.ground_.n_, odometry_config_.config.max_distance_ground);
                 if(projection_target_) this->publish_projection(stamp, *projection_target_, odometry_system_.projection_.target_);

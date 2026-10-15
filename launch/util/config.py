@@ -30,7 +30,6 @@ class Config:
             'max_distance_ground': (float, False), 
             'voxel_size': (float, False), 
             'voxel_capacity': (int, False), 
-            'threshold_initial': (float, False), 
             'threshold_motion': (float, False), 
             'deskew': (bool, False),
             'double_downsample': (bool, False),

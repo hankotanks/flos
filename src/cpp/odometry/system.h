@@ -25,9 +25,8 @@ public:
         float max_distance{50.f};
         float max_distance_ground{10.f};
         float voxel_size{1.f};
-        size_t voxel_capacity{20};
+        size_t voxel_capacity{8};
         struct {
-            float initial{2.f};
             float motion{0.1f};
         } threshold;
         bool deskew{true};
@@ -107,7 +106,7 @@ private:
 private:
     // assumes points are already transformed by initial_guess
     // updates initial guess (and points)
-    Sophus::SE3f refine(SemanticCloud& points, Sophus::SE3f& initial_guess, float correspondence_distance);
+    Sophus::SE3f refine(SemanticCloud& points, const Sophus::SE3f& initial_guess, float correspondence_distance);
     // returns pose and deviation respectively
-    Sophus::SE3f align(SemanticCloud& points, const Sophus::SE3f& initial_guess, float correspondence_distance);
+    Sophus::SE3f align(SemanticCloud& points, float correspondence_distance);
 };

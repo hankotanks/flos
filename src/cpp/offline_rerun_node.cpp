@@ -22,9 +22,10 @@ class RerunNode : public OfflineNode {
 public:
     explicit RerunNode() : OfflineNode(), rr_("visualizer") {
         if(!rclcpp::ok()) return;
+        static const std::string MEMORY_LIMIT = std::to_string(RerunNode::MEMORY_LIMIT) + "GB";
         if(visualize_) {
             rerun::SpawnOptions options;
-            if(RerunNode::MEMORY_LIMIT > 0) options.memory_limit = std::to_string(RerunNode::MEMORY_LIMIT) + "GB";
+            if(RerunNode::MEMORY_LIMIT > 0) options.memory_limit = MEMORY_LIMIT;
             rr_.spawn(options).throw_on_failure();
         }
     }
