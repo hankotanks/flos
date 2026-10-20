@@ -100,7 +100,7 @@ public:
                     this->publish_local_map_belief(stamp, odometry_system_.map_.voxels(), odometry_config_.config.voxel_size);
                 }
                 this->publish_pose(stamp, header.frame_id, pose);
-                this->publish_ground_plane(stamp, odometry_system_.projection_.ground_.centroid_, odometry_system_.projection_.ground_.n_, odometry_config_.config.max_distance_ground);
+                this->publish_ground(stamp, cloud, odometry_system_.projection_.ground_.centroid_, odometry_system_.projection_.ground_.n_);
                 if(projection_target_) this->publish_projection(stamp, *projection_target_, odometry_system_.projection_.target_);
                 projection_target_.emplace(odometry_system_.projection_.target_);
             }
@@ -114,7 +114,7 @@ protected:
     virtual void publish_local_map(TimeSystem::Stamp stamp, const util::Cloud& cloud) { /* STUB */ };
     virtual void publish_local_map_belief(TimeSystem::Stamp stamp, const VoxelMap<3, SemanticCloud>::view_voxels& voxels, float voxel_size) { /* STUB */ }
     virtual void publish_pose(TimeSystem::Stamp stamp, const std_msgs::msg::Header::_frame_id_type& frame_id, const Sophus::SE3f& pose) { /* STUB */ }
-    virtual void publish_ground_plane(TimeSystem::Stamp stamp, const Eigen::Vector3f& centroid, const Eigen::Vector3f& normal, float radius) { /* STUB */ }
+    virtual void publish_ground(TimeSystem::Stamp stamp, const util::Cloud& cloud, const Eigen::Vector3f& centroid, const Eigen::Vector3f& normal) { /* STUB */ }
     virtual void publish_projection(TimeSystem::Stamp stamp, const VoxelMap<2, BirdsEyeCloud>& previous, const VoxelMap<2, BirdsEyeCloud>& current) { /* STUB */ }
     virtual void publish_progress(TimeSystem::Stamp stamp, float percent, float remaining) { /* STUB */ }
     virtual void publish_statistics(TimeSystem::Stamp stamp, const OdometrySystem::Statistics& statistics) { /* STUB */ }
@@ -161,16 +161,17 @@ private:
 protected:
     bool visualize_{true};
     bool visualize_map_{true};
+protected:
+    SegmentationNodeConfig segmentation_config_;
+    OdometryNodeConfig odometry_config_;
 private:
     // parameters
     std::filesystem::path path_to_result_;
     // dataloader
     std::unique_ptr<Dataloader> loader_{nullptr};
     // segmentation
-    SegmentationNodeConfig segmentation_config_;
     SegmentationSystem segmentation_system_;
     // odometry
-    OdometryNodeConfig odometry_config_;
     OdometrySystem odometry_system_;
     // buffer projection to show alignment
     std::optional<VoxelMap<2, BirdsEyeCloud>> projection_target_;

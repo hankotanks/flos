@@ -2,6 +2,7 @@
 
 // util
 #include "util/rosarg.h"
+#include <rosbag2_storage/topic_metadata.hpp>
 
 namespace {
 template <typename T>
@@ -37,7 +38,44 @@ BagDataloader::BagDataloader(rclcpp::Node* node) : Dataloader(node) {
     }
     if(path_to_bag_.empty()) throw Dataloader::UnsupportedFormat{"unable to find MCAP/DB3 file"};
     // params
-    util::param_req(node, "incoming_points_topic", incoming_points_topic_);
+    util::param_opt(node, "incoming_points_topic", incoming_points_topic_);
+    {
+        rosbag2_cpp::Reader reader;
+        reader.open(rosbag2_storage::StorageOptions{path_to_bag_.string()});
+        std::vector<rosbag2_storage::TopicMetadata> topics = reader.get_all_topics_and_types();
+        reader.close();
+        if(topics.empty()) {
+            RCLCPP_ERROR_STREAM_ONCE(node->get_logger(), "supplied bag has no PointCloud2 topics!");
+            rclcpp::shutdown();
+        } else if(!incoming_points_topic_.empty()) {
+            bool valid = std::any_of(topics.begin(), topics.end(), [this](const rosbag2_storage::TopicMetadata& topic) {
+                return this->incoming_points_topic_ == topic.name;
+            });
+            if(!valid) {
+                std::ostringstream names;
+                bool first = true;
+                for(const auto& topic : topics) {
+                    if(topic.type != "sensor_msgs/msg/PointCloud2") continue;
+                    names << (first ? "" : ", ") << topic.name;
+                    first = false;
+                }
+                RCLCPP_ERROR_STREAM_ONCE(node->get_logger(), "invalid argument, must be one of [" << names.str() << "]: incoming_points_topic");
+                rclcpp::shutdown();
+            }
+        } else if(incoming_points_topic_.empty() && topics.size() != 1) {
+            std::ostringstream names;
+                bool first = true;
+                for(const auto& topic : topics) {
+                    if(topic.type != "sensor_msgs/msg/PointCloud2") continue;
+                    names << (first ? "" : ", ") << topic.name;
+                    first = false;
+                }
+            RCLCPP_ERROR_STREAM_ONCE(node->get_logger(), "missing a required argument, must be one of [" << names.str() << "]: incoming_points_topic");
+            rclcpp::shutdown();
+        } else if(incoming_points_topic_.empty() && topics.size() == 1) {
+            incoming_points_topic_ = topics[0].name;
+        }
+    }
 }
 
 BagDataloader::~BagDataloader() {

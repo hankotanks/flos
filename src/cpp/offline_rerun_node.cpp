@@ -88,7 +88,7 @@ protected:
         rr_.log("progress/remaining", rerun::Scalar(remaining));
     }
     
-    virtual void publish_ground_plane(TimeSystem::Stamp stamp, const Eigen::Vector3f& centroid, const Eigen::Vector3f& normal, float radius) override {
+    virtual void publish_ground(TimeSystem::Stamp stamp, const util::Cloud& cloud, const Eigen::Vector3f& centroid, const Eigen::Vector3f& normal) override {
         RerunNode::set_stamp(stamp);
         // plane
         const Eigen::Vector3f n = normal.normalized();
@@ -103,7 +103,7 @@ protected:
         vertices.emplace_back(centroid.x(), centroid.y(), centroid.z());
         for(uint32_t i = 0; i < SEGMENTS; ++i) {
             const float theta = 2.f * static_cast<float>(M_PI) * static_cast<float>(i) / static_cast<float>(SEGMENTS);
-            const Eigen::Vector3f p = centroid + radius * (std::cos(theta) * t1 + std::sin(theta) * t2);
+            const Eigen::Vector3f p = centroid + odometry_config_.config.max_distance_ground * (std::cos(theta) * t1 + std::sin(theta) * t2);
             vertices.emplace_back(p.x(), p.y(), p.z());
         }
         // indices
@@ -112,7 +112,17 @@ protected:
         for(uint32_t i = 0; i < SEGMENTS; ++i) {
             triangles.emplace_back(std::array<uint32_t, 3>{0, 1 + i, static_cast<uint32_t>((i + 1) % SEGMENTS) + 1});
         }
-        rr_.log("map/ground_plane", rerun::archetypes::Mesh3D(vertices).with_triangle_indices(triangles));
+        rr_.log("map/ground/plane", rerun::archetypes::Mesh3D(vertices).with_triangle_indices(triangles));
+        // points
+        float inlier_distance = std::sqrt(odometry_config_.config.voxel_size * odometry_config_.config.voxel_size / static_cast<float>(odometry_config_.config.voxel_capacity));
+        std::span<const uint8_t> predictions = cloud.field<uint8_t>("prediction");
+        std::vector<rerun::Position3D> points;
+        for(size_t i = 0; i < predictions.size(); ++i) {
+            if(odometry_config_.config.projection.ground.count(predictions[i]) == 0) continue;
+            if(normal.transpose() * (cloud[i] - centroid) > inlier_distance) continue;
+            points.emplace_back(cloud[i].x(), cloud[i].y(), cloud[i].z());
+        }
+        rr_.log("map/ground/consensus", rerun::Points3D().with_positions(points));
     };
 
     virtual void publish_projection(TimeSystem::Stamp stamp, const VoxelMap<2, BirdsEyeCloud>& previous, const VoxelMap<2, BirdsEyeCloud>& current) override {
