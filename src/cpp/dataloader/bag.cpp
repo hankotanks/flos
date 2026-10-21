@@ -42,8 +42,15 @@ BagDataloader::BagDataloader(rclcpp::Node* node) : Dataloader(node) {
     {
         rosbag2_cpp::Reader reader;
         reader.open(rosbag2_storage::StorageOptions{path_to_bag_.string()});
+        // get pc2 topics
         std::vector<rosbag2_storage::TopicMetadata> topics = reader.get_all_topics_and_types();
+        auto it = std::remove_if(topics.begin(), topics.end(), [](const rosbag2_storage::TopicMetadata& topic) { 
+            return topic.type != "sensor_msgs/msg/PointCloud2"; 
+        });
+        topics.resize(std::distance(topics.begin(), it));
+        // close reader
         reader.close();
+        // handle whether incoming_points_topic is required for this bag
         if(topics.empty()) {
             RCLCPP_ERROR_STREAM_ONCE(node->get_logger(), "supplied bag has no PointCloud2 topics!");
             rclcpp::shutdown();
@@ -55,7 +62,6 @@ BagDataloader::BagDataloader(rclcpp::Node* node) : Dataloader(node) {
                 std::ostringstream names;
                 bool first = true;
                 for(const auto& topic : topics) {
-                    if(topic.type != "sensor_msgs/msg/PointCloud2") continue;
                     names << (first ? "" : ", ") << topic.name;
                     first = false;
                 }
@@ -64,12 +70,11 @@ BagDataloader::BagDataloader(rclcpp::Node* node) : Dataloader(node) {
             }
         } else if(incoming_points_topic_.empty() && topics.size() != 1) {
             std::ostringstream names;
-                bool first = true;
-                for(const auto& topic : topics) {
-                    if(topic.type != "sensor_msgs/msg/PointCloud2") continue;
-                    names << (first ? "" : ", ") << topic.name;
-                    first = false;
-                }
+            bool first = true;
+            for(const auto& topic : topics) {
+                names << (first ? "" : ", ") << topic.name;
+                first = false;
+            }
             RCLCPP_ERROR_STREAM_ONCE(node->get_logger(), "missing a required argument, must be one of [" << names.str() << "]: incoming_points_topic");
             rclcpp::shutdown();
         } else if(incoming_points_topic_.empty() && topics.size() == 1) {
