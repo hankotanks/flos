@@ -17,8 +17,7 @@ import torch_scatter
 import collections
 
 try:
-    # import flash_attn
-    flash_attn = None
+    import flash_attn
 except ImportError:
     flash_attn = None
 

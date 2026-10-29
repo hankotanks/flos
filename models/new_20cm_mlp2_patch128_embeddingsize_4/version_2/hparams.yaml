@@ -1,0 +1,14 @@
+batch_size: 1
+clear_torch_cache: true
+coord_dimension: 3
+dataset_config:
+  delete_existing_processed_files: false
+  include_instance: true
+  include_semantics: true
+  voxel_size: 0.2
+embedding_size: 4
+in_channels: 1
+lr: 0.001
+num_classes: 4
+num_workers: 8
+vds: 0.2
