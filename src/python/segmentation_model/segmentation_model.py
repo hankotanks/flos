@@ -37,7 +37,7 @@ class PointTransformerV3Lightning(pl.LightningModule):
         vds: float = 0.1,
         in_channels = 1,
         embedding_size = 8,
-        num_classes = 5,
+        num_classes = 4,
         coord_dimension = 3,
         lr: float = 0.001,
         batch_size: int = 1,
@@ -55,6 +55,10 @@ class PointTransformerV3Lightning(pl.LightningModule):
             (embedding_size * 8, 4),
         ]
 
+        patch_size = 128
+
+        mlp_ratio = 2
+
         enc_channels = tuple(channel for channel, _ in stages)
         enc_num_head = tuple(num_head for _, num_head in stages)
 
@@ -67,14 +71,14 @@ class PointTransformerV3Lightning(pl.LightningModule):
             enc_depths = (1,) * len(enc_channels),
             enc_channels = enc_channels,
             enc_num_head = enc_num_head,
-            enc_patch_size = (256,) * len(enc_channels),
+            enc_patch_size = (patch_size,) * len(enc_channels),
             dec_depths = (1,) * (len(enc_channels) - 1),
             dec_channels = dec_channels,
             dec_num_head = dec_num_head,
-            dec_patch_size = (256,) * (len(enc_channels) - 1),
-            mlp_ratio = 2)
+            dec_patch_size = (patch_size,) * (len(enc_channels) - 1),
+            mlp_ratio = mlp_ratio)
 
-        self.segmentation_head = MLP(embedding_size*4, self.hparams.num_classes, batch_norm = True, num_layers = 2)
+        self.segmentation_head = MLP(dec_channels[0], self.hparams.num_classes, batch_norm = False, num_layers = 2)
 
         self.loss = nn.CrossEntropyLoss(reduction = "mean", ignore_index = 0)
 
@@ -86,7 +90,7 @@ class PointTransformerV3Lightning(pl.LightningModule):
                 ignore_index = 0, average = "macro"),
             "IOU": ClasswiseWrapper(
                 torchmetrics.classification.MulticlassJaccardIndex(num_classes = self.hparams.num_classes, ignore_index = 0, average = "none"), 
-                labels = ["Ignore", "Ground", "Shrub", "Stem", "Canopy"]),
+                labels = ["Ignore", "Ground", "Vegetation", "Stem"]),
         })
         self.train_metrics = metrics.clone(prefix="train/")
         self.val_metrics = metrics.clone(prefix="val/")
@@ -103,7 +107,7 @@ class PointTransformerV3Lightning(pl.LightningModule):
             "feat": torch.ones((coord.shape[0], 1), device = coord.device, dtype = coord.dtype),
             "coord": coord,
             "batch": batch["pos"][:, 0].long(),
-            "grid_size": 0.1
+            "grid_size": self.hparams.vds
         }
 
         predicted = self.point_transformer(data_dict)    

@@ -24,7 +24,7 @@ class InferenceHelper:
         np_points_batched[:, 1:] = np_points
         # construct dict
         batch = {"pos": torch.from_numpy(np_points_batched).to("cuda")}
-        with torch.no_grad():
+        with torch.inference_mode():
             conf = self.model.infer(batch)
         # note that the vector type should match the pybind side, otherwise might end up with copies 
         np_conf = conf.cpu().numpy().astype(np.float32)

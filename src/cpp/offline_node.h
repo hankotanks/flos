@@ -3,6 +3,7 @@
 // system
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <iomanip>
 #include <limits>
 #include <memory>
@@ -60,6 +61,17 @@ public:
     ~OfflineNode() {
         OfflineNode::save();
     }
+private:
+    struct Frame {
+        std_msgs::msg::Header header;
+        TimeSystem::Stamp stamp;
+        util::Cloud points;
+    };
+
+    struct Result {
+        Frame frame;
+        Sophus::SE3f pose;
+    };
 public:
     void run() {
         if(!rclcpp::ok()) return;
@@ -69,25 +81,21 @@ public:
         // initialize and set total message count
         size_t frames = this->loader_->init(this->shared_from_this());
         if(msg_count_ == 0) msg_count_ = frames;
-        // infer lidar messages from the given bag
-        while(rclcpp::ok() && !this->loader_->finished() && msg_processed_++ < msg_count_) {
-            auto [cloud, header] = this->loader_->next();
-            TimeSystem::Stamp stamp(header.stamp.sec, header.stamp.nanosec);
-            Sophus::SE3f pose;
-            PROFILE(frame, this) {
-                // preprocess before inference
-                model.preprocess(cloud);
-                // inference
-                model.infer(cloud);
-                // compute pose and store for OfflineNode::save
-                pose = odometry_system_.register_to_map(cloud, stamp);
-            }
-            output_.emplace_back(header, pose, odometry_system_.statistics_);
+
+        auto register_to_map = [this](Frame frame) {
+            return std::async(std::launch::async, [this, frame = std::move(frame)]() mutable -> Result {
+                const Sophus::SE3f& pose = this->odometry_system_.register_to_map(frame.points);
+                return {std::move(frame), pose};
+            });
+        };
+
+        auto publish = [this](Result result) {
+            output_.emplace_back(result.frame.header, result.pose, odometry_system_.statistics_);
             // publications
             if(visualize_) {
-                SemanticCloud cloud_wrapper{cloud};
-                cloud_wrapper.transform(pose);
-                this->publish_scan(stamp, cloud);
+                SemanticCloud cloud_wrapper{result.frame.points};
+                cloud_wrapper.transform(result.pose);
+                this->publish_scan(result.frame.stamp, result.frame.points);
                 if(visualize_map_) {
                     util::Cloud out;
                     std::vector<uint8_t> prediction;
@@ -96,17 +104,39 @@ public:
                         prediction.emplace_back(semantics.prediction);
                     }
                     out.add_field<uint8_t>("prediction", prediction);
-                    this->publish_local_map(stamp, out);
-                    this->publish_local_map_belief(stamp, odometry_system_.map_.voxels(), odometry_config_.config.voxel_size);
+                    this->publish_local_map(result.frame.stamp, out);
+                    this->publish_local_map_belief(result.frame.stamp, odometry_system_.map_.voxels(), odometry_config_.config.voxel_size);
+                    this->publish_ground(result.frame.stamp, result.frame.points, odometry_system_.projection_.ground_.centroid_, odometry_system_.projection_.ground_.n_);
                 }
-                this->publish_pose(stamp, header.frame_id, pose);
-                this->publish_ground(stamp, cloud, odometry_system_.projection_.ground_.centroid_, odometry_system_.projection_.ground_.n_);
-                if(projection_target_) this->publish_projection(stamp, *projection_target_, odometry_system_.projection_.target_);
+                this->publish_pose(result.frame.stamp, result.frame.header.frame_id, result.pose);
+                if(projection_target_) this->publish_projection(result.frame.stamp, *projection_target_, odometry_system_.projection_.target_);
                 projection_target_.emplace(odometry_system_.projection_.target_);
             }
             const auto [percent, remaining] = OfflineNode::compute_progress();
-            this->publish_progress(stamp, percent, remaining);
-            this->publish_statistics(stamp, odometry_system_.statistics_);
+            this->publish_progress(result.frame.stamp, percent, remaining);
+            this->publish_statistics(result.frame.stamp, odometry_system_.statistics_);
+        };
+
+        // infer lidar messages from the given bag
+        std::optional<std::future<Result>> pending;
+        while(rclcpp::ok() && !loader_->finished() && msg_processed_ < msg_count_) {
+            auto [points, header] = this->loader_->next();
+            TimeSystem::Stamp stamp(header.stamp.sec, header.stamp.nanosec);
+            PROFILE(frame, this) {
+                // preprocess before inference
+                model.preprocess(points);
+                // inference
+                model.infer(points);
+                PROFILE_SKIP(frame) {
+                    if(pending) {
+                        publish(pending->get());
+                        pending.reset();
+                    }
+                }
+                // compute pose
+                pending.emplace(register_to_map({std::move(header), stamp, std::move(points)}));
+            }
+            ++msg_processed_;
         }
     }
 protected:

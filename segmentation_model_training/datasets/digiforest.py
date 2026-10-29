@@ -25,9 +25,8 @@ class Labels:
     class To(enum.Enum):
         IGNORE = 0
         GROUND = 1
-        SHRUB = 2
+        VEGETATION = 2
         STEM = 3
-        CANOPY = 4
 
     def __init__(self, semantics: np.ndarray, instance: np.ndarray) -> None:
         self.semantics = semantics
@@ -55,7 +54,7 @@ class Labels:
             Labels.From.UNLABELLED.value: Labels.To.IGNORE.value,
             Labels.From.OUTLIER.value: Labels.To.IGNORE.value,
             Labels.From.GROUND.value: Labels.To.GROUND.value,
-            Labels.From.SHRUB.value: Labels.To.SHRUB.value,
+            Labels.From.SHRUB.value: Labels.To.VEGETATION.value,
             Labels.From.AUTO_GROUND.value: Labels.To.GROUND.value,
             Labels.From.OTHER.value: Labels.To.IGNORE.value,
         }
@@ -67,7 +66,7 @@ class Labels:
         stem_mask = np.logical_and(tree_mask, sub_labels == Labels.SubFrom.STEM.value)
         canopy_mask = np.logical_and(tree_mask, sub_labels == Labels.SubFrom.CANOPY.value)
         remapped_labels[stem_mask] = Labels.To.STEM.value
-        remapped_labels[canopy_mask] = Labels.To.SHRUB.value
+        remapped_labels[canopy_mask] = Labels.To.VEGETATION.value
         
         # Tree semantic class doesn't exist anymore. so any remaining tree points, should be none, should be ignored
         stem_and_canopy_mask = np.logical_or(stem_mask, canopy_mask)
@@ -136,9 +135,9 @@ def voxel_down_sample(pos: np.ndarray, voxel_size: float,
             count_snd = voxel_counts[label_snd]
             # preserve thin structures and ground when the vote is close.
             if count_snd >= THRESHOLD * count_fst:
-                if label_fst == Labels.To.CANOPY.value and label_snd == Labels.To.STEM.value:
+                if label_fst == Labels.To.VEGETATION.value and label_snd == Labels.To.STEM.value:
                     label_fst = Labels.To.STEM.value
-                elif label_fst in (Labels.To.CANOPY.value, Labels.To.SHRUB.value) and label_snd == Labels.To.GROUND.value:
+                elif label_fst == Labels.To.VEGETATION.value and label_snd == Labels.To.GROUND.value:
                     label_fst = Labels.To.GROUND.value
             semantics_down[voxel_idx] = label_fst
     else:

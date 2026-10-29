@@ -16,7 +16,11 @@ import spconv.pytorch as spconv
 import torch_scatter
 import collections
 
-flash_attn = None
+try:
+    # import flash_attn
+    flash_attn = None
+except ImportError:
+    flash_attn = None
 
 from .serialization import encode
 
