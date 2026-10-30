@@ -10,6 +10,12 @@
 #include "util/profiler.h"
 
 namespace {
+py::object load_from_segmentation_model(const std::string& name) {
+    std::filesystem::path path_to_module = std::filesystem::path{PROJECT_ROOT} / "src" / "python";
+    py::module_::import("sys").attr("path").attr("insert")(0, path_to_module.string());
+    return py::module_::import(("segmentation_model." + name).c_str());
+}
+
 void predict(std::span<uint8_t> prediction, const std::span<std::span<const float>> fields) {
     if(fields.empty()) return;
     tbb::parallel_for(tbb::blocked_range<std::size_t>(0, prediction.size()), [&prediction, &fields](const tbb::blocked_range<std::size_t>& range) {
@@ -36,7 +42,7 @@ SegmentationSystem::SegmentationSystem(const Config& config, util::Profiler* pro
 SegmentationSystem::Model::Model(const SegmentationSystem::Config& config, const std::filesystem::path& path_to_model, util::Profiler* profiler) :
     profiler_(profiler),
     config_(config),
-    module_(py::module_::import("segmentation_model.inference_helper")),
+    module_(load_from_segmentation_model("inference_helper")),
     helper_(module_.attr("InferenceHelper")(path_to_model.string())),
     infer_(helper_.attr("infer")) { /* STUB */ }
 
