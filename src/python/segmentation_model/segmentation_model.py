@@ -51,13 +51,12 @@ class PointTransformerV3Lightning(pl.LightningModule):
             (embedding_size, 1),
             (embedding_size * 2, 1),
             (embedding_size * 4, 2),
-            (embedding_size * 4, 2),
-            (embedding_size * 8, 4),
+            (embedding_size * 4, 4),
         ]
 
-        patch_size = 128
+        patch_size = 256
 
-        mlp_ratio = 2
+        mlp_ratio = 1
 
         enc_channels = tuple(channel for channel, _ in stages)
         enc_num_head = tuple(num_head for _, num_head in stages)

@@ -6,6 +6,7 @@
 #include <limits>
 // tbb
 #include <tbb/parallel_for.h>
+#include <tbb/parallel_reduce.h>
 
 // TODO: is this possible without allocating the points again?
 // not a big cost, since its only done once every ~5 meters

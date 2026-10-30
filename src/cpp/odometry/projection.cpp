@@ -62,14 +62,14 @@ std::optional<Sophus::SE3f> Projection::align(const SemanticCloud& source, size_
     for(iter = 0; iter < max_iterations; ++iter) {
         // build bidirectional correspondences
         correspond(source_, target_, correspondences);
-        std::sort(correspondences.begin(), correspondences.end(), [](const auto& a, const auto& b) {
-                const auto* ta = std::get<1>(a);
-                const auto* tb = std::get<1>(b);
-                if(ta != tb) return ta < tb;
-                return std::get<2>(a) < std::get<2>(b); });
-        correspondences.erase(std::unique(correspondences.begin(), correspondences.end(), 
-            [](const auto& a, const auto& b) { return std::get<1>(a) == std::get<1>(b); }),
-            correspondences.end());
+        // std::sort(correspondences.begin(), correspondences.end(), [](const auto& a, const auto& b) {
+        //         const auto* ta = std::get<1>(a);
+        //         const auto* tb = std::get<1>(b);
+        //         if(ta != tb) return ta < tb;
+        //         return std::get<2>(a) < std::get<2>(b); });
+        // correspondences.erase(std::unique(correspondences.begin(), correspondences.end(), 
+        //     [](const auto& a, const auto& b) { return std::get<1>(a) == std::get<1>(b); }),
+        //     correspondences.end());
         if(correspondences.size() < 3) {
             target_.clear();
             target_.extend(points);
