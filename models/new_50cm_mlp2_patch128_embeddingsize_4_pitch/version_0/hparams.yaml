@@ -6,7 +6,7 @@ dataset_config:
   include_instance: true
   include_semantics: true
   voxel_size: 0.5
-embedding_size: 8
+embedding_size: 4
 in_channels: 1
 lr: 0.001
 num_classes: 4

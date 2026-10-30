@@ -5,4 +5,4 @@ dataset:
   include_semantics: true
   include_instance: true
   delete_existing_processed_files: false
-  voxel_size: 0.2
+  voxel_size: 0.5

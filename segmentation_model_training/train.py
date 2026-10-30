@@ -25,6 +25,8 @@ def train(config_model: typing.Dict, config_trainer: typing.Dict, config_data: t
     # data prep
     transform_pre = transforms.Compose([utils.transforms.CenterGlobal(verbose = verbose)])
     transform_batch = transforms.Compose([
+        utils.transforms.RandomRotate((-30, 30), axis = 0, verbose = verbose),
+        utils.transforms.RandomRotate((-30, 30), axis = 1, verbose = verbose),
         utils.transforms.RandomRotate(180, axis = 2, verbose = verbose),
         utils.transforms.RandomUniformScale((0.8, 1.2), verbose = verbose),
     ])

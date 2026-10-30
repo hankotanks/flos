@@ -5,6 +5,7 @@
 #include <set>
 #include <regex>
 #include <stdexcept>
+#include <random>
 // robin_map
 #include <tsl/robin_map.h>
 
@@ -258,6 +259,8 @@ template py::object Cloud::field_as_py_object<f4>(const std::string&) const;
 template py::object Cloud::field_as_py_object<f8>(const std::string&) const;
 #endif // GENERATE_CLOUD_PYBIND_MODULE
 
+// NOTE: new implementation generates a randomized index set to uniformly sample points (this should be cheap)
+#if 0
 void Cloud::downsample(float voxel_size) {
     tsl::robin_map<Eigen::Vector3i, size_t> grid;
     grid.reserve(Cloud::size());
@@ -278,6 +281,30 @@ void Cloud::downsample(float voxel_size) {
     }
     Cloud::resize(i_write);
 }
+#else
+void Cloud::downsample(float voxel_size) {
+    const size_t n = Cloud::size();
+    tsl::robin_map<Eigen::Vector3i, size_t> grid;
+    grid.reserve(n);
+    std::vector<size_t> indices(n);
+    std::iota(indices.begin(), indices.end(), 0);
+    static thread_local std::mt19937 rng{std::random_device{}()};
+    std::shuffle(indices.begin(), indices.end(), rng);
+    size_t i_write = 0;
+    for(const size_t i_read : indices) {
+        const Eigen::Vector3i voxel = point_to_voxel(points_[i_read], voxel_size);
+        if(!grid.contains(voxel)) {
+            grid.insert({voxel, i_write});
+            points_[i_write] = points_[i_read];
+            for(size_t i = 0; i < fields_.size(); ++i) {
+                std::visit([i_read, i_write](auto& vec) { vec[i_write] = vec[i_read]; }, fields_[i].data_);
+            }
+            ++i_write;
+        }
+    }
+    Cloud::resize(i_write);
+}
+#endif
 
 void Cloud::filter_by_distance(const Eigen::Vector3f& origin, float minima, float maxima) {
     float minima_sq = minima * minima;
