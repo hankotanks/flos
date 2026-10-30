@@ -11,7 +11,8 @@
 
 namespace {
 py::object load_from_segmentation_model(const std::string& name) {
-    std::filesystem::path path_to_module = std::filesystem::path{PROJECT_ROOT} / "src" / "python";
+    std::filesystem::path path_to_source = std::filesystem::path{PROJECT_ROOT};
+    std::filesystem::path path_to_module = path_to_source.parent_path() / "python";
     py::module_::import("sys").attr("path").attr("insert")(0, path_to_module.string());
     return py::module_::import(("segmentation_model." + name).c_str());
 }
