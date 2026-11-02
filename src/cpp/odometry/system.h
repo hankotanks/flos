@@ -22,7 +22,7 @@ class OdometrySystem: util::Profiler {
     friend class OfflineNode;
 public:
     struct Config {
-        float max_distance{35.f};
+        float max_distance{27.5f};
         float max_distance_ground{10.f};
         float voxel_size{1.f};
         struct {
@@ -40,7 +40,7 @@ public:
         } correspondence;
         struct {
             bool enable{true};
-            float iou{0.73f};
+            float iou{0.58f};
             std::set<size_t> ground{1};
             std::set<size_t> target{3};
         } projection;

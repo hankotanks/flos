@@ -13,9 +13,9 @@ class SegmentationSystem : util::Profiler {
     friend class OfflineNode;
 public:
     struct Config {
-        float max_distance{35.f};
+        float max_distance{27.5f};
         float voxel_size{1.f};
-        float voxel_size_inference{0.1f};
+        float voxel_size_inference{0.5f};
         bool double_downsample{false};
         struct {
             std::set<size_t> ignore{0};
