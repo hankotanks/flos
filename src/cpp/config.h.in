@@ -1,0 +1,9 @@
+#pragma once
+
+#include <cstddef>
+
+namespace config {
+    inline constexpr size_t VOXEL_CAPACITY = @FLOS_VOXEL_CAPACITY@;
+    inline constexpr size_t CLASS_COUNT = @FLOS_CLASS_COUNT@;
+    inline constexpr size_t SEED = @FLOS_SEED@;
+}

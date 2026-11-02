@@ -1,6 +1,7 @@
 #pragma once
 
 // system
+#include "config.h"
 #include <limits>
 #include <optional>
 #include <ranges>
@@ -77,16 +78,10 @@ concept TransformLambda = (
 template<size_t D, typename F = std::span<const Eigen::Vector<float, D>>>
 requires(ValidVoxelMap<D, F>)
 struct VoxelMap {
-    explicit VoxelMap(float max_distance, float voxel_size, size_t voxel_capacity) : 
+    explicit VoxelMap(float max_distance, float voxel_size, bool limit = true) : 
         max_distance_(max_distance), 
         voxel_size_(voxel_size),  
-        voxel_capacity_(voxel_capacity),
-        voxel_resolution_sq_(voxel_size_ * voxel_size_ / static_cast<float>(voxel_capacity_)) { /* STUB */ }
-    explicit VoxelMap(float max_distance, float voxel_size) : 
-        max_distance_(max_distance), 
-        voxel_size_(voxel_size),  
-        voxel_capacity_(0),
-        voxel_resolution_sq_(std::numeric_limits<float>::lowest()) { /* STUB */ }
+        voxel_resolution_sq_(limit ? (voxel_size_ * voxel_size_ / static_cast<float>(config::VOXEL_CAPACITY)) : std::numeric_limits<float>::lowest()) { /* STUB */ }
     VoxelMap(const VoxelMap&) = default;
     VoxelMap(VoxelMap&&) = default;
     VoxelMap& operator=(const VoxelMap&) = delete; // NOTE: copy assignment is explicitly deleted to avoid unintended allocations
@@ -179,14 +174,14 @@ private:
     class VoxelInner<_D, _F> {
     protected:
         friend class VoxelMap<D, F>;
-        std::vector<typename _F::point_data_t> point_data_;
+        std::array<typename _F::point_data_t, config::VOXEL_CAPACITY> point_data_;
         typename _F::voxel_data_t data_;
     };
     // internal voxel representation
     class Voxel : VoxelInner<D, F> {
         friend class VoxelMap<D, F>;
     public:
-        Voxel(size_t voxel_capacity);
+        Voxel() = default;
         Voxel(const Voxel&) = default;
         Voxel(Voxel&&) = default;
         Voxel& operator=(const Voxel&) = delete; // NOTE: see voxel_map.h:77
@@ -199,7 +194,8 @@ private:
         void add(const Eigen::Vector<float, D>& point, typename T::point_data_t data, float voxel_resolution_sq) noexcept
         requires(!DefaultFrameType<D, F>);
     private:
-        std::vector<Eigen::Vector<float, D>> points_;
+        std::array<Eigen::Vector<float, D>, config::VOXEL_CAPACITY> points_;
+        size_t count_{0};
     };
     // get lower bound distance for pruning the search space in VoxelMap::closest
     inline float lower_bound_distance_sq(const Eigen::Vector<float, D>& query, const Eigen::Vector<int, D>& voxel) const noexcept;
@@ -207,7 +203,6 @@ private:
     // configuration options
     float max_distance_;
     float voxel_size_;
-    size_t voxel_capacity_;
     float voxel_resolution_sq_;
     // underlying map structure
     tsl::robin_map<Eigen::Vector<int, D>, Voxel> map_;
@@ -324,7 +319,7 @@ public:
     class view_voxels : public std::ranges::view_interface<view_voxels> {
         friend class VoxelMap<D, F>;
         using map_iterator = typename tsl::robin_map<Eigen::Vector<int, D>, Voxel>::const_iterator;
-        view_voxels(const VoxelMap<D, F>& map) : begin_(map.map_.cbegin()), end_(map.map_.cend()), voxel_capacity_(map.voxel_capacity_) { /* STUB */ }
+        view_voxels(const VoxelMap<D, F>& map) : begin_(map.map_.cbegin()), end_(map.map_.cend()) { /* STUB */ }
     public:
         bool empty() const noexcept { return begin_ == end_; }
         // iterator inner class
@@ -356,14 +351,13 @@ public:
             friend bool operator==(const iterator& lhs, const iterator& rhs) noexcept { return lhs.voxel_ == rhs.voxel_; }
             friend bool operator!=(const iterator& lhs, const iterator& rhs) noexcept { return !(lhs == rhs); }
         private:
-            explicit iterator(map_iterator voxel, size_t voxel_capacity) : voxel_(voxel), voxel_capacity_(voxel_capacity) { /* STUB */ }
+            explicit iterator(map_iterator voxel) : voxel_(voxel) { /* STUB */ }
         private:
             map_iterator voxel_{};
-            size_t voxel_capacity_;
         };
         // iterator initializers
-        iterator begin() const { return iterator{begin_, voxel_capacity_}; }
-        iterator end() const { return iterator{end_, voxel_capacity_}; }
+        iterator begin() const { return iterator{begin_}; }
+        iterator end() const { return iterator{end_}; }
     private:
         map_iterator begin_;
         map_iterator end_;

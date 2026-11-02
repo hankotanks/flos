@@ -25,7 +25,6 @@ public:
         float max_distance{35.f};
         float max_distance_ground{10.f};
         float voxel_size{1.f};
-        size_t voxel_capacity{5};
         struct {
             float motion{0.1f};
         } threshold;

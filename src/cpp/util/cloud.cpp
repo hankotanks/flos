@@ -10,10 +10,11 @@
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_sort.h>
 #include <tbb/concurrent_vector.h>
+#include <tbb/concurrent_unordered_map.h>
 // robin_map
 #include <tsl/robin_map.h>
 // package
-#include "classes.h"
+#include "config.h"
 
 using i1 = int8_t;
 using u1 = uint8_t;
@@ -312,197 +313,57 @@ void Cloud::downsample(float voxel_size) {
     }
     Cloud::resize(i_write);
 }
-#elif 0
-// fixed chunk sizes
-void Cloud::downsample(float voxel_size) {
-    using Grid = tsl::robin_map<Eigen::Vector3i, size_t>;
-
-    const size_t n = Cloud::size();
-
-    if (n == 0)
-        return;
-
-    struct Entry {
-        Eigen::Vector3i voxel;
-        size_t index;
-    };
-
-    struct Chunk {
-        size_t begin;
-        Grid grid;
-        std::vector<Entry> entries;
-    };
-
-    const size_t num_workers = std::min(
-        static_cast<size_t>(
-            oneapi::tbb::this_task_arena::max_concurrency()
-        ),
-        n
-    );
-
-    const size_t chunk_size = (n + num_workers - 1) / num_workers;
-
-    std::vector<Chunk> chunks(num_workers);
-
-    // Phase 1: Parallel local voxel identification.
-    oneapi::tbb::parallel_for(
-        size_t(0),
-        num_workers,
-        [&](size_t worker) {
-            const size_t begin = worker * chunk_size;
-            const size_t end = std::min(begin + chunk_size, n);
-
-            Chunk& chunk = chunks[worker];
-            chunk.begin = begin;
-
-            chunk.grid.reserve(end - begin);
-            chunk.entries.reserve(end - begin);
-
-            for (size_t read = begin; read < end; ++read) {
-                const auto voxel =
-                    point_to_voxel(points_[read], voxel_size);
-
-                if (chunk.grid.emplace(voxel, read).second) {
-                    chunk.entries.push_back({voxel, read});
-                }
-            }
-        }
-    );
-
-    // Phase 2: Global overlap elimination and in-place compaction.
-    Grid& merged_grid = chunks[0].grid;
-
-    size_t i_write = 0;
-
-    for (size_t c = 0; c < num_workers; ++c) {
-        for (const auto& entry : chunks[c].entries) {
-            bool keep = true;
-
-            if (c != 0) {
-                keep = merged_grid.emplace(
-                    entry.voxel,
-                    entry.index
-                ).second;
-            }
-
-            if (keep) {
-                if (i_write != entry.index) {
-                    points_[i_write] =
-                        std::move(points_[entry.index]);
-
-                    for (auto& field : fields_) {
-                        std::visit([&](auto& vec) {
-                            vec[i_write] =
-                                std::move(vec[entry.index]);
-                        }, field.data_);
-                    }
-                }
-
-                ++i_write;
-            }
-        }
-    }
-
-    Cloud::resize(i_write);
-}
-#else
+#elif 1
 // current best
 void Cloud::downsample(float voxel_size) {
     using Grid = tsl::robin_map<Eigen::Vector3i, size_t>;
-
+    using GridGlobal = tbb::concurrent_unordered_map<Eigen::Vector3i, size_t, Grid::hasher, Grid::key_equal>;
     const size_t n = Cloud::size();
-
-    if (n == 0)
-        return;
-
-    struct Entry {
-        Eigen::Vector3i voxel;
-        size_t index;
-    };
-
-    struct Chunk {
-        size_t begin;
-        Grid grid;
-        std::vector<Entry> entries;
-    };
-
+    if(n == 0) return;
+    // index map for uniform sampling
+    std::vector<size_t> indices(n);
+    std::iota(indices.begin(), indices.end(), 0);
+    static thread_local std::mt19937 rng{config::SEED};
+    std::shuffle(indices.begin(), indices.end(), rng);
+    // grain size is the number of points tasked to each worker
     constexpr size_t grain_size = 4096;
-
-    oneapi::tbb::concurrent_vector<Chunk> chunks;
-
-    // Phase 1: Parallel local voxel identification.
-    oneapi::tbb::parallel_for(
-        oneapi::tbb::blocked_range<size_t>(0, n, grain_size),
-        [&](const oneapi::tbb::blocked_range<size_t>& range) {
-            Chunk chunk{
-                range.begin(),
-                {},
-                {}
-            };
-
-            chunk.grid.reserve(range.size());
-            chunk.entries.reserve(range.size());
-
-            for (size_t read = range.begin(); read < range.end(); ++read) {
-                const auto voxel =
-                    point_to_voxel(points_[read], voxel_size);
-
-                if (chunk.grid.emplace(voxel, read).second) {
-                    chunk.entries.push_back({voxel, read});
-                }
+    const size_t num_chunks = (n + grain_size - 1) / grain_size;
+    // build grids
+    std::vector<Grid> chunks(num_chunks);
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, num_chunks), [&](const tbb::blocked_range<size_t>& range) {
+        for(size_t c = range.begin(); c < range.end(); ++c) {
+            const size_t begin = c * grain_size;
+            const size_t end = std::min(begin + grain_size, n);
+            Grid& grid = chunks[c];
+            grid.reserve(end - begin);
+            for(size_t i = begin; i < end; ++i) {
+                const size_t j = indices[i];
+                grid.emplace(point_to_voxel(points_[j], voxel_size), j);
             }
-
-            chunks.push_back(std::move(chunk));
         }
-    );
-
-    // Phase 2: Restore original chunk order.
-    std::sort(
-        chunks.begin(),
-        chunks.end(),
-        [](const Chunk& a, const Chunk& b) {
-            return a.begin < b.begin;
+    });
+    // merge
+    GridGlobal merged_grid;
+    std::vector<uint8_t> keep(n, 0);
+    tbb::parallel_for(tbb::blocked_range<size_t>(0, num_chunks), [&](const tbb::blocked_range<size_t>& range) {
+        for(size_t c = range.begin(); c < range.end(); ++c) {
+            for(const auto& [voxel, index] : chunks[c]) {
+                if(merged_grid.insert({voxel, index}).second) keep[index] = 1;
+            }
         }
-    );
-
-    // Phase 3: Merge local maps and compact in-place.
-    // Reuse the first chunk's map as the accumulated voxel map.
-    Grid& merged_grid = chunks[0].grid;
-
+    });
+    // compact
     size_t i_write = 0;
-
-    for (size_t c = 0; c < chunks.size(); ++c) {
-        const auto& entries = chunks[c].entries;
-
-        for (const auto& entry : entries) {
-            bool keep = true;
-
-            // The first chunk's entries are already in merged_grid.
-            // Subsequent chunks insert into it to eliminate overlaps.
-            if (c != 0) {
-                keep = merged_grid.emplace(
-                    entry.voxel,
-                    entry.index
-                ).second;
-            }
-
-            if (keep) {
-                if (i_write != entry.index) {
-                    points_[i_write] = std::move(points_[entry.index]);
-
-                    for (auto& field : fields_) {
-                        std::visit([&](auto& vec) {
-                            vec[i_write] = std::move(vec[entry.index]);
-                        }, field.data_);
-                    }
-                }
-
-                ++i_write;
+    for(const size_t i : indices) {
+        if(!keep[i]) continue;
+        if(i_write != i) {
+            points_[i_write] = std::move(points_[i]);
+            for(auto& field : fields_) {
+                std::visit([&](auto& vec) { vec[i_write] = std::move(vec[i]); }, field.data_);
             }
         }
+        ++i_write;
     }
-
-    // Phase 4: Resize.
     Cloud::resize(i_write);
 }
 #endif

@@ -1,3 +1,9 @@
+set(FLOS_VOXEL_CAPACITY 5 CACHE STRING "")
+set(FLOS_CLASS_COUNT 4 CACHE STRING "")
+set(FLOS_SEED 42 CACHE STRING "")
+
+configure_file("${CMAKE_CURRENT_LIST_DIR}/config.h.in" "${CMAKE_CURRENT_BINARY_DIR}/config.h" @ONLY)
+
 function(configure_node name)
   set(options)
   set(oneValueArgs)
@@ -14,6 +20,7 @@ function(configure_node name)
       NODE_NAME="${name}"
       ${ARG_DEFINITIONS})
   target_compile_options(${name} PRIVATE -Wno-alloc-size-larger-than)
+  target_include_directories(${name} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 endfunction()
 
 #

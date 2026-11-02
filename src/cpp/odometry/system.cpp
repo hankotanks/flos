@@ -12,7 +12,7 @@
 #include "odometry/adaptive_threshold.h"
 #include "odometry/projection.h"
 #include "odometry/time_system.h"
-#include "classes.h"
+#include "config.h"
 // util
 #include "util/cloud.h"
 #include "util/profiler.h"
@@ -21,9 +21,9 @@ OdometrySystem::OdometrySystem(const Config& config) : OdometrySystem(config, nu
 
 OdometrySystem::OdometrySystem(const Config& config, util::Profiler* profiler) : util::Profiler("OdometrySystem", profiler),
     config_(config),
-    map_(config_.max_distance, config_.voxel_size, config_.voxel_capacity),
+    map_(config_.max_distance, config_.voxel_size, config::VOXEL_CAPACITY),
     projection_(config_.max_distance, config_.max_distance_ground, config_.voxel_size, config_.projection.iou, 
-        std::sqrt(config_.voxel_size * config_.voxel_size / static_cast<float>(config_.voxel_capacity)),
+        std::sqrt(config_.voxel_size * config_.voxel_size / static_cast<float>(config::VOXEL_CAPACITY)),
         [this](const Semantics& semantics) { return this->config_.projection.ground.count(semantics.prediction) > 0; },
         [this](const Semantics& semantics) { return this->config_.projection.target.count(semantics.prediction) > 0; }),
     threshold_(config_.max_distance, config_.voxel_size * 1.5f, config_.threshold.motion) {
@@ -62,7 +62,7 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, TimeSys
             if(config_.projection.enable) {
                 PROFILE(refinement, &align) {
                     // after OdometrySystem::refine, points have been transformed by T_hyp
-                    if(frame_ > config_.voxel_capacity) correction = OdometrySystem::refine(points_kp_wrapper, initial_guess, correspondence_distance);
+                    if(frame_ > config::VOXEL_CAPACITY) correction = OdometrySystem::refine(points_kp_wrapper, initial_guess, correspondence_distance);
                 }
             }
             // deskewing
@@ -82,7 +82,7 @@ const Sophus::SE3f& OdometrySystem::register_to_map(util::Cloud& points, TimeSys
             // maintain ground plane and previous frame's projection
             if(config_.projection.enable) {
                 PROFILE(refinement_update, &align) {
-                    if(frame_ > config_.voxel_capacity) {
+                    if(frame_ > config::VOXEL_CAPACITY) {
                         projection_.fit(map_, last_pose_, T_icp);
                     }
                 }
@@ -222,11 +222,7 @@ std::ostream& operator<<(std::ostream& stream, const OdometrySystem::Config& con
         for(const auto i : classes) {
             if(!first) oss << ", ";
             first = false; 
-            if(i < classes::COUNT) {
-                oss << classes::HINT[i];
-            } else {
-                oss << i;
-            }
+            oss << i;
         }
         oss << ']';
         return oss.str();
@@ -236,7 +232,6 @@ std::ostream& operator<<(std::ostream& stream, const OdometrySystem::Config& con
         "\tmax_distance: " << config.max_distance << "," << std::endl <<
         "\tmax_distance_ground: " << config.max_distance_ground << "," << std::endl <<
         "\tvoxel_size: " << config.voxel_size << "," << std::endl <<
-        "\tvoxel_capacity: " << config.voxel_capacity << "," << std::endl <<
         "\tthreshold_motion: " << config.threshold.motion << "," << std::endl <<
         "\tdeskew: " << config.deskew << "," << std::endl << 
         "\tdouble_downsample: " << config.double_downsample << "," << std::endl <<

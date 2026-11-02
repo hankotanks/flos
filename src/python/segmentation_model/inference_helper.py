@@ -7,11 +7,8 @@ import cloud_bindings
 
 class InferenceHelper:
     def __init__(self, path_to_model):
-        self.model = PointTransformerV3Lightning.load_from_checkpoint(path_to_model)
-        self.model.to("cuda")
-        self.model.eval()
-        self.model.half()
-        self.model = torch.compile(self.model, mode = "reduce-overhead", dynamic = True, fullgraph = True)
+        model = PointTransformerV3Lightning.load_from_checkpoint(path_to_model).to(device = "cuda", dtype = torch.float16).eval()
+        self.model = torch.compile(model, mode = "reduce-overhead")
 
     def infer(self, points):
         np_points = np.asarray(points, dtype = np.float16)

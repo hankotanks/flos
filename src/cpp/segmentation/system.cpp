@@ -5,7 +5,7 @@
 // tbb
 #include <tbb/parallel_for.h>
 // package
-#include "classes.h"
+#include "config.h"
 // util
 #include "util/profiler.h"
 
@@ -60,7 +60,7 @@ void SegmentationSystem::Model::infer(util::Cloud& cloud) {
     PROFILE(inference, profiler_) {
         py::object points = cloud.points_as_py_object();
         std::vector<std::span<const float>> fields;
-        fields.reserve(classes::COUNT);
+        fields.reserve(config::CLASS_COUNT);
         try {
             // perform inference
             py::list result;
@@ -121,12 +121,8 @@ std::ostream& operator<<(std::ostream& stream, const SegmentationSystem::Config&
         bool first = true;
         for(size_t i : ignore) {
             if(!first) oss << ", ";
-            first = false; 
-            if(i < classes::COUNT) {
-                oss << classes::HINT[i];
-            } else {
-                oss << i;
-            }
+            first = false;
+            oss << i;
         }
         oss << ']';
         return oss.str();
@@ -139,17 +135,9 @@ std::ostream& operator<<(std::ostream& stream, const SegmentationSystem::Config&
         for(const auto [i, w] : remap) {
             if(!first) oss << ", ";
             first = false; 
-            if(i < classes::COUNT) {
-                oss << classes::HINT[i];
-            } else {
-                oss << i;
-            }
+            oss << i;
             oss << ": ";
-            if(w < classes::COUNT) {
-                oss << classes::HINT[w];
-            } else {
-                oss << w;
-            }
+            oss << w;
         }
         oss << ']';
         return oss.str();

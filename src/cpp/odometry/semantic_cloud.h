@@ -1,7 +1,7 @@
 #pragma once
 
 // package
-#include "classes.h"
+#include "config.h"
 #include "odometry/voxel_map.h"
 // util
 #include "util/cloud.h"
@@ -9,7 +9,7 @@
 // represents the semantics of a single point
 struct Semantics {
     size_t prediction;
-    std::array<float, classes::COUNT> confidence;
+    std::array<float, config::CLASS_COUNT> confidence;
 };
 
 // forward declaration
@@ -31,8 +31,8 @@ public:
     virtual float weight(const Semantics& query) const noexcept override final;
 public:
     size_t prediction_;
-    std::array<float, classes::COUNT> belief_; 
-    std::array<float, classes::COUNT> confidence_;
+    std::array<float, config::CLASS_COUNT> belief_; 
+    std::array<float, config::CLASS_COUNT> confidence_;
 };
 
 // util::Cloud wrapper for fast access of fields
@@ -53,5 +53,5 @@ public:
 private:
     std::span<Eigen::Vector3f> points_;
     std::span<const uint8_t> class_;
-    std::array<std::span<const float>, classes::COUNT> confidence_;
+    std::array<std::span<const float>, config::CLASS_COUNT> confidence_;
 };

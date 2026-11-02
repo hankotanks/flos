@@ -1,6 +1,7 @@
 // rerun
 #include <rerun.hpp>
 // package
+#include "config.h"
 #include "odometry/ground_plane.h"
 #include "offline_node.h"
 // util
@@ -114,7 +115,7 @@ protected:
         }
         rr_.log("map/ground/plane", rerun::archetypes::Mesh3D(vertices).with_triangle_indices(triangles));
         // points
-        float inlier_distance = std::sqrt(odometry_config_.config.voxel_size * odometry_config_.config.voxel_size / static_cast<float>(odometry_config_.config.voxel_capacity));
+        float inlier_distance = std::sqrt(odometry_config_.config.voxel_size * odometry_config_.config.voxel_size / static_cast<float>(config::VOXEL_CAPACITY));
         std::span<const uint8_t> predictions = cloud.field<uint8_t>("prediction");
         std::vector<rerun::Position3D> points;
         for(size_t i = 0; i < predictions.size(); ++i) {
