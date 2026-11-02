@@ -124,7 +124,7 @@ public:
             TimeSystem::Stamp stamp(header.stamp.sec, header.stamp.nanosec);
             PROFILE(frame, this) {
                 // preprocess before inference
-                model.preprocess(points);
+                PROFILE(preprocess, &frame) model.preprocess(points);
                 // inference
                 model.infer(points);
                 PROFILE_SKIP(frame) {

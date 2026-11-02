@@ -11,7 +11,7 @@ class InferenceHelper:
         self.model.to("cuda")
         self.model.eval()
         self.model.half()
-        self.model = torch.compile(self.model)
+        self.model = torch.compile(self.model, mode = "reduce-overhead", dynamic = True, fullgraph = True)
 
     def infer(self, points):
         np_points = np.asarray(points, dtype = np.float16)
