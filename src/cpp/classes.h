@@ -7,3 +7,7 @@ namespace classes {
     static constexpr size_t COUNT = 4;
     static constexpr std::array<std::string, COUNT> HINT{"ignore", "ground", "vegetation", "trunks"};
 }
+
+namespace config {
+    static constexpr size_t SEED = 13;
+}

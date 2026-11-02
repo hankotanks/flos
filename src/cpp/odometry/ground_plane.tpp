@@ -7,6 +7,8 @@
 // tbb
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_reduce.h>
+// package
+#include "classes.h"
 
 // TODO: is this possible without allocating the points again?
 // not a big cost, since its only done once every ~5 meters
@@ -41,7 +43,7 @@ std::function<void(Eigen::Vector2f&, float&)> GroundPlane::update(const VoxelMap
     Consensus best;
     best.error = std::numeric_limits<float>::max();
 
-    std::mt19937 rng{static_cast<std::mt19937::result_type>(std::chrono::high_resolution_clock::now().time_since_epoch().count())};
+    std::mt19937 rng{config::SEED};
 
     // get random index generator
     std::uniform_int_distribution<size_t> distribution(0, points.size() - 1);

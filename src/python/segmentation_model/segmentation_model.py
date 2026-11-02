@@ -49,14 +49,13 @@ class PointTransformerV3Lightning(pl.LightningModule):
 
         stages = [
             (embedding_size, 1),
-            (embedding_size * 2, 1),
-            (embedding_size * 4, 2),
+            (embedding_size * 2, 2),
             (embedding_size * 4, 4),
         ]
 
         patch_size = 256
 
-        mlp_ratio = 1
+        mlp_ratio = 2
 
         enc_channels = tuple(channel for channel, _ in stages)
         enc_num_head = tuple(num_head for _, num_head in stages)
@@ -77,7 +76,7 @@ class PointTransformerV3Lightning(pl.LightningModule):
             dec_patch_size = (patch_size,) * (len(enc_channels) - 1),
             mlp_ratio = mlp_ratio)
 
-        self.segmentation_head = MLP(dec_channels[0], self.hparams.num_classes, batch_norm = False, num_layers = 2)
+        self.segmentation_head = MLP(dec_channels[0], self.hparams.num_classes, batch_norm = True, num_layers = 2)
 
         self.loss = nn.CrossEntropyLoss(reduction = "mean", ignore_index = 0)
 

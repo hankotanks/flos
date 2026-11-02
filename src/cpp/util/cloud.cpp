@@ -8,6 +8,8 @@
 #include <random>
 // robin_map
 #include <tsl/robin_map.h>
+// package
+#include "classes.h"
 
 using i1 = int8_t;
 using u1 = uint8_t;
@@ -288,7 +290,7 @@ void Cloud::downsample(float voxel_size) {
     grid.reserve(n);
     std::vector<size_t> indices(n);
     std::iota(indices.begin(), indices.end(), 0);
-    static thread_local std::mt19937 rng{std::random_device{}()};
+    static thread_local std::mt19937 rng{config::SEED};
     std::shuffle(indices.begin(), indices.end(), rng);
     size_t i_write = 0;
     for(const size_t i_read : indices) {
