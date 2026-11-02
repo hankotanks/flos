@@ -6,6 +6,9 @@
 #include <regex>
 #include <stdexcept>
 #include <random>
+// tbb
+#include <tbb/parallel_for.h>
+#include <tbb/parallel_sort.h>
 // robin_map
 #include <tsl/robin_map.h>
 // package
@@ -283,7 +286,7 @@ void Cloud::downsample(float voxel_size) {
     }
     Cloud::resize(i_write);
 }
-#else
+#elif 0
 void Cloud::downsample(float voxel_size) {
     const size_t n = Cloud::size();
     tsl::robin_map<Eigen::Vector3i, size_t> grid;
@@ -305,6 +308,109 @@ void Cloud::downsample(float voxel_size) {
         }
     }
     Cloud::resize(i_write);
+}
+#else
+void Cloud::downsample(float voxel_size) {
+    const size_t n = size();
+    if (n == 0) return;
+
+    static thread_local std::mt19937 rng{config::SEED};
+
+    struct Entry {
+        Eigen::Vector3i voxel;
+        size_t index;
+        size_t order;
+    };
+
+    // Randomize representative selection.
+    std::vector<size_t> indices(n);
+    std::iota(indices.begin(), indices.end(), 0);
+    std::shuffle(indices.begin(), indices.end(), rng);
+
+    // Compute voxel coordinates in parallel.
+    std::vector<Entry> entries(n);
+
+    tbb::parallel_for(
+        tbb::blocked_range<size_t>(0, n),
+        [&](const tbb::blocked_range<size_t>& range) {
+            for (size_t i = range.begin(); i != range.end(); ++i) {
+                const size_t index = indices[i];
+
+                entries[i] = {
+                    point_to_voxel(points_[index], voxel_size),
+                    index,
+                    i
+                };
+            }
+        }
+    );
+
+    // Sort by voxel, preserving randomized representative selection.
+    tbb::parallel_sort(
+        entries.begin(), entries.end(),
+        [](const Entry& a, const Entry& b) {
+            if (a.voxel.x() != b.voxel.x())
+                return a.voxel.x() < b.voxel.x();
+
+            if (a.voxel.y() != b.voxel.y())
+                return a.voxel.y() < b.voxel.y();
+
+            if (a.voxel.z() != b.voxel.z())
+                return a.voxel.z() < b.voxel.z();
+
+            return a.order < b.order;
+        }
+    );
+
+    // Select one representative per voxel.
+    std::vector<size_t> selected;
+    selected.reserve(n);
+
+    for (size_t i = 0; i < n; ++i) {
+        if (i == 0 || entries[i].voxel != entries[i - 1].voxel) {
+            selected.push_back(entries[i].index);
+        }
+    }
+
+    // Copy selected points and fields into separate storage.
+    // This avoids overwriting unread source elements.
+    const size_t m = selected.size();
+
+    std::vector<Eigen::Vector3f> new_points(m);
+
+    tbb::parallel_for(
+        tbb::blocked_range<size_t>(0, m),
+        [&](const tbb::blocked_range<size_t>& range) {
+            for (size_t i = range.begin(); i != range.end(); ++i) {
+                new_points[i] = points_[selected[i]];
+            }
+        }
+    );
+
+    // Copy each field using its original variant type.
+    auto new_fields = fields_;
+
+    for (size_t f = 0; f < fields_.size(); ++f) {
+        std::visit([&](const auto& src) {
+            using Vector = std::decay_t<decltype(src)>;
+
+            Vector dst(m);
+
+            tbb::parallel_for(
+                tbb::blocked_range<size_t>(0, m),
+                [&](const tbb::blocked_range<size_t>& range) {
+                    for (size_t i = range.begin(); i != range.end(); ++i) {
+                        dst[i] = src[selected[i]];
+                    }
+                }
+            );
+
+            new_fields[f].data_ = std::move(dst);
+        }, fields_[f].data_);
+    }
+
+    points_ = std::move(new_points);
+    fields_ = std::move(new_fields);
 }
 #endif
 
