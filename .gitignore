@@ -2,3 +2,6 @@ __pycache__/
 /.cache
 /.devcontainer.json
 /docker/.zsh_history
+/models/10cm/
+/models/20cm/
+/models/1m/
