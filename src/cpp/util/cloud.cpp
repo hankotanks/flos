@@ -325,33 +325,36 @@ void Cloud::downsample(float voxel_size) {
         size_t index;
     };
     struct Chunk {
-        size_t begin;
         Grid grid;
         std::vector<Entry> entries;
     };
     static constexpr size_t GRAIN_SIZE = 4096;
+    static constexpr float CHUNK_SIZE_SCALAR = 0.15f;
     tbb::concurrent_vector<Chunk> chunks;
     // build grids
     tbb::parallel_for(tbb::blocked_range<size_t>(0, n, GRAIN_SIZE), [&](const oneapi::tbb::blocked_range<size_t>& range) {
-        Chunk chunk{range.begin(), {}, {}};
-        chunk.grid.reserve(range.size());
-        chunk.entries.reserve(range.size());
+        const size_t size_est = static_cast<size_t>(static_cast<float>(range.size()) * CHUNK_SIZE_SCALAR);
+        Chunk chunk;
+        chunk.grid.reserve(size_est);
+        chunk.entries.reserve(size_est);
         for(size_t read = range.begin(); read < range.end(); ++read) {
             const auto voxel = point_to_voxel(points_[read], voxel_size);
             if(chunk.grid.emplace(voxel, read).second) chunk.entries.push_back({voxel, read});
         }
         chunks.push_back(std::move(chunk));
     });
-    std::sort(chunks.begin(), chunks.end(), [](const Chunk& a, const Chunk& b) { return a.begin < b.begin; });
+    // estimate voxel count
+    size_t count = 0;
+    for(const auto& chunk : chunks) count += chunk.grid.size();
+    Grid merged_grid;
+    merged_grid.reserve(count);
+    // release local grids
+    for(auto& chunk : chunks) Grid().swap(chunk.grid);
     // merge
-    Grid& merged_grid = chunks[0].grid;
     size_t i_write = 0;
-    for(size_t c = 0; c < chunks.size(); ++c) {
-        const auto& entries = chunks[c].entries;
-        for(const auto& entry : entries) {
-            bool keep = true;
-            if(c != 0) keep = merged_grid.emplace(entry.voxel, entry.index).second;
-            if(keep) {
+    for(const auto& chunk : chunks) {
+        for(const auto& entry : chunk.entries) {
+            if(merged_grid.emplace(entry.voxel, entry.index).second) {
                 if(i_write != entry.index) {
                     points_[i_write] = std::move(points_[entry.index]);
                     for(auto& field : fields_) {
