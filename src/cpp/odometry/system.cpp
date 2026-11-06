@@ -24,8 +24,22 @@ OdometrySystem::OdometrySystem(const Config& config, util::Profiler* profiler) :
     map_(config_.max_distance, config_.voxel_size, config::VOXEL_CAPACITY),
     projection_(config_.max_distance, config_.max_distance_ground, config_.voxel_size, config_.projection.iou, 
         std::sqrt(config_.voxel_size * config_.voxel_size / static_cast<float>(config::VOXEL_CAPACITY)),
-        [this](const Semantics& semantics) { return this->config_.projection.ground.count(semantics.prediction) > 0; },
-        [this](const Semantics& semantics) { return this->config_.projection.target.count(semantics.prediction) > 0; }),
+        [this](const Semantics& semantics) { 
+            float snd = std::numeric_limits<float>::lowest();
+            for(size_t i = 0; i < config::CLASS_COUNT; ++i) {
+                if(i == semantics.prediction) continue;
+                if(semantics.confidence[i] > snd) snd = semantics.confidence[i];
+            }
+            return this->config_.projection.ground.count(semantics.prediction) > 0 && semantics.confidence[semantics.prediction] >= 2.f * snd; 
+        },
+        [this](const Semantics& semantics) { 
+            float snd = std::numeric_limits<float>::lowest();
+            for(size_t i = 0; i < config::CLASS_COUNT; ++i) {
+                if(i == semantics.prediction) continue;
+                if(semantics.confidence[i] > snd) snd = semantics.confidence[i];
+            }
+            return this->config_.projection.target.count(semantics.prediction) > 0 && semantics.confidence[semantics.prediction] >= 2.f * snd; 
+        }),
     threshold_(config_.max_distance, config_.voxel_size * 1.5f, config_.threshold.motion) {
     size_t max_threads = config_.max_threads > 0 ? \
         config_.max_threads : tbb::this_task_arena::max_concurrency();
@@ -171,7 +185,7 @@ Sophus::SE3f OdometrySystem::refine(SemanticCloud& points, const Sophus::SE3f& i
         CorrespondenceSet correspondences_refined = OdometrySystem::correspond(points, correspondence_distance);
         const auto [dx_refined, chi_refined] = OdometrySystem::solve(correspondences_refined);
         // we are essentially sacrificing 2 icp iterations under the assumption that the refinement will reduce the total ICP count by more than 2
-        if(chi_refined > chi_initial) {
+        if(chi_refined > chi_initial + config_.convergence_criterion * 2.f) {
             points.transform(T_bev.inverse());
             return {};
         } else {

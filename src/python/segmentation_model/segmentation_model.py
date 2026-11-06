@@ -48,29 +48,31 @@ class PointTransformerV3Lightning(pl.LightningModule):
         self.setup_metrics()
 
         stages = [
-            (embedding_size, 1),
-            (embedding_size * 2, 2),
-            (embedding_size * 4, 4),
+            (embedding_size * 1, 1, 1),
+            (embedding_size * 2, 2, 1),
+            (embedding_size * 4, 4, 1),
         ]
 
         patch_size = 256
 
         mlp_ratio = 2
 
-        enc_channels = tuple(channel for channel, _ in stages)
-        enc_num_head = tuple(num_head for _, num_head in stages)
+        enc_channels = tuple(channel for channel, _, _ in stages)
+        enc_num_head = tuple(num_head for _, num_head, _ in stages)
+        enc_depths = tuple(depth for _, _, depth in stages)
 
         dec_channels = tuple(reversed(enc_channels[:-1]))
         dec_num_head = tuple(reversed(enc_num_head[:-1]))
+        dec_depths = tuple(reversed(enc_depths[:-1]))
 
         self.point_transformer = PointTransformerV3(
             in_channels = self.hparams.in_channels,
             stride = (2,) * (len(enc_channels) - 1),
-            enc_depths = (1,) * len(enc_channels),
+            enc_depths = enc_depths,
             enc_channels = enc_channels,
             enc_num_head = enc_num_head,
             enc_patch_size = (patch_size,) * len(enc_channels),
-            dec_depths = (1,) * (len(enc_channels) - 1),
+            dec_depths = dec_depths,
             dec_channels = dec_channels,
             dec_num_head = dec_num_head,
             dec_patch_size = (patch_size,) * (len(enc_channels) - 1),

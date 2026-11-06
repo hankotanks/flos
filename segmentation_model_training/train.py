@@ -1,11 +1,16 @@
 import pathlib
 import typing
 import argparse
+import sys
 
 import torch
 import torchvision.transforms as transforms
 
 import lightning.pytorch as lightning
+
+TRAIN_ROOT = pathlib.Path(__file__).resolve(strict = True).parent
+MODEL_ROOT = (TRAIN_ROOT.parent / 'models').resolve(strict = True)
+sys.path.append(str(TRAIN_ROOT.parent))
 
 import segmentation_model_training.utils as utils
 import segmentation_model_training.utils.config
